@@ -20,20 +20,20 @@ pytest = "8.2.2"
 pytest-cov = "5.0.0"
 pytest-html = "4.1.1"
 pytest-mock = "3.14.0"
-coverage = "7.5.4"
+coverage = "7.6.0"
 
 [tool.poetry.group.docs.dependencies]
-sphinx = "7.3.7"
+sphinx = "7.4.6"
 sphinx-rtd-theme = "2.0.0"
 sphinx-autobuild = "2024.4.16"
-furo = "2024.5.6"
+furo = "2024.7.18"
 pytz = "2024.1"
 
 [tool.poetry.group.dev.dependencies]
 black = "24.4.2"
 isort = "5.13.2"
 pre-commit = "3.7.1"
-ruff = "0.5.1"
+ruff = "0.5.2"
 mypy = "1.10.1"
 typing-extensions = "4.12.2"
 

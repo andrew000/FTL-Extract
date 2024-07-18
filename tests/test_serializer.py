@@ -71,3 +71,28 @@ def test_custom_serializer_handles_empty_fluent_keys_list_properly(
     ftl_string, resource = generate_ftl(empty_fluent_keys, serializer=BeautyFluentSerializer())
     assert ftl_string == ""
     assert resource.body is None or len(resource.body) == 0
+
+
+def test_generate_ftl_includes_leave_as_is_elements() -> None:
+    ftl_string, resource = generate_ftl(
+        [
+            FluentKey(
+                code_path=Path("test.py"),
+                key="test_key",
+                translation=ast.Message(
+                    id=ast.Identifier("test_message"),
+                    value=ast.Pattern(elements=[ast.TextElement("Test message content")]),
+                ),
+            )
+        ],
+        serializer=BeautyFluentSerializer(),
+        leave_as_is=[
+            ast.Comment(content="This is a comment"),
+            ast.GroupComment(content="This is a group comment"),
+            ast.ResourceComment(content="This is a resource comment"),
+        ],
+    )
+    assert "This is a comment" in ftl_string
+    assert "This is a group comment" in ftl_string
+    assert "This is a resource comment" in ftl_string
+    assert "Test message content" in ftl_string

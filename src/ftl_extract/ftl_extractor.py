@@ -9,6 +9,7 @@ from ftl_extract import extract_fluent_keys
 from ftl_extract.code_extractor import sort_fluent_keys_by_path
 from ftl_extract.ftl_importer import import_ftl_from_dir
 from ftl_extract.process.commentator import comment_ftl_key
+from ftl_extract.process.kwargs_extractor import extract_kwargs
 from ftl_extract.process.serializer import BeautyFluentSerializer, generate_ftl
 
 if TYPE_CHECKING:
@@ -36,7 +37,7 @@ def extract(
 
     for lang in language:
         # Import fluent keys from existing FTL files
-        stored_fluent_keys = import_ftl_from_dir(output_path, lang)
+        stored_fluent_keys, leave_as_is = import_ftl_from_dir(output_path, lang)
         for fluent_key in stored_fluent_keys.values():
             fluent_key.path = fluent_key.path.relative_to(output_path / lang)
 
@@ -57,7 +58,19 @@ def extract(
             else:
                 stored_fluent_keys[key].code_path = fluent_key.code_path
 
-        # Second step: find keys that are not in code
+        # Second step: find keys that have different kwargs
+        for key, fluent_key in in_code_fluent_keys.items():
+            if key not in stored_fluent_keys:
+                continue
+
+            fluent_key_placeable_set = extract_kwargs(fluent_key)
+            stored_fluent_key_placeable_set = extract_kwargs(stored_fluent_keys[key])
+
+            if fluent_key_placeable_set != stored_fluent_key_placeable_set:
+                keys_to_comment[key] = stored_fluent_keys.pop(key)
+                keys_to_add[key] = fluent_key
+
+        # Third step: find keys that are not in code
         for key in stored_fluent_keys.keys() - in_code_fluent_keys.keys():
             keys_to_comment[key] = stored_fluent_keys.pop(key)
 
@@ -73,7 +86,7 @@ def extract(
             sorted_fluent_keys.setdefault(path, []).extend(keys)
 
         for path, keys in sorted_fluent_keys.items():
-            ftl, _ = generate_ftl(keys, serializer=serializer)
+            ftl, _ = generate_ftl(keys, serializer=serializer, leave_as_is=leave_as_is)
             (output_path / lang / path).parent.mkdir(parents=True, exist_ok=True)
             (output_path / lang / path).write_text(ftl, encoding="utf-8")
             echo(f"File {output_path / lang / path} has been saved. {len(keys)} keys updated.")

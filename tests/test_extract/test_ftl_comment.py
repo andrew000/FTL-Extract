@@ -34,7 +34,7 @@ key-5 = ⚠️ Header Text. Header Text.
 def test_ftl_comment(tmp_path: Path) -> None:
     (tmp_path / "test.ftl").write_text(CONTENT, encoding="utf-8")
 
-    ftl_keys, resource = import_from_ftl(tmp_path / "test.ftl", "en")
+    ftl_keys, resource, leave_as_is = import_from_ftl(tmp_path / "test.ftl", "en")
 
     serializer = FluentSerializer(with_junk=True)
 

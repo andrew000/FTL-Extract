@@ -52,9 +52,14 @@ def serialize_comment(
 def generate_ftl(
     fluent_keys: dict[str, FluentKey] | list[FluentKey],
     serializer: FluentSerializer,
+    leave_as_is: list[ast.Term | ast.Comment | ast.GroupComment | ast.ResourceComment | ast.Junk]
+    | None = None,
 ) -> tuple[str, Resource]:
     """Generate FTL translations from `fluent_keys`."""
     resource = ast.Resource(body=None)
+
+    if leave_as_is is not None:
+        resource.body.extend(leave_as_is)
 
     if isinstance(fluent_keys, list):
         for fluent_key in fluent_keys:

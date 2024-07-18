@@ -65,7 +65,8 @@ def test_extract_with_beauty_enabled(
             "ftl_extract.ftl_extractor.extract_fluent_keys", return_value={"key-1": mock_fluent_key}
         ),
         patch(
-            "ftl_extract.ftl_extractor.import_ftl_from_dir", return_value={"key-1": mock_fluent_key}
+            "ftl_extract.ftl_extractor.import_ftl_from_dir",
+            return_value=({"key-1": mock_fluent_key}, []),
         ),
         patch(
             "ftl_extract.ftl_extractor.generate_ftl", return_value=("key-1 = key-1", None)
@@ -91,7 +92,7 @@ def test_extract_with_keys_to_comment_and_add(
         ),
         patch(
             "ftl_extract.ftl_extractor.import_ftl_from_dir",
-            return_value={"key-1": MagicMock(spec=FluentKey, path=stored_fluent_key_path)},
+            return_value=({"key-1": MagicMock(spec=FluentKey, path=stored_fluent_key_path)}, []),
         ),
         patch("ftl_extract.ftl_extractor.comment_ftl_key") as mock_comment_ftl_key,
         patch(
@@ -117,7 +118,8 @@ def test_extract_with_keys_only_to_add(
             "ftl_extract.ftl_extractor.extract_fluent_keys", return_value={"key-2": mock_fluent_key}
         ),
         patch(
-            "ftl_extract.ftl_extractor.import_ftl_from_dir", return_value={"key-1": mock_fluent_key}
+            "ftl_extract.ftl_extractor.import_ftl_from_dir",
+            return_value=({"key-1": mock_fluent_key}, []),
         ),
         patch(
             "ftl_extract.ftl_extractor.generate_ftl", return_value=("generated ftl", None)

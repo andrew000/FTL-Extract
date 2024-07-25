@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+import operator
 from typing import TYPE_CHECKING
 
 from fluent.syntax import FluentSerializer, ast
 from fluent.syntax.serializer import serialize_junk, serialize_message, serialize_term
 
 if TYPE_CHECKING:
+    from collections.abc import Iterable
+
     from fluent.syntax.ast import Resource
 
     from ftl_extract.matcher import FluentKey
@@ -50,22 +53,20 @@ def serialize_comment(
 
 
 def generate_ftl(
-    fluent_keys: dict[str, FluentKey] | list[FluentKey],
+    fluent_keys: Iterable[FluentKey],
     serializer: FluentSerializer,
-    leave_as_is: list[ast.Term | ast.Comment | ast.GroupComment | ast.ResourceComment | ast.Junk]
-    | None = None,
+    leave_as_is: Iterable[FluentKey],
 ) -> tuple[str, Resource]:
     """Generate FTL translations from `fluent_keys`."""
     resource = ast.Resource(body=None)
 
-    if leave_as_is is not None:
-        resource.body.extend(leave_as_is)
+    listed_fluent_keys = list(fluent_keys)
+    listed_fluent_keys.extend(leave_as_is)
 
-    if isinstance(fluent_keys, list):
-        for fluent_key in fluent_keys:
-            resource.body.append(fluent_key.translation)
-    else:
-        for fluent_key in fluent_keys.values():
-            resource.body.append(fluent_key.translation)
+    # Sort fluent keys by position
+    listed_fluent_keys.sort(key=operator.attrgetter("position"))
+
+    for fluent_key in listed_fluent_keys:
+        resource.body.append(fluent_key.translation)
 
     return serializer.serialize(resource), resource

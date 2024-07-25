@@ -16,6 +16,7 @@ def mock_ftl_content() -> str:
 -term = Term value
 hello = Hello, world!
 welcome = Welcome, { $name }!
+Junk
 """
 
 
@@ -24,7 +25,7 @@ def test_import_from_ftl_with_valid_ftl_file(mock_ftl_content: str) -> None:
         keys, resource, leave_as_is = import_from_ftl(Path("/path/to/locale/en/example.ftl"), "en")
         assert "hello" in keys
         assert "welcome" in keys
-        assert len(resource.body) == 6  # noqa: PLR2004
+        assert len(resource.body) == 7  # noqa: PLR2004
 
 
 def test_import_from_ftl_with_empty_ftl_file() -> None:
@@ -59,8 +60,9 @@ def test_import_ftl_from_dir_with_nonexistent_directory() -> None:
 def test_import_from_ftl_appends_non_message_entries_correctly(mock_ftl_content: str) -> None:
     with patch("pathlib.Path.read_text", return_value=mock_ftl_content):
         _, _, leave_as_is = import_from_ftl(Path("/path/to/locale/en/various_entries.ftl"), "en")
-        assert len(leave_as_is) == 4  # noqa: PLR2004
-        assert isinstance(leave_as_is[0], ast.Comment)
-        assert isinstance(leave_as_is[1], ast.GroupComment)
-        assert isinstance(leave_as_is[2], ast.ResourceComment)
-        assert isinstance(leave_as_is[3], ast.Term)
+        assert len(leave_as_is) == 5  # noqa: PLR2004
+        assert isinstance(leave_as_is[0].translation, ast.Comment)
+        assert isinstance(leave_as_is[1].translation, ast.GroupComment)
+        assert isinstance(leave_as_is[2].translation, ast.ResourceComment)
+        assert isinstance(leave_as_is[3].translation, ast.Term)
+        assert isinstance(leave_as_is[4].translation, ast.Junk)

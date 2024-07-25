@@ -6,7 +6,6 @@
 /.venv/
 /tokei.exe
 __pycache__/
-*.ftl
 /.coverage
 /dist/
 /docs/

@@ -6,7 +6,7 @@ from ftl_extract.matcher import FluentKey
 def extract_kwargs(key: FluentKey) -> set[str]:
     kwargs: set[str] = set()
 
-    if isinstance(key.translation, ast.Comment):
+    if not isinstance(key.translation, ast.Message):
         return kwargs
 
     if not key.translation.value:

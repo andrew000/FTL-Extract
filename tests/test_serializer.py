@@ -51,7 +51,11 @@ def empty_fluent_keys() -> list[FluentKey]:
 def test_custom_serializer_produces_correct_ftl_for_single_key(
     single_fluent_key: list[FluentKey],
 ) -> None:
-    ftl_string, resource = generate_ftl(single_fluent_key, serializer=BeautyFluentSerializer())
+    ftl_string, resource = generate_ftl(
+        single_fluent_key,
+        serializer=BeautyFluentSerializer(),
+        leave_as_is=[],
+    )
     assert "greeting = Hello, world!" in ftl_string
     assert len(resource.body) == 1
 
@@ -59,7 +63,11 @@ def test_custom_serializer_produces_correct_ftl_for_single_key(
 def test_custom_serializer_produces_correct_ftl_for_multiple_keys(
     multiple_fluent_keys: list[FluentKey],
 ) -> None:
-    ftl_string, resource = generate_ftl(multiple_fluent_keys, serializer=BeautyFluentSerializer())
+    ftl_string, resource = generate_ftl(
+        multiple_fluent_keys,
+        serializer=BeautyFluentSerializer(),
+        leave_as_is=[],
+    )
     assert "greeting = Hello, world!" in ftl_string
     assert "farewell = Goodbye, world!" in ftl_string
     assert len(resource.body) == 2  # noqa: PLR2004
@@ -68,7 +76,11 @@ def test_custom_serializer_produces_correct_ftl_for_multiple_keys(
 def test_custom_serializer_handles_empty_fluent_keys_list_properly(
     empty_fluent_keys: list[FluentKey],
 ) -> None:
-    ftl_string, resource = generate_ftl(empty_fluent_keys, serializer=BeautyFluentSerializer())
+    ftl_string, resource = generate_ftl(
+        empty_fluent_keys,
+        serializer=BeautyFluentSerializer(),
+        leave_as_is=[],
+    )
     assert ftl_string == ""
     assert resource.body is None or len(resource.body) == 0
 
@@ -85,14 +97,43 @@ def test_generate_ftl_includes_leave_as_is_elements() -> None:
                 ),
             )
         ],
-        serializer=BeautyFluentSerializer(),
+        serializer=BeautyFluentSerializer(with_junk=True),
         leave_as_is=[
-            ast.Comment(content="This is a comment"),
-            ast.GroupComment(content="This is a group comment"),
-            ast.ResourceComment(content="This is a resource comment"),
+            FluentKey(
+                code_path=Path(),
+                key="",
+                translation=ast.Comment(content="This is a comment"),
+            ),
+            FluentKey(
+                code_path=Path(),
+                key="",
+                translation=ast.GroupComment(content="This is a group comment"),
+            ),
+            FluentKey(
+                code_path=Path(),
+                key="",
+                translation=ast.ResourceComment(content="This is a resource comment"),
+            ),
+            FluentKey(
+                code_path=Path(),
+                key="",
+                translation=ast.Term(
+                    id=ast.Identifier("test_term"),
+                    value=ast.Pattern(elements=[ast.TextElement("Test term content")]),
+                ),
+            ),
+            FluentKey(
+                code_path=Path(),
+                key="",
+                translation=ast.Junk(
+                    content="This is junk content",
+                ),
+            ),
         ],
     )
     assert "This is a comment" in ftl_string
     assert "This is a group comment" in ftl_string
     assert "This is a resource comment" in ftl_string
+    assert "test_term = Test term content" in ftl_string
+    assert "This is junk content" in ftl_string
     assert "Test message content" in ftl_string

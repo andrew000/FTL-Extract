@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 import libcst as cst
+from fluent.syntax import ast
 
 from ftl_extract.exceptions import (
     FTLExtractorDifferentPathsError,
@@ -89,8 +90,8 @@ def find_conflicts(
         if not current_fluent_keys[key].translation.equals(new_fluent_keys[key].translation):
             raise FTLExtractorDifferentTranslationError(
                 key,
-                current_fluent_keys[key].translation,
-                new_fluent_keys[key].translation,
+                cast(ast.Message, current_fluent_keys[key].translation),
+                cast(ast.Message, new_fluent_keys[key].translation),
             )
 
 

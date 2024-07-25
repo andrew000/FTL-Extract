@@ -44,7 +44,7 @@ def test_ftl_comment(tmp_path: Path) -> None:
     comment_ftl_key(ftl_keys["key-4"], serializer=serializer)
     comment_ftl_key(ftl_keys["key-5"], serializer=serializer)
 
-    ftl, _ = generate_ftl(ftl_keys, serializer=serializer)
+    ftl, _ = generate_ftl(ftl_keys.values(), serializer=serializer, leave_as_is=leave_as_is)
     (tmp_path / "test.ftl").write_text(ftl, encoding="utf-8")
 
     ftl = (tmp_path / "test.ftl").read_text(encoding="utf-8")

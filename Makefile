@@ -39,3 +39,12 @@ test-coverage:
 	@$(mkdir_cmd)
 	@poetry run pytest -vv --cov=$(code_dir) --cov-config=.coveragerc --html=$(reports_dir)/tests/index.html tests/
 	@poetry run coverage html -d $(reports_dir)/coverage
+
+
+.PHONY poetry-show:
+poetry-show:
+	@poetry show --top-level --latest
+
+.PHONY poetry-show-outdated:
+poetry-show-outdated:
+	@poetry show --top-level --outdated

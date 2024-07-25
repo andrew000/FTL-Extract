@@ -42,9 +42,7 @@ class FluentKey:
 
     code_path: Path
     key: str
-    translation: (
-        ast.Message | ast.Comment | ast.Term | ast.GroupComment | ast.ResourceComment | ast.Junk
-    )
+    translation: ast.EntryType
     path: Path = field(default=Path("_default.ftl"))
     locale: str | None = field(default=None)
     position: int | float = field(default=inf)

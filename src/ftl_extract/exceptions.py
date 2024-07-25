@@ -26,8 +26,8 @@ class FTLExtractorDifferentTranslationError(FTLExtractorError):
     def __init__(
         self,
         key: str,
-        current_translation: ast.Message | ast.Comment,
-        new_translation: ast.Message | ast.Comment,
+        current_translation: ast.Message,
+        new_translation: ast.Message,
     ) -> None:
         self.current_translation = current_translation
         self.new_translation = new_translation

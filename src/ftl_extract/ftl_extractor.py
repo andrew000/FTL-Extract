@@ -24,6 +24,7 @@ def extract(
     language: tuple[str, ...],
     i18n_keys: tuple[str, ...],
     beauty: bool = False,
+    comment_junks: bool = False,
 ) -> None:
     serializer: FluentSerializer | BeautyFluentSerializer
 
@@ -76,6 +77,11 @@ def extract(
 
         for fluent_key in keys_to_comment.values():
             comment_ftl_key(fluent_key, serializer)
+
+        # Comment Junk elements if needed
+        if comment_junks is True:
+            for fluent_key in leave_as_is:
+                comment_ftl_key(fluent_key, serializer)
 
         sorted_fluent_keys = sort_fluent_keys_by_path(stored_fluent_keys)
 

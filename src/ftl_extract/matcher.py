@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from dataclasses import dataclass, field
+from math import inf
 from pathlib import Path
 from typing import TYPE_CHECKING, Callable, cast
 
@@ -41,9 +42,12 @@ class FluentKey:
 
     code_path: Path
     key: str
-    translation: ast.Message | ast.Comment
+    translation: (
+        ast.Message | ast.Comment | ast.Term | ast.GroupComment | ast.ResourceComment | ast.Junk
+    )
     path: Path = field(default=Path("_default.ftl"))
     locale: str | None = field(default=None)
+    position: int | float = field(default=inf)
 
 
 class I18nMatcher:
@@ -127,14 +131,22 @@ class I18nMatcher:
                         elements=[ast.TextElement(value=cast(cst.Name, match["key"]).value)]
                     ),
                 )
-                fluent_key = FluentKey(code_path=self.code_path, key=key, translation=translation)
+                fluent_key = FluentKey(
+                    code_path=self.code_path,
+                    key=key,
+                    translation=translation,
+                )
             elif isinstance(match["key"], cst.SimpleString):
                 key = cast(cst.SimpleString, match["key"]).raw_value
                 translation = ast.Message(
                     id=ast.Identifier(name=key),
                     value=ast.Pattern(elements=[ast.TextElement(value=key)]),
                 )
-                fluent_key = FluentKey(code_path=self.code_path, key=key, translation=translation)
+                fluent_key = FluentKey(
+                    code_path=self.code_path,
+                    key=key,
+                    translation=translation,
+                )
             else:
                 msg = f"Unknown type of key: {type(match['key'])} | {match['key']}"
                 raise TypeError(msg)
@@ -169,8 +181,8 @@ class I18nMatcher:
                 if not self.fluent_keys[fluent_key.key].translation.equals(fluent_key.translation):
                     raise FTLExtractorDifferentTranslationError(
                         fluent_key.key,
-                        fluent_key.translation,
-                        self.fluent_keys[fluent_key.key].translation,
+                        cast(ast.Message, fluent_key.translation),
+                        cast(ast.Message, self.fluent_keys[fluent_key.key].translation),
                     )
 
             else:

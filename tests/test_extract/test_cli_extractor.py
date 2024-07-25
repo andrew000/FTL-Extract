@@ -54,6 +54,17 @@ def mock_extract_function() -> patch:
         yield mock
 
 
+@pytest.fixture()
+def mock_leave_as_is() -> list:
+    return [
+        MagicMock(spec=ast.Comment),
+        MagicMock(spec=ast.GroupComment),
+        MagicMock(spec=ast.ResourceComment),
+        MagicMock(spec=ast.Term),
+        MagicMock(spec=ast.Junk),
+    ]
+
+
 def test_extract_with_beauty_enabled(
     setup_environment: tuple[Path, Path],
     mock_fluent_key: FluentKey,
@@ -200,3 +211,18 @@ def test_extraction_with_invalid_i18n_keys_ignores_them(
     )
     assert result.exit_code == 0
     assert mock_extract_function.call_args[1]["i18n_keys"] == ("nonexistent_key",)
+
+
+def test_extract_comments_junk_elements_if_needed(
+    setup_environment: tuple[Path, Path],
+    mock_leave_as_is: list,
+) -> None:
+    code_path, output_path = setup_environment
+
+    with (
+        patch("ftl_extract.ftl_extractor.extract_fluent_keys", return_value={}),
+        patch("ftl_extract.ftl_extractor.import_ftl_from_dir", return_value=({}, mock_leave_as_is)),
+        patch("ftl_extract.ftl_extractor.comment_ftl_key") as mock_comment_ftl_key,
+    ):
+        extract(code_path, output_path, ("en",), ("i18n",), comment_junks=True)
+        assert mock_comment_ftl_key.call_count == len(mock_leave_as_is)

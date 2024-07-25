@@ -19,7 +19,7 @@ lint:
 
 format:
 	@echo "Running ruff check with --fix..."
-	@poetry run ruff check --config pyproject.toml --fix $(code_dir) $(tests_dir)
+	@poetry run ruff check --config pyproject.toml --fix --unsafe-fixes $(code_dir) $(tests_dir)
 
 	@echo "Running ruff..."
 	@poetry run ruff format --config pyproject.toml $(code_dir) $(tests_dir)

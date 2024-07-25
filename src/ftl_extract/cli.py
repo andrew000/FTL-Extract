@@ -33,12 +33,21 @@ from ftl_extract.ftl_extractor import extract
     show_default=True,
     help="Beautify output FTL files.",
 )
+@click.option(
+    "--comment-junks",
+    is_flag=True,
+    default=False,
+    show_default=True,
+    help="Comments Junk elements.",
+)
+@click.version_option()
 def cli_extract(
     code_path: Path,
     output_path: Path,
     language: tuple[str, ...],
     i18n_keys: tuple[str, ...],
     beauty: bool = False,
+    comment_junks: bool = False,
 ) -> None:
     click.echo(f"Extracting from {code_path}...")
 
@@ -48,4 +57,5 @@ def cli_extract(
         language=language,
         i18n_keys=i18n_keys,
         beauty=beauty,
+        comment_junks=comment_junks,
     )

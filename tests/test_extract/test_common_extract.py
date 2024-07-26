@@ -2,6 +2,7 @@ from pathlib import Path
 from typing import Final
 
 from ftl_extract.code_extractor import extract_fluent_keys
+from ftl_extract.const import IGNORE_ATTRIBUTES
 
 CONTENT: Final[str] = """
 def test(i18n):
@@ -25,15 +26,22 @@ def test(i18n):
     L("lazy-key-4", arg_1=arg1, arg_2=arg2)
     L("lazy-key-5", arg_1=obj.arg1, arg_2=obj.arg2)
     L("lazy-key-6", arg_1=obj.arg1(), arg_2=obj.arg2())
+
+    i18n.attr.key.one()
+    i18n.attr.key.two(_path="content/file.ftl")
+    i18n.attr.key.three(arg_1="arg-1", arg_2="arg-2", _path="content/file.ftl")
+    i18n.attr.key.four(arg_1=arg1, arg_2=arg2)
+    i18n.attr.key.five(arg_1=obj.arg1, arg_2=obj.arg2)
+    i18n.attr.key.six(arg_1=obj.arg1(), arg_2=obj.arg2())
 """
 
 
 def test_common_extract(tmp_path: Path) -> None:
     (tmp_path / "test.py").write_text(CONTENT)
 
-    fluent_keys_len = 18  # Number of keys in `CONTENT`.
+    fluent_keys_len = 24  # Number of keys in `CONTENT`.
 
-    fluent_keys = extract_fluent_keys(tmp_path, ("i18n", "L", "LF"))
+    fluent_keys = extract_fluent_keys(tmp_path, ("i18n", "L", "LF"), IGNORE_ATTRIBUTES)
     assert fluent_keys  # Check if `fluent_keys` is not empty.
     assert len(fluent_keys) == fluent_keys_len  # Check if `fluent_keys` has `fluent_keys_len` keys.
     assert "key-1" in fluent_keys
@@ -173,7 +181,45 @@ def test_common_extract(tmp_path: Path) -> None:
     assert fluent_keys["lazy-key-6"].translation.value.elements[2].expression.id.name == "arg_2"
     assert fluent_keys["lazy-key-6"].code_path == tmp_path / "test.py"
 
+    assert fluent_keys["attr-key-one"].key == "attr-key-one"
+    assert fluent_keys["attr-key-one"].path == Path("_default.ftl")
+    assert fluent_keys["attr-key-one"].translation.value.elements[0].value == "attr-key-one"
+    assert fluent_keys["attr-key-one"].code_path == tmp_path / "test.py"
+
+    assert fluent_keys["attr-key-two"].key == "attr-key-two"
+    assert fluent_keys["attr-key-two"].path == Path("content/file.ftl")
+    assert fluent_keys["attr-key-two"].translation.value.elements[0].value == "attr-key-two"
+    assert fluent_keys["attr-key-two"].code_path == tmp_path / "test.py"
+
+    assert fluent_keys["attr-key-three"].key == "attr-key-three"
+    assert fluent_keys["attr-key-three"].path == Path("content/file.ftl")
+    assert fluent_keys["attr-key-three"].translation.value.elements[0].value == "attr-key-three"
+    assert fluent_keys["attr-key-three"].translation.value.elements[1].expression.id.name == "arg_1"
+    assert fluent_keys["attr-key-three"].translation.value.elements[2].expression.id.name == "arg_2"
+    assert fluent_keys["attr-key-three"].code_path == tmp_path / "test.py"
+
+    assert fluent_keys["attr-key-four"].key == "attr-key-four"
+    assert fluent_keys["attr-key-four"].path == Path("_default.ftl")
+    assert fluent_keys["attr-key-four"].translation.value.elements[0].value == "attr-key-four"
+    assert fluent_keys["attr-key-four"].translation.value.elements[1].expression.id.name == "arg_1"
+    assert fluent_keys["attr-key-four"].translation.value.elements[2].expression.id.name == "arg_2"
+    assert fluent_keys["attr-key-four"].code_path == tmp_path / "test.py"
+
+    assert fluent_keys["attr-key-five"].key == "attr-key-five"
+    assert fluent_keys["attr-key-five"].path == Path("_default.ftl")
+    assert fluent_keys["attr-key-five"].translation.value.elements[0].value == "attr-key-five"
+    assert fluent_keys["attr-key-five"].translation.value.elements[1].expression.id.name == "arg_1"
+    assert fluent_keys["attr-key-five"].translation.value.elements[2].expression.id.name == "arg_2"
+    assert fluent_keys["attr-key-five"].code_path == tmp_path / "test.py"
+
+    assert fluent_keys["attr-key-six"].key == "attr-key-six"
+    assert fluent_keys["attr-key-six"].path == Path("_default.ftl")
+    assert fluent_keys["attr-key-six"].translation.value.elements[0].value == "attr-key-six"
+    assert fluent_keys["attr-key-six"].translation.value.elements[1].expression.id.name == "arg_1"
+    assert fluent_keys["attr-key-six"].translation.value.elements[2].expression.id.name == "arg_2"
+    assert fluent_keys["attr-key-six"].code_path == tmp_path / "test.py"
+
 
 def test_extract_fluent_keys_no_files(tmp_path: Path) -> None:
-    fluent_keys = extract_fluent_keys(tmp_path, "i18n")
+    fluent_keys = extract_fluent_keys(tmp_path, "i18n", IGNORE_ATTRIBUTES)
     assert not fluent_keys

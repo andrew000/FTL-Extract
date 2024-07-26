@@ -1,10 +1,10 @@
 from pathlib import Path
 
 import pytest
-from fluent.syntax import ast
+from fluent.syntax import FluentSerializer, ast
 
 from ftl_extract.matcher import FluentKey
-from ftl_extract.process.serializer import BeautyFluentSerializer, generate_ftl
+from ftl_extract.process.serializer import generate_ftl
 
 
 @pytest.fixture()
@@ -53,7 +53,7 @@ def test_custom_serializer_produces_correct_ftl_for_single_key(
 ) -> None:
     ftl_string, resource = generate_ftl(
         single_fluent_key,
-        serializer=BeautyFluentSerializer(),
+        serializer=FluentSerializer(),
         leave_as_is=[],
     )
     assert "greeting = Hello, world!" in ftl_string
@@ -65,7 +65,7 @@ def test_custom_serializer_produces_correct_ftl_for_multiple_keys(
 ) -> None:
     ftl_string, resource = generate_ftl(
         multiple_fluent_keys,
-        serializer=BeautyFluentSerializer(),
+        serializer=FluentSerializer(),
         leave_as_is=[],
     )
     assert "greeting = Hello, world!" in ftl_string
@@ -78,7 +78,7 @@ def test_custom_serializer_handles_empty_fluent_keys_list_properly(
 ) -> None:
     ftl_string, resource = generate_ftl(
         empty_fluent_keys,
-        serializer=BeautyFluentSerializer(),
+        serializer=FluentSerializer(),
         leave_as_is=[],
     )
     assert ftl_string == ""
@@ -97,7 +97,7 @@ def test_generate_ftl_includes_leave_as_is_elements() -> None:
                 ),
             )
         ],
-        serializer=BeautyFluentSerializer(with_junk=True),
+        serializer=FluentSerializer(with_junk=True),
         leave_as_is=[
             FluentKey(
                 code_path=Path(),

@@ -1,26 +1,21 @@
 from __future__ import annotations
 
-from collections.abc import Sequence
+import ast
 from dataclasses import dataclass, field
 from math import inf
 from pathlib import Path
-from typing import TYPE_CHECKING, Callable, cast
+from typing import TYPE_CHECKING, cast
 
-import libcst as cst
-from fluent.syntax import ast
-from libcst import matchers as m
+from fluent.syntax import ast as fluent_ast
 
+from ftl_extract.const import GET_LITERAL, I18N_LITERAL, IGNORE_ATTRIBUTES, PATH_LITERAL
 from ftl_extract.exceptions import (
     FTLExtractorDifferentPathsError,
     FTLExtractorDifferentTranslationError,
 )
 
 if TYPE_CHECKING:
-    from typing import Literal
-
-I18N_LITERAL: Literal["i18n"] = "i18n"
-GET_LITERAL: Literal["get"] = "get"
-PATH_LITERAL: Literal["_path"] = "_path"
+    from collections.abc import Iterable
 
 
 @dataclass
@@ -42,14 +37,19 @@ class FluentKey:
 
     code_path: Path
     key: str
-    translation: ast.EntryType
+    translation: fluent_ast.EntryType
     path: Path = field(default=Path("_default.ftl"))
     locale: str | None = field(default=None)
     position: int | float = field(default=inf)
 
 
-class I18nMatcher:
-    def __init__(self, code_path: Path, func_names: str | Sequence[str] = I18N_LITERAL) -> None:
+class I18nMatcher(ast.NodeVisitor):
+    def __init__(
+        self,
+        code_path: Path,
+        func_names: str | Iterable[str] = I18N_LITERAL,
+        ignore_attributes: str | Iterable[str] = IGNORE_ATTRIBUTES,
+    ) -> None:
         """
 
         :param code_path: Path to .py file where visitor will be used.
@@ -58,130 +58,123 @@ class I18nMatcher:
         :type func_names: str | Sequence[str]
         """
         self.code_path = code_path
-        self._func_names = {func_names} if isinstance(func_names, str) else set(func_names)
+        self.func_names = (
+            frozenset({func_names}) if isinstance(func_names, str) else frozenset(func_names)
+        )
+        self.ignore_attributes = (
+            frozenset({ignore_attributes})
+            if isinstance(ignore_attributes, str)
+            else frozenset(ignore_attributes)
+        )
         self.fluent_keys: dict[str, FluentKey] = {}
 
-        self._matcher = m.OneOf(
-            m.Call(
-                func=m.Attribute(
-                    value=m.OneOf(*map(cast(Callable, m.Name), self._func_names)),
-                    attr=m.SaveMatchedNode(matcher=~m.Name(GET_LITERAL) & m.Name(), name="key"),
-                ),
-                args=[
-                    m.SaveMatchedNode(
-                        matcher=m.ZeroOrMore(
-                            m.Arg(
-                                value=m.DoNotCare(),
-                                keyword=m.Name(),
-                            )
-                        ),
-                        name="kwargs",
+    def visit_Call(self, node: ast.Call) -> None:  # noqa: N802
+        # Check if the call matches the pattern
+        if isinstance(node.func, ast.Attribute):
+            attr: ast.Attribute | ast.expr = node.func
+            attrs = []
+            while isinstance(attr, ast.Attribute):
+                attrs.append(attr.attr)
+                attr = attr.value
+
+            if isinstance(attr, ast.Name) and attr.id in self.func_names:
+                if len(attrs) == 1 and attrs[0] == GET_LITERAL:
+                    # Check if the call has args
+                    if not node.args:
+                        return  # Skip if no args
+
+                    # Add the first arg as the translation key
+                    attrs.clear()
+                    if isinstance(arg := node.args[0], ast.Constant):
+                        key = cast(ast.Constant, arg).value
+
+                    else:
+                        self.generic_visit(node)
+                        return
+
+                    fluent_key = create_fluent_key(
+                        code_path=self.code_path,
+                        key=key,
+                        keywords=node.keywords,
                     )
-                ],
-            ),
-            m.Call(
-                func=m.Attribute(
-                    value=m.OneOf(*map(cast(Callable, m.Name), self._func_names)),
-                    attr=m.Name(value=GET_LITERAL),
-                ),
-                args=[
-                    m.Arg(
-                        value=m.SaveMatchedNode(matcher=m.SimpleString(), name="key"), keyword=None
-                    ),
-                    m.SaveMatchedNode(
-                        matcher=m.ZeroOrMore(
-                            m.Arg(
-                                value=m.DoNotCare(),
-                                keyword=m.Name(),
-                            )
-                        ),
-                        name="kwargs",
-                    ),
-                ],
-            ),
-            m.Call(
-                func=m.OneOf(*map(cast(Callable, m.Name), self._func_names)),
-                args=[
-                    m.Arg(
-                        value=m.SaveMatchedNode(matcher=m.SimpleString(), name="key"), keyword=None
-                    ),
-                    m.SaveMatchedNode(
-                        matcher=m.ZeroOrMore(
-                            m.Arg(
-                                value=m.DoNotCare(),
-                                keyword=m.Name(),
-                            )
-                        ),
-                        name="kwargs",
-                    ),
-                ],
-            ),
-        )
 
-    def extract_matches(self, module: cst.Module) -> None:
-        for match in m.extractall(module, self._matcher):
-            # Key
-            if isinstance(match["key"], cst.Name):
-                key = cast(cst.Name, match["key"]).value
-                translation = ast.Message(
-                    id=ast.Identifier(name=key),
-                    value=ast.Pattern(
-                        elements=[ast.TextElement(value=cast(cst.Name, match["key"]).value)]
-                    ),
-                )
-                fluent_key = FluentKey(
-                    code_path=self.code_path,
-                    key=key,
-                    translation=translation,
-                )
-            elif isinstance(match["key"], cst.SimpleString):
-                key = cast(cst.SimpleString, match["key"]).raw_value
-                translation = ast.Message(
-                    id=ast.Identifier(name=key),
-                    value=ast.Pattern(elements=[ast.TextElement(value=key)]),
-                )
-                fluent_key = FluentKey(
-                    code_path=self.code_path,
-                    key=key,
-                    translation=translation,
-                )
-            else:
-                msg = f"Unknown type of key: {type(match['key'])} | {match['key']}"
-                raise TypeError(msg)
-
-            # Kwargs
-            for kwarg in cast(Sequence[m.Arg], match["kwargs"]):
-                keyword = cast(cst.Name, kwarg.keyword)
-                if keyword.value == PATH_LITERAL:
-                    fluent_key.path = Path(cast(cst.SimpleString, kwarg.value).raw_value)
+                    process_fluent_key(self.fluent_keys, fluent_key)
 
                 else:
-                    if (
-                        isinstance(fluent_key.translation, ast.Message)
-                        and fluent_key.translation.value is not None
-                    ):
-                        fluent_key.translation.value.elements.append(
-                            ast.Placeable(
-                                expression=ast.VariableReference(
-                                    id=ast.Identifier(name=keyword.value)
-                                )
-                            )
-                        )
+                    if attrs[-1] in self.ignore_attributes:
+                        self.generic_visit(node)
+                        return
 
-            if fluent_key.key in self.fluent_keys:
-                if self.fluent_keys[fluent_key.key].path != fluent_key.path:
-                    raise FTLExtractorDifferentPathsError(
-                        fluent_key.key,
-                        fluent_key.path,
-                        self.fluent_keys[fluent_key.key].path,
+                    fluent_key = create_fluent_key(
+                        code_path=self.code_path,
+                        key="-".join(reversed(attrs)),
+                        keywords=node.keywords,
                     )
-
-                if not self.fluent_keys[fluent_key.key].translation.equals(fluent_key.translation):
-                    raise FTLExtractorDifferentTranslationError(
-                        fluent_key.key,
-                        cast(ast.Message, fluent_key.translation),
-                        cast(ast.Message, self.fluent_keys[fluent_key.key].translation),
-                    )
-
+                    process_fluent_key(self.fluent_keys, fluent_key)
             else:
-                self.fluent_keys[fluent_key.key] = fluent_key
+                self.generic_visit(node)
+
+        elif isinstance(node.func, ast.Name) and node.func.id in self.func_names:
+            if not node.args:
+                return
+
+            fluent_key = create_fluent_key(
+                code_path=self.code_path,
+                key=cast(ast.Constant, node.args[0]).value,
+                keywords=node.keywords,
+            )
+            process_fluent_key(self.fluent_keys, fluent_key)
+
+        else:
+            self.generic_visit(node)
+
+        self.generic_visit(node)
+
+
+def create_fluent_key(
+    code_path: Path,
+    key: str,
+    keywords: list[ast.keyword],
+) -> FluentKey:
+    fluent_key = FluentKey(
+        code_path=code_path,
+        key=key,
+        translation=fluent_ast.Message(
+            id=fluent_ast.Identifier(name=key),
+            value=fluent_ast.Pattern(elements=[fluent_ast.TextElement(value=key)]),
+        ),
+    )
+
+    for kw in keywords:
+        if kw.arg == PATH_LITERAL:
+            if kw.value is not None and isinstance(kw.value, ast.Constant):
+                fluent_key.path = Path(kw.value.value)
+        elif isinstance(kw.arg, str):
+            cast(
+                fluent_ast.Pattern, cast(fluent_ast.Message, fluent_key.translation).value
+            ).elements.append(
+                fluent_ast.Placeable(
+                    expression=fluent_ast.VariableReference(id=fluent_ast.Identifier(name=kw.arg))
+                )
+            )
+
+    return fluent_key
+
+
+def process_fluent_key(fluent_keys: dict[str, FluentKey], new_fluent_key: FluentKey) -> None:
+    if new_fluent_key.key in fluent_keys:
+        if fluent_keys[new_fluent_key.key].path != new_fluent_key.path:
+            raise FTLExtractorDifferentPathsError(
+                new_fluent_key.key,
+                new_fluent_key.path,
+                fluent_keys[new_fluent_key.key].path,
+            )
+        if not fluent_keys[new_fluent_key.key].translation.equals(new_fluent_key.translation):
+            raise FTLExtractorDifferentTranslationError(
+                new_fluent_key.key,
+                cast(fluent_ast.Message, new_fluent_key.translation),
+                cast(fluent_ast.Message, fluent_keys[new_fluent_key.key].translation),
+            )
+
+    else:
+        fluent_keys[new_fluent_key.key] = new_fluent_key

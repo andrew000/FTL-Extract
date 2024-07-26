@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from time import perf_counter_ns
 
 import click
 
@@ -27,11 +28,17 @@ from ftl_extract.ftl_extractor import extract
     help="Names of function that is used to get translation.",
 )
 @click.option(
-    "--beauty",
-    is_flag=True,
-    default=False,
+    "--ignore-attributes",
+    default=("set_locale", "use_locale", "use_context", "set_context"),
+    multiple=True,
     show_default=True,
-    help="Beautify output FTL files.",
+    help="Ignore attributes, like `i18n.set_locale`.",
+)
+@click.option(
+    "--expand-ignore-attributes",
+    "-a",
+    multiple=True,
+    help="Expand default|targeted ignore attributes.",
 )
 @click.option(
     "--comment-junks",
@@ -46,16 +53,21 @@ def cli_extract(
     output_path: Path,
     language: tuple[str, ...],
     i18n_keys: tuple[str, ...],
-    beauty: bool = False,
+    ignore_attributes: tuple[str, ...],
+    expand_ignore_attributes: tuple[str, ...] | None = None,
     comment_junks: bool = False,
 ) -> None:
     click.echo(f"Extracting from {code_path}...")
+    start_time = perf_counter_ns()
 
     extract(
         code_path=code_path,
         output_path=output_path,
         language=language,
         i18n_keys=i18n_keys,
-        beauty=beauty,
+        ignore_attributes=ignore_attributes,
+        expand_ignore_attributes=expand_ignore_attributes,
         comment_junks=comment_junks,
     )
+
+    click.echo(f"Done in {(perf_counter_ns() - start_time) * 1e-9:.3f}s.")

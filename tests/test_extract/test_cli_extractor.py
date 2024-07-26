@@ -65,28 +65,6 @@ def mock_leave_as_is() -> list:
     ]
 
 
-def test_extract_with_beauty_enabled(
-    setup_environment: tuple[Path, Path],
-    mock_fluent_key: FluentKey,
-) -> None:
-    code_path, output_path = setup_environment
-
-    with (
-        patch(
-            "ftl_extract.ftl_extractor.extract_fluent_keys", return_value={"key-1": mock_fluent_key}
-        ),
-        patch(
-            "ftl_extract.ftl_extractor.import_ftl_from_dir",
-            return_value=({"key-1": mock_fluent_key}, []),
-        ),
-        patch(
-            "ftl_extract.ftl_extractor.generate_ftl", return_value=("key-1 = key-1", None)
-        ) as mock_generate_ftl,
-    ):
-        extract(code_path, output_path, ("en",), ("i18n",), beauty=True)
-        mock_generate_ftl.assert_called()
-
-
 def test_extract_with_keys_to_comment_and_add(
     setup_environment: tuple[Path, Path],
     mock_fluent_key: FluentKey,
@@ -110,7 +88,7 @@ def test_extract_with_keys_to_comment_and_add(
             "ftl_extract.ftl_extractor.generate_ftl", return_value=("generated ftl", None)
         ) as mock_generate_ftl,
     ):
-        extract(code_path, output_path, ("en",), ("i18n",), beauty=False)
+        extract(code_path, output_path, ("en",), ("i18n",))
         mock_comment_ftl_key.assert_called()
         mock_generate_ftl.assert_called()
 
@@ -136,7 +114,7 @@ def test_extract_with_keys_only_to_add(
             "ftl_extract.ftl_extractor.generate_ftl", return_value=("generated ftl", None)
         ) as mock_generate_ftl,
     ):
-        extract(code_path, output_path, ("en",), ("i18n",), beauty=False)
+        extract(code_path, output_path, ("en",), ("i18n",))
         mock_generate_ftl.assert_called()
 
 
@@ -172,22 +150,6 @@ def test_extraction_with_multiple_languages_handles_all(
     )
     assert result.exit_code == 0
     assert mock_extract_function.call_args[1]["language"] == ("en", "fr")
-
-
-def test_extraction_with_beautify_option_enables_beautification(
-    runner: click.testing.CliRunner,
-    mock_extract_function: patch,
-    tmp_path: Path,
-) -> None:
-    tmp_path.joinpath("path/to/code").mkdir(parents=True)
-    code_path = tmp_path.joinpath("path/to/code")
-    output_path = tmp_path.joinpath("path/to/output")
-
-    result = runner.invoke(
-        cast(BaseCommand, cli_extract), [code_path.as_posix(), output_path.as_posix(), "--beauty"]
-    )
-    assert result.exit_code == 0
-    assert mock_extract_function.call_args[1]["beauty"] is True
 
 
 def test_extraction_with_nonexistent_code_path_fails(runner: click.testing.CliRunner) -> None:

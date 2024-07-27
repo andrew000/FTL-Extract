@@ -125,9 +125,6 @@ class I18nMatcher(ast.NodeVisitor):
             )
             process_fluent_key(self.fluent_keys, fluent_key)
 
-        else:
-            self.generic_visit(node)
-
         self.generic_visit(node)
 
 

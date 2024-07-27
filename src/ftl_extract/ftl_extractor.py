@@ -4,6 +4,7 @@ from typing import TYPE_CHECKING
 
 from click import echo
 from fluent.syntax import FluentSerializer
+from fluent.syntax import ast as fl_ast
 
 from ftl_extract import extract_fluent_keys
 from ftl_extract.code_extractor import sort_fluent_keys_by_path
@@ -88,7 +89,8 @@ def extract(
         # Comment Junk elements if needed
         if comment_junks is True:
             for fluent_key in leave_as_is:
-                comment_ftl_key(fluent_key, serializer)
+                if isinstance(fluent_key.translation, fl_ast.Junk):
+                    comment_ftl_key(fluent_key, serializer)
 
         sorted_fluent_keys = sort_fluent_keys_by_path(stored_fluent_keys)
 
@@ -98,8 +100,17 @@ def extract(
         for path, keys in sort_fluent_keys_by_path(keys_to_comment).items():
             sorted_fluent_keys.setdefault(path, []).extend(keys)
 
+        leave_as_is_with_path: dict[Path, list[FluentKey]] = {}
+
+        for fluent_key in leave_as_is:
+            leave_as_is_with_path.setdefault(
+                fluent_key.path.relative_to(output_path / lang), []
+            ).append(fluent_key)
+
         for path, keys in sorted_fluent_keys.items():
-            ftl, _ = generate_ftl(keys, serializer=serializer, leave_as_is=leave_as_is)
+            ftl, _ = generate_ftl(
+                keys, serializer=serializer, leave_as_is=leave_as_is_with_path.get(path, [])
+            )
             (output_path / lang / path).parent.mkdir(parents=True, exist_ok=True)
             (output_path / lang / path).write_text(ftl, encoding="utf-8")
             echo(f"File {output_path / lang / path} has been saved. {len(keys)} keys updated.")

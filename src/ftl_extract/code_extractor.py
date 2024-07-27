@@ -1,10 +1,10 @@
 from __future__ import annotations
 
+import ast
 from pathlib import Path
 from typing import TYPE_CHECKING, cast
 
-import libcst as cst
-from fluent.syntax import ast
+from fluent.syntax import ast as fluent_ast
 
 from ftl_extract.exceptions import (
     FTLExtractorDifferentPathsError,
@@ -13,7 +13,7 @@ from ftl_extract.exceptions import (
 from ftl_extract.matcher import I18nMatcher
 
 if TYPE_CHECKING:
-    from collections.abc import Iterator, Sequence
+    from collections.abc import Iterable, Iterator
 
     from ftl_extract.matcher import FluentKey
 
@@ -30,7 +30,11 @@ def find_py_files(path: Path) -> Iterator[Path]:
     yield from path.rglob("[!{.}]*.py") if path.is_dir() else [path]
 
 
-def parse_file(path: Path, i18n_keys: str | Sequence[str]) -> dict[str, FluentKey]:
+def parse_file(
+    path: Path,
+    i18n_keys: str | Iterable[str],
+    ignore_attributes: Iterable[str],
+) -> dict[str, FluentKey]:
     """
     Second step: parse given .py file and find all i18n calls.
 
@@ -38,12 +42,14 @@ def parse_file(path: Path, i18n_keys: str | Sequence[str]) -> dict[str, FluentKe
     :type path: Path
     :param i18n_keys: Names of function that is used to get translation.
     :type i18n_keys: str | Sequence[str]
+    :param ignore_attributes: Ignore attributes, like `i18n.set_locale`.
+    :type ignore_attributes: Sequence[str]
     :return: Dict with `key` and `FluentKey`.
     :rtype: dict[str, FluentKey]
     """
-    module = cst.parse_module(path.read_bytes())
-    matcher = I18nMatcher(code_path=path, func_names=i18n_keys)
-    matcher.extract_matches(module)
+    node = ast.parse(path.read_bytes())
+    matcher = I18nMatcher(code_path=path, func_names=i18n_keys, ignore_attributes=ignore_attributes)
+    matcher.visit(node)
     return matcher.fluent_keys
 
 
@@ -90,12 +96,16 @@ def find_conflicts(
         if not current_fluent_keys[key].translation.equals(new_fluent_keys[key].translation):
             raise FTLExtractorDifferentTranslationError(
                 key,
-                cast(ast.Message, current_fluent_keys[key].translation),
-                cast(ast.Message, new_fluent_keys[key].translation),
+                cast(fluent_ast.Message, current_fluent_keys[key].translation),
+                cast(fluent_ast.Message, new_fluent_keys[key].translation),
             )
 
 
-def extract_fluent_keys(path: Path, i18n_keys: str | Sequence[str]) -> dict[str, FluentKey]:
+def extract_fluent_keys(
+    path: Path,
+    i18n_keys: str | Iterable[str],
+    ignore_attributes: Iterable[str],
+) -> dict[str, FluentKey]:
     """
     Extract all `FluentKey`s from given path.
 
@@ -103,6 +113,8 @@ def extract_fluent_keys(path: Path, i18n_keys: str | Sequence[str]) -> dict[str,
     :type path: Path
     :param i18n_keys: Names of function that is used to get translation.
     :type i18n_keys: str | Sequence[str]
+    :param ignore_attributes: Ignore attributes, like `i18n.set_locale`.
+    :type ignore_attributes: Sequence[str]
     :return: Dict with `key` and `FluentKey`.
     :rtype: dict[str, FluentKey]
 
@@ -110,7 +122,7 @@ def extract_fluent_keys(path: Path, i18n_keys: str | Sequence[str]) -> dict[str,
     fluent_keys: dict[str, FluentKey] = {}
 
     for file in find_py_files(path):
-        keys = parse_file(file, i18n_keys)
+        keys = parse_file(path=file, i18n_keys=i18n_keys, ignore_attributes=ignore_attributes)
         post_process_fluent_keys(keys)
         find_conflicts(fluent_keys, keys)
         fluent_keys.update(keys)

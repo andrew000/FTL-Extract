@@ -4,15 +4,18 @@ from typing import TYPE_CHECKING
 
 from click import echo
 from fluent.syntax import FluentSerializer
+from fluent.syntax import ast as fl_ast
 
 from ftl_extract import extract_fluent_keys
 from ftl_extract.code_extractor import sort_fluent_keys_by_path
+from ftl_extract.const import IGNORE_ATTRIBUTES
 from ftl_extract.ftl_importer import import_ftl_from_dir
 from ftl_extract.process.commentator import comment_ftl_key
 from ftl_extract.process.kwargs_extractor import extract_kwargs
-from ftl_extract.process.serializer import BeautyFluentSerializer, generate_ftl
+from ftl_extract.process.serializer import generate_ftl
 
 if TYPE_CHECKING:
+    from collections.abc import Iterable
     from pathlib import Path
 
     from ftl_extract.matcher import FluentKey
@@ -23,18 +26,23 @@ def extract(
     output_path: Path,
     language: tuple[str, ...],
     i18n_keys: tuple[str, ...],
-    beauty: bool = False,
+    ignore_attributes: Iterable[str] = IGNORE_ATTRIBUTES,
+    expand_ignore_attributes: Iterable[str] | None = None,
     comment_junks: bool = False,
+    serializer: FluentSerializer | None = None,
 ) -> None:
-    serializer: FluentSerializer | BeautyFluentSerializer
+    if expand_ignore_attributes is not None:
+        ignore_attributes = frozenset(set(ignore_attributes) | set(expand_ignore_attributes or []))
 
-    if beauty is True:
-        serializer = BeautyFluentSerializer(with_junk=True)
-    else:
+    if serializer is None:
         serializer = FluentSerializer(with_junk=True)
 
     # Extract fluent keys from code
-    in_code_fluent_keys = extract_fluent_keys(code_path, i18n_keys)
+    in_code_fluent_keys = extract_fluent_keys(
+        path=code_path,
+        i18n_keys=i18n_keys,
+        ignore_attributes=ignore_attributes,
+    )
 
     for lang in language:
         # Import fluent keys from existing FTL files
@@ -81,7 +89,8 @@ def extract(
         # Comment Junk elements if needed
         if comment_junks is True:
             for fluent_key in leave_as_is:
-                comment_ftl_key(fluent_key, serializer)
+                if isinstance(fluent_key.translation, fl_ast.Junk):
+                    comment_ftl_key(fluent_key, serializer)
 
         sorted_fluent_keys = sort_fluent_keys_by_path(stored_fluent_keys)
 
@@ -91,8 +100,17 @@ def extract(
         for path, keys in sort_fluent_keys_by_path(keys_to_comment).items():
             sorted_fluent_keys.setdefault(path, []).extend(keys)
 
+        leave_as_is_with_path: dict[Path, list[FluentKey]] = {}
+
+        for fluent_key in leave_as_is:
+            leave_as_is_with_path.setdefault(
+                fluent_key.path.relative_to(output_path / lang), []
+            ).append(fluent_key)
+
         for path, keys in sorted_fluent_keys.items():
-            ftl, _ = generate_ftl(keys, serializer=serializer, leave_as_is=leave_as_is)
+            ftl, _ = generate_ftl(
+                keys, serializer=serializer, leave_as_is=leave_as_is_with_path.get(path, [])
+            )
             (output_path / lang / path).parent.mkdir(parents=True, exist_ok=True)
             (output_path / lang / path).write_text(ftl, encoding="utf-8")
             echo(f"File {output_path / lang / path} has been saved. {len(keys)} keys updated.")

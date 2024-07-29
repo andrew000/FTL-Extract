@@ -111,7 +111,9 @@ $ ftl_extract \
   -k 'i18n' \
   -k 'L' \
   -k 'LF' \
-  -k 'LazyProxy'
+  -k 'LazyProxy' \
+  -a 'core' \
+  --comment-junks
 ```
 
 ## Contributing

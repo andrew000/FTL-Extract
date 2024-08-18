@@ -43,7 +43,9 @@ jobs:
           echo "$HOME/.local/bin" >> $GITHUB_PATH
 
       - name: Install dependencies
-        run: poetry install --only main
+        run: |
+          poetry lock --no-update
+          poetry install --only main
 
       - name: Build dist
         run: poetry build

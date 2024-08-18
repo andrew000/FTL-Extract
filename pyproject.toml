@@ -1,7 +1,7 @@
 [tool.poetry]
 name = "FTL-Extract"
 description = "Extracts FTL files from a directory and outputs them to a directory"
-version = "0.4.1"
+version = "0.4.2"
 authors = ["andrew000"]
 keywords = ["ftl", "ftl-extract", "ftl-extractor"]
 readme = "README.md"

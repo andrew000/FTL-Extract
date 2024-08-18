@@ -161,3 +161,140 @@ def test_extracts_selector_variable_name_from_select_expression() -> None:
         )
     )
     assert kwargs == {"user_status"}
+
+
+def test_nested_extraction() -> None:
+    kwargs = extract_kwargs(
+        FluentKey(
+            code_path=Path("test.py"),
+            key="trade-waiting_for_answer",
+            translation=ast.Message(
+                id=ast.Identifier(name="nested-key"),
+                value=ast.Pattern(
+                    elements=[
+                        ast.TextElement(value="nested-key\n"),
+                        ast.Placeable(
+                            expression=ast.SelectExpression(
+                                selector=ast.VariableReference(
+                                    id=ast.Identifier(name="first_level_key")
+                                ),
+                                variants=[
+                                    ast.Variant(
+                                        key=ast.NumberLiteral(value="1"),
+                                        value=ast.Pattern(
+                                            elements=[
+                                                ast.TextElement(value="✅ "),
+                                                ast.Placeable(
+                                                    expression=ast.SelectExpression(
+                                                        selector=ast.VariableReference(
+                                                            id=ast.Identifier(
+                                                                name="second_level_key"
+                                                            )
+                                                        ),
+                                                        variants=[
+                                                            ast.Variant(
+                                                                key=ast.NumberLiteral(value="1"),
+                                                                value=ast.Pattern(
+                                                                    elements=[
+                                                                        ast.TextElement(value="OK")
+                                                                    ]
+                                                                ),
+                                                            ),
+                                                            ast.Variant(
+                                                                key=ast.NumberLiteral(value="2"),
+                                                                value=ast.Pattern(
+                                                                    elements=[
+                                                                        ast.TextElement(value="NO")
+                                                                    ]
+                                                                ),
+                                                            ),
+                                                            ast.Variant(
+                                                                key=ast.Identifier(name="other"),
+                                                                value=ast.Pattern(
+                                                                    elements=[
+                                                                        ast.TextElement(
+                                                                            value="ANOTHER"
+                                                                        )
+                                                                    ]
+                                                                ),
+                                                                default=True,
+                                                            ),
+                                                        ],
+                                                    )
+                                                ),
+                                            ]
+                                        ),
+                                    ),
+                                    ast.Variant(
+                                        key=ast.NumberLiteral(value="0"),
+                                        value=ast.Pattern(
+                                            elements=[
+                                                ast.TextElement(value="❌ "),
+                                                ast.Placeable(
+                                                    expression=ast.SelectExpression(
+                                                        selector=ast.VariableReference(
+                                                            id=ast.Identifier(
+                                                                name="second_level_key"
+                                                            )
+                                                        ),
+                                                        variants=[
+                                                            ast.Variant(
+                                                                key=ast.NumberLiteral(value="1"),
+                                                                value=ast.Pattern(
+                                                                    elements=[
+                                                                        ast.TextElement(value="OK")
+                                                                    ]
+                                                                ),
+                                                            ),
+                                                            ast.Variant(
+                                                                key=ast.NumberLiteral(value="2"),
+                                                                value=ast.Pattern(
+                                                                    elements=[
+                                                                        ast.TextElement(value="NO")
+                                                                    ]
+                                                                ),
+                                                            ),
+                                                            ast.Variant(
+                                                                key=ast.Identifier(name="other"),
+                                                                value=ast.Pattern(
+                                                                    elements=[
+                                                                        ast.TextElement(
+                                                                            value="ANOTHER"
+                                                                        )
+                                                                    ]
+                                                                ),
+                                                                default=True,
+                                                            ),
+                                                        ],
+                                                    )
+                                                ),
+                                            ]
+                                        ),
+                                    ),
+                                    ast.Variant(
+                                        key=ast.Identifier(name="other"),
+                                        value=ast.Pattern(
+                                            elements=[
+                                                ast.TextElement(value="⏳ "),
+                                                ast.Placeable(
+                                                    expression=ast.VariableReference(
+                                                        id=ast.Identifier(name="second_level_key")
+                                                    )
+                                                ),
+                                                ast.TextElement(value=" ANOTHER"),
+                                            ]
+                                        ),
+                                        default=True,
+                                    ),
+                                ],
+                            )
+                        ),
+                    ]
+                ),
+            ),
+            locale="en",
+            position=0,
+        )
+    )
+
+    assert kwargs == {"first_level_key", "second_level_key"}

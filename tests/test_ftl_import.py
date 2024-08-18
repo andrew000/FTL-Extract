@@ -7,7 +7,7 @@ from fluent.syntax import ast
 from ftl_extract.ftl_importer import import_from_ftl, import_ftl_from_dir
 
 
-@pytest.fixture()
+@pytest.fixture
 def mock_ftl_content() -> str:
     return """
 # Simple FTL file

@@ -14,7 +14,7 @@ from ftl_extract.ftl_extractor import extract
 from ftl_extract.matcher import FluentKey, I18nMatcher
 
 
-@pytest.fixture()
+@pytest.fixture
 def mock_fluent_key(tmp_path: Path) -> FluentKey:
     mock = MagicMock(spec=FluentKey)
     mock.code_path = tmp_path / "code"
@@ -36,7 +36,7 @@ def mock_fluent_key(tmp_path: Path) -> FluentKey:
     return mock
 
 
-@pytest.fixture()
+@pytest.fixture
 def setup_environment(tmp_path: Path) -> tuple[Path, Path]:
     code_path = tmp_path / "code"
     output_path = tmp_path / "output"
@@ -45,18 +45,18 @@ def setup_environment(tmp_path: Path) -> tuple[Path, Path]:
     return code_path, output_path
 
 
-@pytest.fixture()
+@pytest.fixture
 def runner() -> click.testing.CliRunner:
     return click.testing.CliRunner()
 
 
-@pytest.fixture()
+@pytest.fixture
 def mock_extract_function() -> patch:
     with patch("ftl_extract.cli.extract") as mock:
         yield mock
 
 
-@pytest.fixture()
+@pytest.fixture
 def mock_leave_as_is() -> list:
     return [
         MagicMock(spec=fl_ast.Comment),

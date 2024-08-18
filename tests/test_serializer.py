@@ -7,7 +7,7 @@ from ftl_extract.matcher import FluentKey
 from ftl_extract.process.serializer import generate_ftl
 
 
-@pytest.fixture()
+@pytest.fixture
 def single_fluent_key() -> list[FluentKey]:
     return [
         FluentKey(
@@ -21,7 +21,7 @@ def single_fluent_key() -> list[FluentKey]:
     ]
 
 
-@pytest.fixture()
+@pytest.fixture
 def multiple_fluent_keys() -> list[FluentKey]:
     return [
         FluentKey(
@@ -43,7 +43,7 @@ def multiple_fluent_keys() -> list[FluentKey]:
     ]
 
 
-@pytest.fixture()
+@pytest.fixture
 def empty_fluent_keys() -> list[FluentKey]:
     return []
 

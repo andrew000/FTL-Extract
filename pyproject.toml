@@ -1,48 +1,50 @@
-[tool.poetry]
+[project]
 name = "FTL-Extract"
 description = "Extracts FTL files from a directory and outputs them to a directory"
 version = "0.4.2"
-authors = ["andrew000"]
+authors = [{ name = "andrew000", email = "help.kusbot@gmail.com" }]
 keywords = ["ftl", "ftl-extract", "ftl-extractor"]
 readme = "README.md"
 license = "MIT"
-packages = [
-    { include = "ftl_extract", from = "src" },
+requires-python = ">=3.9"
+dependencies = [
+    "fluent-syntax>=0.19",
 ]
 
-[tool.poetry.dependencies]
-python = ">=3.9"
-fluent-syntax = "^0.19"
+[project.optional-dependencies]
+dev = [
+    "isort==5.13.2",
+    "pre-commit==3.8.0",
+    "ruff==0.6.7",
+    "mypy==1.11.2",
+    "typing-extensions==4.12.2",
+]
+tests = [
+    "pytest==8.3.3",
+    "pytest-cov==5.0.0",
+    "pytest-html==4.1.1",
+    "pytest-mock==3.14.0",
+    "coverage==7.6.1",
+]
+docs = [
+    "sphinx==7.4.7",
+    "sphinx-rtd-theme==2.0.0",
+    "sphinx-autobuild==2024.9.19",
+    "furo==2024.8.6",
+    "pytz==2024.2",
+]
 
-[tool.poetry.group.test.dependencies]
-pytest = "8.3.2"
-pytest-cov = "5.0.0"
-pytest-html = "4.1.1"
-pytest-mock = "3.14.0"
-coverage = "7.6.1"
+[project.urls]
+Homepage = "https://github.com/andrew000/FTL-Extract"
+Issues = "https://github.com/andrew000/FTL-Extract/issues"
 
-[tool.poetry.group.docs.dependencies]
-sphinx = "7.4.7"
-sphinx-rtd-theme = "2.0.0"
-sphinx-autobuild = "2024.4.16"
-furo = "2024.8.6"
-pytz = "2024.1"
-
-[tool.poetry.group.dev.dependencies]
-black = "24.8.0"
-isort = "5.13.2"
-pre-commit = "3.8.0"
-ruff = "0.6.1"
-mypy = "1.11.1"
-typing-extensions = "4.12.2"
-
-[tool.poetry.scripts]
+[project.scripts]
+ftl-extract = "ftl_extract.cli:cli_extract"
 ftl_extract = "ftl_extract.cli:cli_extract"
-ftl_export = "ftl_export.__main__:main"
 
 [build-system]
-requires = ["poetry-core>=1.0.0"]
-build-backend = "poetry.core.masonry.api"
+requires = ["hatchling"]
+build-backend = "hatchling.build"
 
 [tool.pytest.ini_options]
 testpaths = "tests"

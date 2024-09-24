@@ -6,54 +6,38 @@ on:
   pull_request:
     branches: [ "master", "dev" ]
 
-env:
-  PYTHON_VERSION: "3.12"
-  POETRY_VERSION: "1.8.3"
-  POETRY_URL: https://install.python-poetry.org
-
 jobs:
   build:
-
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
         python-version: [ "3.9", "3.10", "3.11", "3.12" ]
+    env:
+      UV_CACHE_DIR: /tmp/.uv-cache
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Install uv
+        uses: astral-sh/setup-uv@v2
+        with:
+          version: "0.4.15"
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
+
       - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v5
-        with:
-          python-version: ${{ matrix.python-version }}
-        id: setup_python
+        run: uv python install ${{ matrix.python-version }}
 
-      - name: Cache Poetry cache
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/pypoetry
-          key: poetry-cache-${{ runner.os }}-${{ steps.setup_python.outputs.python-version }}-${{ env.POETRY_VERSION }}
+      - name: Install the project
+        run: uv sync --extra dev --extra tests
 
-      - name: Cache Packages
-        uses: actions/cache@v4
-        with:
-          path: ~/.local
-          key: poetry-local-${{ runner.os }}-${{ steps.setup_python.outputs.python-version }}-${{ hashFiles('**/poetry.lock') }}-${{ hashFiles('.github/workflows/*.yml') }}
-
-      - name: Install Poetry
-        run: |
-          curl -sSL ${{ env.POETRY_URL }} | python3 - --version ${{ env.POETRY_VERSION }}
-          echo "$HOME/.local/bin" >> $GITHUB_PATH
-
-      - name: Install dependencies
-        run: |
-          poetry lock --no-update
-          poetry install --with dev,test
+      - name: Minimize uv cache
+        run: uv cache prune --ci
 
       - name: Lint
         run: make lint
 
       - name: Test with pytest
-        run: make test
+        run: make tests

@@ -10,41 +10,45 @@ else
 	mkdir_cmd := $(shell mkdir -p $(reports_dir))
 endif
 
+.PHONY lint:
 lint:
-	@echo "Running ruff..."
-	@poetry run ruff check --config pyproject.toml --diff $(code_dir) $(tests_dir)
+	echo "Running ruff..."
+	uv run ruff check --config pyproject.toml --diff $(code_dir) $(tests_dir)
 
-	@echo "Running MyPy..."
-	@poetry run mypy --config-file pyproject.toml $(code_dir)
+	echo "Running MyPy..."
+	uv run mypy --config-file pyproject.toml $(code_dir)
 
+.PHONY format:
 format:
-	@echo "Running ruff check with --fix..."
-	@poetry run ruff check --config pyproject.toml --fix --unsafe-fixes $(code_dir) $(tests_dir)
+	echo "Running ruff check with --fix..."
+	uv run ruff check --config pyproject.toml --fix --unsafe-fixes $(code_dir) $(tests_dir)
 
-	@echo "Running ruff..."
-	@poetry run ruff format --config pyproject.toml $(code_dir) $(tests_dir)
+	echo "Running ruff..."
+	uv run ruff format --config pyproject.toml $(code_dir) $(tests_dir)
 
-	@echo "Running isort..."
-	@poetry run isort --settings-file pyproject.toml $(code_dir) $(tests_dir)
+	echo "Running isort..."
+	uv run isort --settings-file pyproject.toml $(code_dir) $(tests_dir)
 
+.PHONY livehtml:
 livehtml:
-	@sphinx-autobuild "$(docs_source_dir)" "$(docs_dir)/_build/html" $(SPHINXOPTS) $(O)
+	uv run sphinx-autobuild "$(docs_source_dir)" "$(docs_dir)/_build/html" $(SPHINXOPTS) $(O)
 
+.PHONY test:
 test:
-	@echo "Running tests..."
-	@poetry run pytest -vv --cov=$(code_dir) --cov-report=html --cov-report=term --cov-config=.coveragerc $(tests_dir)
+	echo "Running tests..."
+	uv run pytest -vv --cov=$(code_dir) --cov-report=html --cov-report=term --cov-config=.coveragerc $(tests_dir)
 
+.PHONY test-coverage:
 test-coverage:
-	@echo "Running tests with coverage..."
-	@$(mkdir_cmd)
-	@poetry run pytest -vv --cov=$(code_dir) --cov-config=.coveragerc --html=$(reports_dir)/tests/index.html tests/
-	@poetry run coverage html -d $(reports_dir)/coverage
+	echo "Running tests with coverage..."
+	$(mkdir_cmd)
+	uv run pytest -vv --cov=$(code_dir) --cov-config=.coveragerc --html=$(reports_dir)/tests/index.html tests/
+	uv run coverage html -d $(reports_dir)/coverage
 
+.PHONY show-outdated:
+show-outdated:
+	echo "Waiting for uv to create this feature..."
 
-.PHONY poetry-show:
-poetry-show:
-	@poetry show --top-level --latest
-
-.PHONY poetry-show-outdated:
-poetry-show-outdated:
-	@poetry show --top-level --outdated
+.PHONY uv-sync:
+uv-sync:
+	uv sync --extra dev --extra tests --extra docs

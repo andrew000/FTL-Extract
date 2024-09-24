@@ -4,59 +4,43 @@ on:
   release:
     types: [published]
 
-
-env:
-  PYTHON_VERSION: "3.12"
-  POETRY_VERSION: "1.8.3"
-  POETRY_URL: https://install.python-poetry.org
-
 jobs:
   build:
     name: 📦 Build
     runs-on: ubuntu-latest
+    env:
+      UV_PYTHON: "3.12.6"
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - name: Install uv
+        uses: astral-sh/setup-uv@v2
         with:
-          python-version: "3.12"
-        id: setup_python
+          version: "0.4.15"
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
 
-      - name: Cache Poetry cache
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/pypoetry
-          key: poetry-cache-${{ runner.os }}-${{ steps.setup_python.outputs.python-version }}-${{ env.POETRY_VERSION }}
+      - name: Set up Python ${{ env.UV_PYTHON }}
+        run: uv python install ${{ env.UV_PYTHON }}
 
-      - name: Cache Packages
-        uses: actions/cache@v4
-        with:
-          path: ~/.local
-          key: poetry-local-${{ runner.os }}-${{ steps.setup_python.outputs.python-version }}-${{ hashFiles('**/poetry.lock') }}-${{ hashFiles('.github/workflows/*.yml') }}
+      - name: Install the project
+        run: uv sync --extra dev --extra tests
 
-      - name: Install Poetry
-        run: |
-          curl -sSL ${{ env.POETRY_URL }} | python3 - --version ${{ env.POETRY_VERSION }}
-          echo "$HOME/.local/bin" >> $GITHUB_PATH
-
-      - name: Install dependencies
-        run: |
-          poetry lock --no-update
-          poetry install --only main
+      - name: Minimize uv cache
+        run: uv cache prune --ci
 
       - name: Build dist
-        run: poetry build
+        run: uv build
 
       - name: Verify wheel installation
         run: |
           mkdir -p verify
           cd verify
-          python3 -m venv venv
-          venv/bin/pip install ../dist/*.whl
-          venv/bin/python -c "import ftl_extract; print(ftl_extract.__version__)"
+          uv venv ${{ env.UV_PYTHON }}
+          uv pip install ../dist/*.whl
+          uv run python -c "import ftl_extract; print(ftl_extract.__version__)"
 
       - name: Store the distribution packages
         uses: actions/upload-artifact@v4

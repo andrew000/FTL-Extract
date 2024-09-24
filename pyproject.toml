@@ -38,6 +38,7 @@ docs = [
 [project.urls]
 Homepage = "https://github.com/andrew000/FTL-Extract"
 Issues = "https://github.com/andrew000/FTL-Extract/issues"
+Repository = "https://github.com/andrew000/FTL-Extract"
 
 [project.scripts]
 ftl-extract = "ftl_extract.cli:cli_extract"

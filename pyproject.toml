@@ -9,6 +9,7 @@ license = "MIT"
 requires-python = ">=3.9"
 dependencies = [
     "fluent-syntax>=0.19",
+    "click==8.*",
 ]
 
 [project.optional-dependencies]

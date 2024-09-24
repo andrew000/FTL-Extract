@@ -33,13 +33,13 @@ format:
 livehtml:
 	uv run sphinx-autobuild "$(docs_source_dir)" "$(docs_dir)/_build/html" $(SPHINXOPTS) $(O)
 
-.PHONY tests:
-tests:
+.PHONY test:
+test:
 	echo "Running tests..."
 	uv run pytest -vv --cov=$(code_dir) --cov-report=html --cov-report=term --cov-config=.coveragerc $(tests_dir)
 
-.PHONY tests-coverage:
-tests-coverage:
+.PHONY test-coverage:
+test-coverage:
 	echo "Running tests with coverage..."
 	$(mkdir_cmd)
 	uv run pytest -vv --cov=$(code_dir) --cov-config=.coveragerc --html=$(reports_dir)/tests/index.html tests/

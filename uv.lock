@@ -278,9 +278,10 @@ wheels = [
 
 [[package]]
 name = "ftl-extract"
-version = "0.4.2"
+version = "0.4.3"
 source = { editable = "." }
 dependencies = [
+    { name = "click" },
     { name = "fluent-syntax" },
 ]
 
@@ -309,6 +310,7 @@ tests = [
 
 [package.metadata]
 requires-dist = [
+    { name = "click", specifier = "==8.*" },
     { name = "coverage", marker = "extra == 'tests'", specifier = "==7.6.1" },
     { name = "fluent-syntax", specifier = ">=0.19" },
     { name = "furo", marker = "extra == 'docs'", specifier = "==2024.8.6" },

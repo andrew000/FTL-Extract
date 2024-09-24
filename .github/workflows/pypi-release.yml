@@ -9,7 +9,6 @@ jobs:
     name: 📦 Build
     runs-on: ubuntu-latest
     env:
-      UV_CACHE_DIR: /tmp/.uv-cache
       UV_PYTHON: "3.12.6"
 
     steps:

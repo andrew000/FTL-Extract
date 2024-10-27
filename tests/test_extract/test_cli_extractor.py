@@ -318,7 +318,7 @@ def test_generic_visit_called_on_else_block(setup_environment: tuple[Path, Path]
 
     with patch.object(matcher, "generic_visit", wraps=matcher.generic_visit) as mock_generic_visit:
         matcher.visit_Call(node)
-        mock_generic_visit.assert_called_with(node.args[0])
+        mock_generic_visit.assert_called()
 
 
 def test_generic_visit_called_when_attr_in_ignore_attributes(

@@ -2,23 +2,23 @@ name: Publish to PyPI
 
 on:
   release:
-    types: [published]
+    types: [ published ]
 
 jobs:
-  build:
-    name: 📦 Build
+  build_and_publish:
+    name: 📦 Build and publish
     runs-on: ubuntu-latest
     env:
-      UV_PYTHON: "3.12.6"
+      UV_PYTHON: "3.12.7"
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v2
+        uses: astral-sh/setup-uv@v3
         with:
-          version: "0.4.15"
+          version: "latest"
           enable-cache: true
           cache-dependency-glob: "uv.lock"
 
@@ -35,35 +35,11 @@ jobs:
         run: uv build
 
       - name: Verify wheel installation
-        run: |
-          mkdir -p verify
-          cd verify
-          uv venv ${{ env.UV_PYTHON }}
-          uv pip install ../dist/*.whl
-          uv run python -c "import ftl_extract; print(ftl_extract.__version__)"
+        run: uv run --verbose \
+          --with ./dist/$(find ./dist/*.whl -printf "%f") \
+          --no-project \
+          --refresh-package ftl_extract -- \
+          python -c "import ftl_extract; print(ftl_extract.__version__)"
 
-      - name: Store the distribution packages
-        uses: actions/upload-artifact@v4
-        with:
-          name: python-package-distributions
-          path: dist/
-
-  publish:
-    name: 🐍 Publish
-    needs: build
-    runs-on: ubuntu-latest
-    environment:
-      name: pypi
-      url: https://pypi.org/p/ftl-extract
-    permissions:
-      id-token: write  # IMPORTANT: mandatory for trusted publishing
-
-    steps:
-      - name: Download all the dists
-        uses: actions/download-artifact@v4
-        with:
-          name: python-package-distributions
-          path: dist/
-
-      - name: Publish distribution 📦 to PyPI
-        uses: pypa/gh-action-pypi-publish@release/v1
+      - name: 🐍 Publish distribution 📦
+        run: uv publish

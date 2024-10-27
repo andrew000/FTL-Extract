@@ -2,7 +2,7 @@
 name = "FTL-Extract"
 description = "Extracts FTL files from a directory and outputs them to a directory"
 version = "0.4.3"
-authors = [{ name = "andrew000", email = "help.kusbot@gmail.com" }]
+authors = [{ name = "andrew000", email = "help@kusbot.com" }]
 keywords = ["ftl", "ftl-extract", "ftl-extractor"]
 readme = "README.md"
 license = "MIT"
@@ -15,9 +15,9 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
     "isort==5.13.2",
-    "pre-commit==3.8.0",
-    "ruff==0.6.7",
-    "mypy==1.11.2",
+    "pre-commit==4.0.1",
+    "ruff==0.7.1",
+    "mypy==1.13.0",
     "typing-extensions==4.12.2",
 ]
 tests = [
@@ -33,6 +33,9 @@ docs = [
     "sphinx-autobuild==2024.9.19",
     "furo==2024.8.6",
     "pytz==2024.2",
+]
+pcu = [
+    "pip-check-updates==0.27.0",
 ]
 
 [project.urls]

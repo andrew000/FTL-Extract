@@ -47,8 +47,12 @@ test-coverage:
 
 .PHONY show-outdated:
 show-outdated:
-	echo "Waiting for uv to create this feature..."
+	uv run pcu "./pyproject.toml" --extra lint --extra dev --extra uvloop
 
 .PHONY uv-sync:
 uv-sync:
 	uv sync --extra dev --extra tests --extra docs
+
+.PHONY uv-sync-with-pcu:
+uv-sync-with-pcu:
+	uv sync --extra dev --extra tests --extra docs --extra pcu

@@ -35,11 +35,7 @@ jobs:
         run: uv build
 
       - name: Verify wheel installation
-        run: uv run --verbose \
-          --with ./dist/$(find ./dist/*.whl -printf "%f") \
-          --no-project \
-          --refresh-package ftl_extract -- \
-          python -c "import ftl_extract; print(ftl_extract.__version__)"
+        run: uv run --verbose --with ./dist/$(find ./dist/*.whl -printf "%f") --no-project --refresh-package ftl_extract -- python -c "import ftl_extract; print(ftl_extract.__version__)"
 
       - name: 🐍 Publish distribution 📦
         run: uv publish

@@ -52,6 +52,7 @@ from ftl_extract.ftl_extractor import extract
     "--default-ftl-file",
     default=DEFAULT_FTL_FILE,
     show_default=True,
+    type=click.Path(path_type=Path),
 )
 @click.version_option()
 def cli_extract(
@@ -62,7 +63,7 @@ def cli_extract(
     ignore_attributes: tuple[str, ...],
     expand_ignore_attributes: tuple[str, ...] | None = None,
     comment_junks: bool = False,
-    default_ftl_file: str = DEFAULT_FTL_FILE,
+    default_ftl_file: Path = DEFAULT_FTL_FILE,
 ) -> None:
     click.echo(f"Extracting from {code_path}...")
     start_time = perf_counter_ns()

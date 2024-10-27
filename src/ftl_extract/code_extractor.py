@@ -53,7 +53,7 @@ def parse_file(
     return matcher.fluent_keys
 
 
-def post_process_fluent_keys(fluent_keys: dict[str, FluentKey], default_ftl_file: str) -> None:
+def post_process_fluent_keys(fluent_keys: dict[str, FluentKey], default_ftl_file: Path) -> None:
     """
     Third step: post-process parsed `FluentKey`.
 
@@ -107,7 +107,7 @@ def extract_fluent_keys(
     path: Path,
     i18n_keys: str | Iterable[str],
     ignore_attributes: Iterable[str],
-    default_ftl_file: str,
+    default_ftl_file: Path,
 ) -> dict[str, FluentKey]:
     """
     Extract all `FluentKey`s from given path.

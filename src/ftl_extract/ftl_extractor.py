@@ -29,7 +29,7 @@ def extract(
     ignore_attributes: Iterable[str] = IGNORE_ATTRIBUTES,
     expand_ignore_attributes: Iterable[str] | None = None,
     comment_junks: bool = False,
-    default_ftl_file: str = DEFAULT_FTL_FILE,
+    default_ftl_file: Path = DEFAULT_FTL_FILE,
     serializer: FluentSerializer | None = None,
 ) -> None:
     if expand_ignore_attributes is not None:

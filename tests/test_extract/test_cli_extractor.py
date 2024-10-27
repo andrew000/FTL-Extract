@@ -300,7 +300,7 @@ def test_i18n_matcher_skips_call_with_no_args(setup_environment: tuple[Path, Pat
     code_path, output_path = setup_environment
     matcher = I18nMatcher(code_path)
 
-    node = ast.Call(func=ast.Attribute(value=ast.Name(id="i18n"), attr="get"), args=[])
+    node = ast.Call(func=ast.Attribute(value=ast.Name(id="i18n"), attr="get"), args=[], keywords=[])
     matcher.visit_Call(node)
 
     assert len(matcher.fluent_keys) == 0
@@ -310,7 +310,11 @@ def test_generic_visit_called_on_else_block(setup_environment: tuple[Path, Path]
     code_path, output_path = setup_environment
     matcher = I18nMatcher(code_path)
 
-    node = ast.Call(func=ast.Attribute(value=ast.Name(id="i18n"), attr="get"), args=[ast.Name()])
+    node = ast.Call(
+        func=ast.Attribute(value=ast.Name(id="i18n"), attr="get"),
+        args=[ast.Name(id="i18n")],
+        keywords=[],
+    )
 
     with patch.object(matcher, "generic_visit", wraps=matcher.generic_visit) as mock_generic_visit:
         matcher.visit_Call(node)

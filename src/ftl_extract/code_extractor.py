@@ -53,19 +53,21 @@ def parse_file(
     return matcher.fluent_keys
 
 
-def post_process_fluent_keys(fluent_keys: dict[str, FluentKey]) -> None:
+def post_process_fluent_keys(fluent_keys: dict[str, FluentKey], default_ftl_file: str) -> None:
     """
     Third step: post-process parsed `FluentKey`.
 
     :param fluent_keys: Dict with `key` and `FluentKey` that will be post-processed.
     :type fluent_keys: dict[str, FluentKey]
+    :param default_ftl_file: Default name of FTL file.
+    :type default_ftl_file: str
     """
     for fluent_key in fluent_keys.values():
         if not isinstance(fluent_key.path, Path):
             fluent_key.path = Path(fluent_key.path)
 
         if not fluent_key.path.suffix:  # if path looks like directory (no suffix)
-            fluent_key.path /= "_default.ftl"
+            fluent_key.path /= default_ftl_file
 
 
 def find_conflicts(
@@ -105,6 +107,7 @@ def extract_fluent_keys(
     path: Path,
     i18n_keys: str | Iterable[str],
     ignore_attributes: Iterable[str],
+    default_ftl_file: str,
 ) -> dict[str, FluentKey]:
     """
     Extract all `FluentKey`s from given path.
@@ -115,6 +118,8 @@ def extract_fluent_keys(
     :type i18n_keys: str | Sequence[str]
     :param ignore_attributes: Ignore attributes, like `i18n.set_locale`.
     :type ignore_attributes: Sequence[str]
+    :param default_ftl_file: Default name of FTL file.
+    :type default_ftl_file: str
     :return: Dict with `key` and `FluentKey`.
     :rtype: dict[str, FluentKey]
 
@@ -123,7 +128,7 @@ def extract_fluent_keys(
 
     for file in find_py_files(path):
         keys = parse_file(path=file, i18n_keys=i18n_keys, ignore_attributes=ignore_attributes)
-        post_process_fluent_keys(keys)
+        post_process_fluent_keys(keys, default_ftl_file)
         find_conflicts(fluent_keys, keys)
         fluent_keys.update(keys)
 

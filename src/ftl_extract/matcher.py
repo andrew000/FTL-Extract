@@ -145,14 +145,15 @@ def create_fluent_key(
     for kw in keywords:
         if kw.arg == PATH_LITERAL:
             if kw.value is not None and isinstance(kw.value, ast.Constant):
-                fluent_key.path = Path(kw.value.value)
+                fluent_key.path = Path(cast(ast.Constant, kw.value).value)
         elif isinstance(kw.arg, str):
             cast(
-                fluent_ast.Pattern, cast(fluent_ast.Message, fluent_key.translation).value
+                fluent_ast.Pattern,
+                cast(fluent_ast.Message, fluent_key.translation).value,
             ).elements.append(
                 fluent_ast.Placeable(
-                    expression=fluent_ast.VariableReference(id=fluent_ast.Identifier(name=kw.arg))
-                )
+                    expression=fluent_ast.VariableReference(id=fluent_ast.Identifier(name=kw.arg)),
+                ),
             )
 
     return fluent_key

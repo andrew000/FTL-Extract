@@ -17,7 +17,7 @@ def single_fluent_key() -> list[FluentKey]:
                 id=ast.Identifier("greeting"),
                 value=ast.Pattern(elements=[ast.TextElement("Hello, world!")]),
             ),
-        )
+        ),
     ]
 
 
@@ -95,7 +95,7 @@ def test_generate_ftl_includes_leave_as_is_elements() -> None:
                     id=ast.Identifier("test_message"),
                     value=ast.Pattern(elements=[ast.TextElement("Test message content")]),
                 ),
-            )
+            ),
         ],
         serializer=FluentSerializer(with_junk=True),
         leave_as_is=[

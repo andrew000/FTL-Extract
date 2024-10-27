@@ -8,7 +8,7 @@ from fluent.syntax import ast as fl_ast
 
 from ftl_extract import extract_fluent_keys
 from ftl_extract.code_extractor import sort_fluent_keys_by_path
-from ftl_extract.const import IGNORE_ATTRIBUTES
+from ftl_extract.const import DEFAULT_FTL_FILE, IGNORE_ATTRIBUTES
 from ftl_extract.ftl_importer import import_ftl_from_dir
 from ftl_extract.process.commentator import comment_ftl_key
 from ftl_extract.process.kwargs_extractor import extract_kwargs
@@ -29,6 +29,7 @@ def extract(
     ignore_attributes: Iterable[str] = IGNORE_ATTRIBUTES,
     expand_ignore_attributes: Iterable[str] | None = None,
     comment_junks: bool = False,
+    default_ftl_file: str = DEFAULT_FTL_FILE,
     serializer: FluentSerializer | None = None,
 ) -> None:
     if expand_ignore_attributes is not None:
@@ -42,6 +43,7 @@ def extract(
         path=code_path,
         i18n_keys=i18n_keys,
         ignore_attributes=ignore_attributes,
+        default_ftl_file=default_ftl_file,
     )
 
     for lang in language:
@@ -104,12 +106,15 @@ def extract(
 
         for fluent_key in leave_as_is:
             leave_as_is_with_path.setdefault(
-                fluent_key.path.relative_to(output_path / lang), []
+                fluent_key.path.relative_to(output_path / lang),
+                [],
             ).append(fluent_key)
 
         for path, keys in sorted_fluent_keys.items():
             ftl, _ = generate_ftl(
-                keys, serializer=serializer, leave_as_is=leave_as_is_with_path.get(path, [])
+                keys,
+                serializer=serializer,
+                leave_as_is=leave_as_is_with_path.get(path, []),
             )
             (output_path / lang / path).parent.mkdir(parents=True, exist_ok=True)
             (output_path / lang / path).write_text(ftl, encoding="utf-8")

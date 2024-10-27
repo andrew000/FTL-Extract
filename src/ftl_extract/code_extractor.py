@@ -34,6 +34,7 @@ def parse_file(
     path: Path,
     i18n_keys: str | Iterable[str],
     ignore_attributes: Iterable[str],
+    default_ftl_file: Path,
 ) -> dict[str, FluentKey]:
     """
     Second step: parse given .py file and find all i18n calls.
@@ -44,11 +45,18 @@ def parse_file(
     :type i18n_keys: str | Sequence[str]
     :param ignore_attributes: Ignore attributes, like `i18n.set_locale`.
     :type ignore_attributes: Sequence[str]
+    :param default_ftl_file: Default name of FTL file.
+    :type default_ftl_file: Path
     :return: Dict with `key` and `FluentKey`.
     :rtype: dict[str, FluentKey]
     """
     node = ast.parse(path.read_bytes())
-    matcher = I18nMatcher(code_path=path, func_names=i18n_keys, ignore_attributes=ignore_attributes)
+    matcher = I18nMatcher(
+        code_path=path,
+        default_ftl_file=default_ftl_file,
+        func_names=i18n_keys,
+        ignore_attributes=ignore_attributes,
+    )
     matcher.visit(node)
     return matcher.fluent_keys
 
@@ -60,7 +68,7 @@ def post_process_fluent_keys(fluent_keys: dict[str, FluentKey], default_ftl_file
     :param fluent_keys: Dict with `key` and `FluentKey` that will be post-processed.
     :type fluent_keys: dict[str, FluentKey]
     :param default_ftl_file: Default name of FTL file.
-    :type default_ftl_file: str
+    :type default_ftl_file: Path
     """
     for fluent_key in fluent_keys.values():
         if not isinstance(fluent_key.path, Path):
@@ -119,7 +127,7 @@ def extract_fluent_keys(
     :param ignore_attributes: Ignore attributes, like `i18n.set_locale`.
     :type ignore_attributes: Sequence[str]
     :param default_ftl_file: Default name of FTL file.
-    :type default_ftl_file: str
+    :type default_ftl_file: Path
     :return: Dict with `key` and `FluentKey`.
     :rtype: dict[str, FluentKey]
 
@@ -127,7 +135,12 @@ def extract_fluent_keys(
     fluent_keys: dict[str, FluentKey] = {}
 
     for file in find_py_files(path):
-        keys = parse_file(path=file, i18n_keys=i18n_keys, ignore_attributes=ignore_attributes)
+        keys = parse_file(
+            path=file,
+            i18n_keys=i18n_keys,
+            ignore_attributes=ignore_attributes,
+            default_ftl_file=default_ftl_file,
+        )
         post_process_fluent_keys(keys, default_ftl_file)
         find_conflicts(fluent_keys, keys)
         fluent_keys.update(keys)

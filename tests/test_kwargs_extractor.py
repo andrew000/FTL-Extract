@@ -2,6 +2,7 @@ from pathlib import Path
 
 from fluent.syntax import ast
 
+from ftl_extract.const import DEFAULT_FTL_FILE
 from ftl_extract.matcher import FluentKey
 from ftl_extract.process.kwargs_extractor import extract_kwargs
 
@@ -22,6 +23,7 @@ def extracts_variable_names_from_simple_variable() -> None:
                     ],
                 ),
             ),
+            path=DEFAULT_FTL_FILE,
         ),
     )
     assert kwargs == {"username"}
@@ -56,6 +58,7 @@ def extracts_variable_names_from_select_expression() -> None:
                     ],
                 ),
             ),
+            path=DEFAULT_FTL_FILE,
         ),
     )
     assert kwargs == {"gender"}
@@ -70,6 +73,7 @@ def returns_empty_set_for_messages_without_variables() -> None:
                 id=ast.Identifier("no_variables"),
                 value=ast.Pattern(elements=[ast.TextElement("Just a text message.")]),
             ),
+            path=DEFAULT_FTL_FILE,
         ),
     )
     assert kwargs == set()
@@ -81,6 +85,7 @@ def test_returns_empty_set_for_comment_translation() -> None:
             code_path=Path("test.py"),
             key="key-1",
             translation=ast.Comment(content="This is a comment"),
+            path=DEFAULT_FTL_FILE,
         ),
     )
     assert kwargs == set()
@@ -95,6 +100,7 @@ def test_returns_empty_set_for_translation_without_value() -> None:
                 id=ast.Identifier("message_no_value"),
                 value=None,  # Explicitly setting value to None
             ),
+            path=DEFAULT_FTL_FILE,
         ),
     )
     assert kwargs == set()
@@ -120,6 +126,7 @@ def test_extracts_variable_names_from_mixed_elements() -> None:
                     ],
                 ),
             ),
+            path=DEFAULT_FTL_FILE,
         ),
     )
     assert kwargs == {"username", "balance"}
@@ -158,6 +165,7 @@ def test_extracts_selector_variable_name_from_select_expression() -> None:
                     ],
                 ),
             ),
+            path=DEFAULT_FTL_FILE,
         ),
     )
     assert kwargs == {"user_status"}
@@ -292,6 +300,7 @@ def test_nested_extraction() -> None:
                     ],
                 ),
             ),
+            path=DEFAULT_FTL_FILE,
             locale="en",
             position=0,
         ),

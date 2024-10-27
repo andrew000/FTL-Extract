@@ -38,7 +38,7 @@ class FluentKey:
     code_path: Path
     key: str
     translation: fluent_ast.EntryType
-    path: Path = field(default=Path("_default.ftl"))
+    path: Path
     locale: str | None = field(default=None)
     position: int | float = field(default=inf)
 
@@ -47,6 +47,7 @@ class I18nMatcher(ast.NodeVisitor):
     def __init__(
         self,
         code_path: Path,
+        default_ftl_file: Path,
         func_names: str | Iterable[str] = I18N_LITERAL,
         ignore_attributes: str | Iterable[str] = IGNORE_ATTRIBUTES,
     ) -> None:
@@ -66,6 +67,7 @@ class I18nMatcher(ast.NodeVisitor):
             if isinstance(ignore_attributes, str)
             else frozenset(ignore_attributes)
         )
+        self.default_ftl_file = default_ftl_file
         self.fluent_keys: dict[str, FluentKey] = {}
 
     def visit_Call(self, node: ast.Call) -> None:  # noqa: N802
@@ -96,6 +98,7 @@ class I18nMatcher(ast.NodeVisitor):
                         code_path=self.code_path,
                         key=key,
                         keywords=node.keywords,
+                        default_ftl_file=self.default_ftl_file,
                     )
 
                     process_fluent_key(self.fluent_keys, fluent_key)
@@ -109,6 +112,7 @@ class I18nMatcher(ast.NodeVisitor):
                         code_path=self.code_path,
                         key="-".join(reversed(attrs)),
                         keywords=node.keywords,
+                        default_ftl_file=self.default_ftl_file,
                     )
                     process_fluent_key(self.fluent_keys, fluent_key)
             else:
@@ -122,6 +126,7 @@ class I18nMatcher(ast.NodeVisitor):
                 code_path=self.code_path,
                 key=cast(ast.Constant, node.args[0]).value,
                 keywords=node.keywords,
+                default_ftl_file=self.default_ftl_file,
             )
             process_fluent_key(self.fluent_keys, fluent_key)
 
@@ -132,6 +137,7 @@ def create_fluent_key(
     code_path: Path,
     key: str,
     keywords: list[ast.keyword],
+    default_ftl_file: Path,
 ) -> FluentKey:
     fluent_key = FluentKey(
         code_path=code_path,
@@ -140,6 +146,7 @@ def create_fluent_key(
             id=fluent_ast.Identifier(name=key),
             value=fluent_ast.Pattern(elements=[fluent_ast.TextElement(value=key)]),
         ),
+        path=default_ftl_file,
     )
 
     for kw in keywords:

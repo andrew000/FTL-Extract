@@ -16,7 +16,7 @@ Or add it to your `pyproject.toml` and run `poetry update`
 
 ## Usage
 
-First of all, you should to create locales directory in your project.
+First of all, you should create locales directory in your project.
 
 ```shell
 $ mkdir project_path/locales
@@ -50,6 +50,11 @@ put the key.
 
 It may be just a filename like `file.ftl` or a path to a file like `dir/file.ftl`.
 
+<details>
+    <summary><b>❌ CustomFluentRuntimeCore</b></summary>
+
+### ❗️ Is not actual anymore
+
 #### ❓ - My `FluentRuntimeCore` throws an error 🤯, when I use `_path` argument
 
 Now there is a little problem with integration with [aiogram-i18n](https://github.com/aiogram/i18n)
@@ -81,6 +86,8 @@ class CustomFluentRuntimeCore(FluentRuntimeCore):
 ```
 
 Then just use this `CustomFluentRuntimeCore` in your `i18n` middleware as erlier.
+
+</details>
 
 #### ❓ - How to add more languages to the project ?
 

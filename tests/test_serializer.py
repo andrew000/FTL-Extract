@@ -3,6 +3,7 @@ from pathlib import Path
 import pytest
 from fluent.syntax import FluentSerializer, ast
 
+from ftl_extract.const import DEFAULT_FTL_FILE
 from ftl_extract.matcher import FluentKey
 from ftl_extract.process.serializer import generate_ftl
 
@@ -17,7 +18,8 @@ def single_fluent_key() -> list[FluentKey]:
                 id=ast.Identifier("greeting"),
                 value=ast.Pattern(elements=[ast.TextElement("Hello, world!")]),
             ),
-        )
+            path=DEFAULT_FTL_FILE,
+        ),
     ]
 
 
@@ -31,6 +33,7 @@ def multiple_fluent_keys() -> list[FluentKey]:
                 id=ast.Identifier("greeting"),
                 value=ast.Pattern(elements=[ast.TextElement("Hello, world!")]),
             ),
+            path=DEFAULT_FTL_FILE,
         ),
         FluentKey(
             code_path=Path("test.py"),
@@ -39,6 +42,7 @@ def multiple_fluent_keys() -> list[FluentKey]:
                 id=ast.Identifier("farewell"),
                 value=ast.Pattern(elements=[ast.TextElement("Goodbye, world!")]),
             ),
+            path=DEFAULT_FTL_FILE,
         ),
     ]
 
@@ -95,7 +99,8 @@ def test_generate_ftl_includes_leave_as_is_elements() -> None:
                     id=ast.Identifier("test_message"),
                     value=ast.Pattern(elements=[ast.TextElement("Test message content")]),
                 ),
-            )
+                path=DEFAULT_FTL_FILE,
+            ),
         ],
         serializer=FluentSerializer(with_junk=True),
         leave_as_is=[
@@ -103,16 +108,19 @@ def test_generate_ftl_includes_leave_as_is_elements() -> None:
                 code_path=Path(),
                 key="",
                 translation=ast.Comment(content="This is a comment"),
+                path=DEFAULT_FTL_FILE,
             ),
             FluentKey(
                 code_path=Path(),
                 key="",
                 translation=ast.GroupComment(content="This is a group comment"),
+                path=DEFAULT_FTL_FILE,
             ),
             FluentKey(
                 code_path=Path(),
                 key="",
                 translation=ast.ResourceComment(content="This is a resource comment"),
+                path=DEFAULT_FTL_FILE,
             ),
             FluentKey(
                 code_path=Path(),
@@ -121,6 +129,7 @@ def test_generate_ftl_includes_leave_as_is_elements() -> None:
                     id=ast.Identifier("test_term"),
                     value=ast.Pattern(elements=[ast.TextElement("Test term content")]),
                 ),
+                path=DEFAULT_FTL_FILE,
             ),
             FluentKey(
                 code_path=Path(),
@@ -128,6 +137,7 @@ def test_generate_ftl_includes_leave_as_is_elements() -> None:
                 translation=ast.Junk(
                     content="This is junk content",
                 ),
+                path=DEFAULT_FTL_FILE,
             ),
         ],
     )

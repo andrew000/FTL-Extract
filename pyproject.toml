@@ -54,14 +54,6 @@ build-backend = "hatchling.build"
 [tool.pytest.ini_options]
 testpaths = "tests"
 
-[tool.mypy]
-packages = ["src/ftl_extract"]
-exclude = [
-    "\\.?venv",
-    "\\.idea",
-    "\\.tests?",
-]
-
 [tool.coverage.report]
 exclude_lines = [
     "pragma: no cover",
@@ -88,28 +80,17 @@ src = ["src", "tests"]
 target-version = "py39"
 line-length = 100
 exclude = [
-    ".bzr",
-    ".direnv",
-    ".eggs",
     ".git",
-    ".hg",
     ".mypy_cache",
-    ".nox",
-    ".pants.d",
-    ".pytype",
     ".ruff_cache",
-    ".svn",
-    ".tox",
-    ".venv",
     "__pypackages__",
-    "_build",
-    "buck-out",
-    "build",
-    "dist",
-    "node_modules",
+    "__pycache__",
+    "*.pyi",
     "venv",
     ".venv",
-    "tests/.data_for_testing",
+    "tests/.files",
+    "dist",
+    "build",
 ]
 
 [tool.ruff.lint]
@@ -117,19 +98,54 @@ select = ["ALL"]
 ignore = [
     "A003",
     "ANN002", "ANN003", "ANN101", "ANN102", "ANN401",
-    "COM812",
     "C901",
     "D100", "D101", "D102", "D103", "D104", "D105", "D106", "D107", "D203", "D205", "D212",
-    "DTZ003",
     "ERA001",
-    "F841",
     "FA100", "FA102",
     "FBT001", "FBT002",
     "FIX002",
-    "INP001", "ISC001",
+    "I001",
     "PLR0911", "PLR0912", "PLR0913", "PLR0915", "PLR5501",
     "PLW0120",
-    "RUF",
-    "S101", "S311",
-    "TD002", "TD003"
+    "RUF001",
+    "S101",
+    "TD002", "TD003",
+]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+skip-magic-trailing-comma = false
+line-ending = "auto"
+
+[tool.mypy]
+python_version = "3.9"
+packages = ["src/ftl_extract"]
+plugins = []
+allow_redefinition = true
+check_untyped_defs = true
+disallow_any_generics = true
+disallow_incomplete_defs = true
+disallow_untyped_calls = true
+disallow_untyped_defs = true
+extra_checks = true
+follow_imports = "skip"
+follow_imports_for_stubs = false
+ignore_missing_imports = false
+namespace_packages = true
+no_implicit_optional = true
+no_implicit_reexport = true
+pretty = true
+show_absolute_path = true
+show_error_codes = true
+show_error_context = true
+warn_unused_configs = true
+warn_unused_ignores = true
+disable_error_code = [
+    "no-redef",
+]
+exclude = [
+    "\\.?venv",
+    "\\.idea",
+    "\\.tests?",
 ]

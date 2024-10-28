@@ -4,7 +4,7 @@ from typing import Final
 import pytest
 
 from ftl_extract.code_extractor import extract_fluent_keys
-from ftl_extract.const import IGNORE_ATTRIBUTES
+from ftl_extract.const import DEFAULT_FTL_FILE, IGNORE_ATTRIBUTES
 from ftl_extract.exceptions import (
     FTLExtractorDifferentPathsError,
     FTLExtractorDifferentTranslationError,
@@ -52,7 +52,7 @@ def test_extract_similar_keys_in_different_paths_from_one_py_file(tmp_path: Path
     (tmp_path / "test.py").write_text(CONTENT_1)
 
     with pytest.raises(FTLExtractorDifferentPathsError):
-        extract_fluent_keys(tmp_path, "i18n", IGNORE_ATTRIBUTES)
+        extract_fluent_keys(tmp_path, "i18n", IGNORE_ATTRIBUTES, default_ftl_file=DEFAULT_FTL_FILE)
 
 
 def test_extract_similar_fluent_keys_in_different_paths_from_different_py_files(
@@ -63,14 +63,14 @@ def test_extract_similar_fluent_keys_in_different_paths_from_different_py_files(
     (tmp_path / "test2.py").write_text(CONTENT_2_2)
 
     with pytest.raises(FTLExtractorDifferentPathsError):
-        extract_fluent_keys(tmp_path, "i18n", IGNORE_ATTRIBUTES)
+        extract_fluent_keys(tmp_path, "i18n", IGNORE_ATTRIBUTES, default_ftl_file=DEFAULT_FTL_FILE)
 
 
 def test_extract_similar_fluent_keys_with_different_translation_one_py_file(tmp_path: Path) -> None:
     (tmp_path / "test.py").write_text(CONTENT_3)
 
     with pytest.raises(FTLExtractorDifferentTranslationError):
-        extract_fluent_keys(tmp_path, "i18n", IGNORE_ATTRIBUTES)
+        extract_fluent_keys(tmp_path, "i18n", IGNORE_ATTRIBUTES, default_ftl_file=DEFAULT_FTL_FILE)
 
 
 def test_extract_similar_fluent_keys_with_different_translation_different_py_files(
@@ -81,4 +81,4 @@ def test_extract_similar_fluent_keys_with_different_translation_different_py_fil
     (tmp_path / "test2.py").write_text(CONTENT_4_2)
 
     with pytest.raises(FTLExtractorDifferentTranslationError):
-        extract_fluent_keys(tmp_path, "i18n", IGNORE_ATTRIBUTES)
+        extract_fluent_keys(tmp_path, "i18n", IGNORE_ATTRIBUTES, default_ftl_file=DEFAULT_FTL_FILE)

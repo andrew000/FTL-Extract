@@ -10,6 +10,7 @@ from fluent.syntax import FluentSerializer
 from fluent.syntax import ast as fl_ast
 
 from ftl_extract.cli import cli_extract
+from ftl_extract.const import DEFAULT_FTL_FILE
 from ftl_extract.ftl_extractor import extract
 from ftl_extract.matcher import FluentKey, I18nMatcher
 
@@ -79,7 +80,8 @@ def test_extract_with_keys_to_comment_and_add(
 
     with (
         patch(
-            "ftl_extract.ftl_extractor.extract_fluent_keys", return_value={"key-1": mock_fluent_key}
+            "ftl_extract.ftl_extractor.extract_fluent_keys",
+            return_value={"key-1": mock_fluent_key},
         ),
         patch(
             "ftl_extract.ftl_extractor.import_ftl_from_dir",
@@ -87,7 +89,8 @@ def test_extract_with_keys_to_comment_and_add(
         ),
         patch("ftl_extract.ftl_extractor.comment_ftl_key") as mock_comment_ftl_key,
         patch(
-            "ftl_extract.ftl_extractor.generate_ftl", return_value=("generated ftl", None)
+            "ftl_extract.ftl_extractor.generate_ftl",
+            return_value=("generated ftl", None),
         ) as mock_generate_ftl,
     ):
         extract(code_path, output_path, ("en",), ("i18n",))
@@ -106,14 +109,16 @@ def test_extract_with_keys_only_to_add(
 
     with (
         patch(
-            "ftl_extract.ftl_extractor.extract_fluent_keys", return_value={"key-2": mock_fluent_key}
+            "ftl_extract.ftl_extractor.extract_fluent_keys",
+            return_value={"key-2": mock_fluent_key},
         ),
         patch(
             "ftl_extract.ftl_extractor.import_ftl_from_dir",
             return_value=({"key-1": mock_fluent_key}, []),
         ),
         patch(
-            "ftl_extract.ftl_extractor.generate_ftl", return_value=("generated ftl", None)
+            "ftl_extract.ftl_extractor.generate_ftl",
+            return_value=("generated ftl", None),
         ) as mock_generate_ftl,
     ):
         extract(code_path, output_path, ("en",), ("i18n",))
@@ -130,7 +135,8 @@ def test_extraction_with_valid_paths_succeeds(
     output_path = tmp_path.joinpath("path/to/output")
 
     result = runner.invoke(
-        cast(BaseCommand, cli_extract), [code_path.as_posix(), output_path.as_posix()]
+        cast(BaseCommand, cli_extract),
+        [code_path.as_posix(), output_path.as_posix()],
     )
     assert result.exit_code == 0
     assert f"Extracting from {code_path}..." in result.output
@@ -182,6 +188,7 @@ def test_comment_junk_elements_if_needed(setup_environment: tuple[Path, Path]) -
 
     mock_junk_key = MagicMock(spec=FluentKey)
     mock_junk_key.translation = MagicMock(spec=fl_ast.Junk)
+    mock_junk_key.path = MagicMock(spec=Path)
     mock_serializer = MagicMock(spec=FluentSerializer)
 
     with (
@@ -246,7 +253,8 @@ def test_stored_fluent_keys_code_path_update(setup_environment: tuple[Path, Path
     with (
         patch("ftl_extract.ftl_extractor.extract_fluent_keys", return_value=in_code_fluent_keys),
         patch(
-            "ftl_extract.ftl_extractor.import_ftl_from_dir", return_value=(stored_fluent_keys, [])
+            "ftl_extract.ftl_extractor.import_ftl_from_dir",
+            return_value=(stored_fluent_keys, []),
         ),
         patch("ftl_extract.ftl_extractor.extract_kwargs", return_value=set()),
         patch("ftl_extract.ftl_extractor.comment_ftl_key"),
@@ -278,7 +286,8 @@ def test_keys_to_comment_and_add_on_different_kwargs(setup_environment: tuple[Pa
     with (
         patch("ftl_extract.ftl_extractor.extract_fluent_keys", return_value=in_code_fluent_keys),
         patch(
-            "ftl_extract.ftl_extractor.import_ftl_from_dir", return_value=(stored_fluent_keys, [])
+            "ftl_extract.ftl_extractor.import_ftl_from_dir",
+            return_value=(stored_fluent_keys, []),
         ),
         patch("ftl_extract.ftl_extractor.extract_kwargs", side_effect=[{"arg1"}, {"arg2"}]),
         patch("ftl_extract.ftl_extractor.comment_ftl_key"),
@@ -298,7 +307,7 @@ def test_keys_to_comment_and_add_on_different_kwargs(setup_environment: tuple[Pa
 
 def test_i18n_matcher_skips_call_with_no_args(setup_environment: tuple[Path, Path]) -> None:
     code_path, output_path = setup_environment
-    matcher = I18nMatcher(code_path)
+    matcher = I18nMatcher(code_path, default_ftl_file=DEFAULT_FTL_FILE)
 
     node = ast.Call(func=ast.Attribute(value=ast.Name(id="i18n"), attr="get"), args=[], keywords=[])
     matcher.visit_Call(node)
@@ -308,7 +317,7 @@ def test_i18n_matcher_skips_call_with_no_args(setup_environment: tuple[Path, Pat
 
 def test_generic_visit_called_on_else_block(setup_environment: tuple[Path, Path]) -> None:
     code_path, output_path = setup_environment
-    matcher = I18nMatcher(code_path)
+    matcher = I18nMatcher(code_path, default_ftl_file=DEFAULT_FTL_FILE)
 
     node = ast.Call(
         func=ast.Attribute(value=ast.Name(id="i18n"), attr="get"),
@@ -325,12 +334,18 @@ def test_generic_visit_called_when_attr_in_ignore_attributes(
     setup_environment: tuple[Path, Path],
 ) -> None:
     code_path, output_path = setup_environment
-    matcher = I18nMatcher(code_path, ignore_attributes={"ignore_this"})
+    matcher = I18nMatcher(
+        code_path,
+        default_ftl_file=DEFAULT_FTL_FILE,
+        ignore_attributes={"ignore_this"},
+    )
 
     # Create a mock AST node for a function call with an attribute in ignore_attributes
     node = ast.Call(
         func=ast.Attribute(
-            value=ast.Name(id="i18n", ctx=ast.Load()), attr="ignore_this", ctx=ast.Load()
+            value=ast.Name(id="i18n", ctx=ast.Load()),
+            attr="ignore_this",
+            ctx=ast.Load(),
         ),
         args=[ast.Constant(value="key")],
         keywords=[],
@@ -345,7 +360,7 @@ def test_generic_visit_called_when_attr_in_ignore_attributes(
 
 def test_i18n_matcher_skips_call_with_no_args_in_elif(setup_environment: tuple[Path, Path]) -> None:
     code_path, output_path = setup_environment
-    matcher = I18nMatcher(code_path)
+    matcher = I18nMatcher(code_path, default_ftl_file=DEFAULT_FTL_FILE)
 
     node = ast.Call(func=ast.Name(id="i18n", ctx=ast.Load()), args=[], keywords=[])
     matcher.visit_Call(node)

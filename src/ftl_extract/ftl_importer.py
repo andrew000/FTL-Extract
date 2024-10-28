@@ -12,7 +12,8 @@ if TYPE_CHECKING:
 
 
 def import_from_ftl(
-    path: Path, locale: str
+    path: Path,
+    locale: str,
 ) -> tuple[dict[str, FluentKey], Resource, list[FluentKey]]:
     """Import `FluentKey`s from FTL."""
     ftl_keys = {}
@@ -39,7 +40,7 @@ def import_from_ftl(
                     path=path,
                     locale=locale,
                     position=position,
-                )
+                ),
             )
 
     return ftl_keys, resource, leave_as_is

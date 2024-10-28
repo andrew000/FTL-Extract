@@ -5,6 +5,7 @@ from time import perf_counter_ns
 
 import click
 
+from ftl_extract.const import DEFAULT_FTL_FILE
 from ftl_extract.ftl_extractor import extract
 
 
@@ -47,6 +48,12 @@ from ftl_extract.ftl_extractor import extract
     show_default=True,
     help="Comments Junk elements.",
 )
+@click.option(
+    "--default-ftl-file",
+    default=DEFAULT_FTL_FILE,
+    show_default=True,
+    type=click.Path(path_type=Path),
+)
 @click.version_option()
 def cli_extract(
     code_path: Path,
@@ -56,6 +63,7 @@ def cli_extract(
     ignore_attributes: tuple[str, ...],
     expand_ignore_attributes: tuple[str, ...] | None = None,
     comment_junks: bool = False,
+    default_ftl_file: Path = DEFAULT_FTL_FILE,
 ) -> None:
     click.echo(f"Extracting from {code_path}...")
     start_time = perf_counter_ns()
@@ -68,6 +76,7 @@ def cli_extract(
         ignore_attributes=ignore_attributes,
         expand_ignore_attributes=expand_ignore_attributes,
         comment_junks=comment_junks,
+        default_ftl_file=default_ftl_file,
     )
 
     click.echo(f"Done in {(perf_counter_ns() - start_time) * 1e-9:.3f}s.")

@@ -1,6 +1,11 @@
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
 from fluent.syntax import ast
 
-from ftl_extract.matcher import FluentKey
+if TYPE_CHECKING:
+    from ftl_extract.matcher import FluentKey
 
 
 def _extract_kwargs_from_variable_reference(

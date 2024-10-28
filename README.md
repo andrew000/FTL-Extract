@@ -107,8 +107,8 @@ $ ftl_extract project_path/code_path project_path/locales -k i18n -k LF -k LazyP
 
 ```shell
 $ ftl_extract \
-  '.\app\bot' \
-  '.\app\bot\locales' \
+  './app/bot' \
+  './app/bot/locales' \
   -l 'en' \
   -l 'uk' \
   -l 'pl' \

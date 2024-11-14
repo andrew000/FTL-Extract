@@ -16,7 +16,7 @@ lint:
 	uv run ruff check --config pyproject.toml --diff $(code_dir) $(tests_dir)
 
 	echo "Running MyPy..."
-	uv run mypy --config-file pyproject.toml $(code_dir)
+	uv run mypy --config-file pyproject.toml
 
 .PHONY format:
 format:
@@ -45,14 +45,10 @@ test-coverage:
 	uv run pytest -vv --cov=$(code_dir) --cov-config=.coveragerc --html=$(reports_dir)/tests/index.html tests/
 	uv run coverage html -d $(reports_dir)/coverage
 
-.PHONY show-outdated:
-show-outdated:
-	uv run pcu "./pyproject.toml" --extra lint --extra dev --extra uvloop
+.PHONY outdated:
+outdated:
+	uv tree --universal --outdated
 
-.PHONY uv-sync:
-uv-sync:
+.PHONY sync:
+sync:
 	uv sync --extra dev --extra tests --extra docs
-
-.PHONY uv-sync-with-pcu:
-uv-sync-with-pcu:
-	uv sync --extra dev --extra tests --extra docs --extra pcu

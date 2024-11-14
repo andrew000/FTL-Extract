@@ -16,26 +16,23 @@ dependencies = [
 dev = [
     "isort==5.13.2",
     "pre-commit==4.0.1",
-    "ruff==0.7.1",
+    "ruff==0.7.3",
     "mypy==1.13.0",
     "typing-extensions==4.12.2",
 ]
 tests = [
     "pytest==8.3.3",
-    "pytest-cov==5.0.0",
+    "pytest-cov==6.0.0",
     "pytest-html==4.1.1",
     "pytest-mock==3.14.0",
-    "coverage==7.6.1",
+    "coverage==7.6.5",
 ]
 docs = [
     "sphinx==7.4.7",
-    "sphinx-rtd-theme==2.0.0",
-    "sphinx-autobuild==2024.9.19",
+    "sphinx-rtd-theme==3.0.2",
+    "sphinx-autobuild==2024.10.3",
     "furo==2024.8.6",
     "pytz==2024.2",
-]
-pcu = [
-    "pip-check-updates==0.27.0",
 ]
 
 [project.urls]
@@ -120,7 +117,8 @@ line-ending = "auto"
 
 [tool.mypy]
 python_version = "3.9"
-packages = ["src/ftl_extract"]
+mypy_path = "src"
+packages = ["ftl_extract"]
 plugins = []
 allow_redefinition = true
 check_untyped_defs = true

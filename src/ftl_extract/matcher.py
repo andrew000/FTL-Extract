@@ -8,7 +8,13 @@ from typing import TYPE_CHECKING, cast
 
 from fluent.syntax import ast as fluent_ast
 
-from ftl_extract.const import GET_LITERAL, I18N_LITERAL, IGNORE_ATTRIBUTES, PATH_LITERAL
+from ftl_extract.const import (
+    GET_LITERAL,
+    I18N_LITERAL,
+    IGNORE_ATTRIBUTES,
+    IGNORE_KWARGS,
+    PATH_LITERAL,
+)
 from ftl_extract.exceptions import (
     FTLExtractorDifferentPathsError,
     FTLExtractorDifferentTranslationError,
@@ -50,13 +56,21 @@ class I18nMatcher(ast.NodeVisitor):
         default_ftl_file: Path,
         func_names: str | Iterable[str] = I18N_LITERAL,
         ignore_attributes: str | Iterable[str] = IGNORE_ATTRIBUTES,
+        ignore_kwargs: str | Iterable[str] = IGNORE_KWARGS,
     ) -> None:
         """
 
         :param code_path: Path to .py file where visitor will be used.
         :type code_path: Path
+        :param default_ftl_file: Default name of FTL file.
+        :type default_ftl_file: Path
         :param func_names: Name of function that is used to get translation. Default is "i18n".
-        :type func_names: str | Sequence[str]
+        :type func_names: str | Iterable[str]
+        :param ignore_attributes: Ignore attributes, like `i18n.set_locale`.
+        :type ignore_attributes: str | Iterable[str]
+        :param ignore_kwargs: Ignore kwargs, like `when` from
+        `aiogram_dialog.I18nFormat(..., when=...)`.
+        :type ignore_kwargs: str | Iterable[str]
         """
         self.code_path = code_path
         self.func_names = (
@@ -66,6 +80,11 @@ class I18nMatcher(ast.NodeVisitor):
             frozenset({ignore_attributes})
             if isinstance(ignore_attributes, str)
             else frozenset(ignore_attributes)
+        )
+        self.ignore_kwargs = (
+            frozenset({ignore_kwargs})
+            if isinstance(ignore_kwargs, str)
+            else frozenset(ignore_kwargs)
         )
         self.default_ftl_file = default_ftl_file
         self.fluent_keys: dict[str, FluentKey] = {}
@@ -98,6 +117,7 @@ class I18nMatcher(ast.NodeVisitor):
                         code_path=self.code_path,
                         key=key,
                         keywords=node.keywords,
+                        ignore_kwargs=self.ignore_kwargs,
                         default_ftl_file=self.default_ftl_file,
                     )
 
@@ -112,6 +132,7 @@ class I18nMatcher(ast.NodeVisitor):
                         code_path=self.code_path,
                         key="-".join(reversed(attrs)),
                         keywords=node.keywords,
+                        ignore_kwargs=self.ignore_kwargs,
                         default_ftl_file=self.default_ftl_file,
                     )
                     process_fluent_key(self.fluent_keys, fluent_key)
@@ -126,6 +147,7 @@ class I18nMatcher(ast.NodeVisitor):
                 code_path=self.code_path,
                 key=cast(ast.Constant, node.args[0]).value,
                 keywords=node.keywords,
+                ignore_kwargs=self.ignore_kwargs,
                 default_ftl_file=self.default_ftl_file,
             )
             process_fluent_key(self.fluent_keys, fluent_key)
@@ -137,6 +159,7 @@ def create_fluent_key(
     code_path: Path,
     key: str,
     keywords: list[ast.keyword],
+    ignore_kwargs: frozenset[str],
     default_ftl_file: Path,
 ) -> FluentKey:
     fluent_key = FluentKey(
@@ -154,6 +177,9 @@ def create_fluent_key(
             if kw.value is not None and isinstance(kw.value, ast.Constant):
                 fluent_key.path = Path(cast(ast.Constant, kw.value).value)
         elif isinstance(kw.arg, str):
+            if kw.arg in ignore_kwargs:
+                continue
+
             cast(
                 fluent_ast.Pattern,
                 cast(fluent_ast.Message, fluent_key.translation).value,

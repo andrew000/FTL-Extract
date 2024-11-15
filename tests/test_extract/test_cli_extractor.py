@@ -366,3 +366,27 @@ def test_i18n_matcher_skips_call_with_no_args_in_elif(setup_environment: tuple[P
     matcher.visit_Call(node)
 
     assert len(matcher.fluent_keys) == 0
+
+
+def test_i18n_matcher_ignore_kwargs(setup_environment: tuple[Path, Path]) -> None:
+    code_path, output_path = setup_environment
+    matcher = I18nMatcher(
+        code_path,
+        default_ftl_file=DEFAULT_FTL_FILE,
+        ignore_kwargs={"ignore_this"},
+    )
+
+    node = ast.Call(
+        func=ast.Attribute(
+            value=ast.Name(id="i18n", ctx=ast.Load()),
+            attr="get",
+            ctx=ast.Load(),
+        ),
+        args=[ast.Constant(value="key")],
+        keywords=[ast.keyword(arg="ignore_this", value=ast.Constant(value="value"))],
+    )
+
+    matcher.visit_Call(node)
+
+    assert isinstance(matcher.fluent_keys["key"].translation.value.elements[0], fl_ast.TextElement)
+    assert len(matcher.fluent_keys) == 1

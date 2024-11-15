@@ -8,7 +8,7 @@ from fluent.syntax import ast as fl_ast
 
 from ftl_extract import extract_fluent_keys
 from ftl_extract.code_extractor import sort_fluent_keys_by_path
-from ftl_extract.const import DEFAULT_FTL_FILE, IGNORE_ATTRIBUTES
+from ftl_extract.const import DEFAULT_FTL_FILE, IGNORE_ATTRIBUTES, IGNORE_KWARGS
 from ftl_extract.ftl_importer import import_ftl_from_dir
 from ftl_extract.process.commentator import comment_ftl_key
 from ftl_extract.process.kwargs_extractor import extract_kwargs
@@ -24,10 +24,11 @@ if TYPE_CHECKING:
 def extract(
     code_path: Path,
     output_path: Path,
-    language: tuple[str, ...],
-    i18n_keys: tuple[str, ...],
-    ignore_attributes: Iterable[str] = IGNORE_ATTRIBUTES,
+    language: Iterable[str],
+    i18n_keys: Iterable[str],
+    ignore_attributes: str | Iterable[str] = IGNORE_ATTRIBUTES,
     expand_ignore_attributes: Iterable[str] | None = None,
+    ignore_kwargs: str | Iterable[str] = IGNORE_KWARGS,
     comment_junks: bool = False,
     default_ftl_file: Path = DEFAULT_FTL_FILE,
     serializer: FluentSerializer | None = None,
@@ -43,6 +44,7 @@ def extract(
         path=code_path,
         i18n_keys=i18n_keys,
         ignore_attributes=ignore_attributes,
+        ignore_kwargs=ignore_kwargs,
         default_ftl_file=default_ftl_file,
     )
 

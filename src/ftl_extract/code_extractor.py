@@ -33,7 +33,8 @@ def find_py_files(path: Path) -> Iterator[Path]:
 def parse_file(
     path: Path,
     i18n_keys: str | Iterable[str],
-    ignore_attributes: Iterable[str],
+    ignore_attributes: str | Iterable[str],
+    ignore_kwargs: str | Iterable[str],
     default_ftl_file: Path,
 ) -> dict[str, FluentKey]:
     """
@@ -42,9 +43,12 @@ def parse_file(
     :param path: Path to .py file.
     :type path: Path
     :param i18n_keys: Names of function that is used to get translation.
-    :type i18n_keys: str | Sequence[str]
+    :type i18n_keys: str | Iterable[str]
     :param ignore_attributes: Ignore attributes, like `i18n.set_locale`.
-    :type ignore_attributes: Sequence[str]
+    :type ignore_attributes: str | Iterable[str]
+    :param ignore_kwargs: Ignore kwargs, like `when` from
+    `aiogram_dialog.I18nFormat(..., when=...)`.
+    :type ignore_kwargs: str | Iterable[str]
     :param default_ftl_file: Default name of FTL file.
     :type default_ftl_file: Path
     :return: Dict with `key` and `FluentKey`.
@@ -56,6 +60,7 @@ def parse_file(
         default_ftl_file=default_ftl_file,
         func_names=i18n_keys,
         ignore_attributes=ignore_attributes,
+        ignore_kwargs=ignore_kwargs,
     )
     matcher.visit(node)
     return matcher.fluent_keys
@@ -114,7 +119,8 @@ def find_conflicts(
 def extract_fluent_keys(
     path: Path,
     i18n_keys: str | Iterable[str],
-    ignore_attributes: Iterable[str],
+    ignore_attributes: str | Iterable[str],
+    ignore_kwargs: str | Iterable[str],
     default_ftl_file: Path,
 ) -> dict[str, FluentKey]:
     """
@@ -123,9 +129,12 @@ def extract_fluent_keys(
     :param path: Path to [.py file] / [directory with .py files].
     :type path: Path
     :param i18n_keys: Names of function that is used to get translation.
-    :type i18n_keys: str | Sequence[str]
+    :type i18n_keys: str | Iterable[str]
     :param ignore_attributes: Ignore attributes, like `i18n.set_locale`.
-    :type ignore_attributes: Sequence[str]
+    :type ignore_attributes: str | Iterable[str]
+    :param ignore_kwargs: Ignore kwargs, like `when` from
+    `aiogram_dialog.I18nFormat(..., when=...)`.
+    :type ignore_kwargs: str | Iterable[str]
     :param default_ftl_file: Default name of FTL file.
     :type default_ftl_file: Path
     :return: Dict with `key` and `FluentKey`.
@@ -139,6 +148,7 @@ def extract_fluent_keys(
             path=file,
             i18n_keys=i18n_keys,
             ignore_attributes=ignore_attributes,
+            ignore_kwargs=ignore_kwargs,
             default_ftl_file=default_ftl_file,
         )
         post_process_fluent_keys(keys, default_ftl_file)

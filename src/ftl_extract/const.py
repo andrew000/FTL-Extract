@@ -13,4 +13,5 @@ PATH_LITERAL: Final[Literal["_path"]] = "_path"
 IGNORE_ATTRIBUTES: Final[frozenset[str]] = frozenset(
     {"set_locale", "use_locale", "use_context", "set_context"},
 )
+IGNORE_KWARGS: Final[frozenset[str]] = frozenset()
 DEFAULT_FTL_FILE: Final[Path] = Path("_default.ftl")

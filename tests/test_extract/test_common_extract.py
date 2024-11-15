@@ -2,7 +2,7 @@ from pathlib import Path
 from typing import Final
 
 from ftl_extract.code_extractor import extract_fluent_keys
-from ftl_extract.const import DEFAULT_FTL_FILE, IGNORE_ATTRIBUTES
+from ftl_extract.const import DEFAULT_FTL_FILE, IGNORE_ATTRIBUTES, IGNORE_KWARGS
 
 CONTENT: Final[str] = """
 def test(i18n):
@@ -42,9 +42,10 @@ def test_common_extract(tmp_path: Path) -> None:
     fluent_keys_len = 24  # Number of keys in `CONTENT`.
 
     fluent_keys = extract_fluent_keys(
-        tmp_path,
-        ("i18n", "L", "LF"),
-        IGNORE_ATTRIBUTES,
+        path=tmp_path,
+        i18n_keys=("i18n", "L", "LF"),
+        ignore_attributes=IGNORE_ATTRIBUTES,
+        ignore_kwargs=IGNORE_KWARGS,
         default_ftl_file=DEFAULT_FTL_FILE,
     )
     assert fluent_keys  # Check if `fluent_keys` is not empty.
@@ -227,9 +228,10 @@ def test_common_extract(tmp_path: Path) -> None:
 
 def test_extract_fluent_keys_no_files(tmp_path: Path) -> None:
     fluent_keys = extract_fluent_keys(
-        tmp_path,
-        "i18n",
-        IGNORE_ATTRIBUTES,
+        path=tmp_path,
+        i18n_keys="i18n",
+        ignore_attributes=IGNORE_ATTRIBUTES,
+        ignore_kwargs=IGNORE_KWARGS,
         default_ftl_file=DEFAULT_FTL_FILE,
     )
     assert not fluent_keys

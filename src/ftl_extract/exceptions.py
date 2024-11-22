@@ -38,7 +38,7 @@ class FTLExtractorDifferentTranslationError(FTLExtractorError):
 
 
 class FTLExtractorCantFindReferenceError(FTLExtractorError):
-    def __init__(self, key: str | None, key_path: Path | None, reference_key: str) -> None:
+    def __init__(self, key: str, key_path: Path, reference_key: str) -> None:
         self.key = key
         self.key_path = key_path
         self.reference_key = reference_key
@@ -46,7 +46,7 @@ class FTLExtractorCantFindReferenceError(FTLExtractorError):
 
 
 class FTLExtractorCantFindTermError(FTLExtractorError):
-    def __init__(self, key: str | None, key_path: Path | None, term_key: str) -> None:
+    def __init__(self, key: str, key_path: Path, term_key: str) -> None:
         self.key = key
         self.key_path = key_path
         self.term_key = term_key

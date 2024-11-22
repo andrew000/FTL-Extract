@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from copy import deepcopy
 from typing import TYPE_CHECKING
 
 from click import echo
@@ -22,6 +23,7 @@ if TYPE_CHECKING:
 
 
 def extract(
+    *,
     code_path: Path,
     output_path: Path,
     language: Iterable[str],
@@ -49,10 +51,16 @@ def extract(
     )
 
     for lang in language:
-        # Import fluent keys from existing FTL files
-        stored_fluent_keys, leave_as_is = import_ftl_from_dir(output_path, lang)
+        # Import fluent keys and terms from existing FTL files
+        stored_fluent_keys, stored_terms, leave_as_is = import_ftl_from_dir(
+            path=output_path,
+            locale=lang,
+        )
         for fluent_key in stored_fluent_keys.values():
             fluent_key.path = fluent_key.path.relative_to(output_path / lang)
+
+        for term in stored_terms.values():
+            term.path = term.path.relative_to(output_path / lang)
 
         keys_to_comment: dict[str, FluentKey] = {}
         keys_to_add: dict[str, FluentKey] = {}
@@ -72,12 +80,24 @@ def extract(
                 stored_fluent_keys[key].code_path = fluent_key.code_path
 
         # Second step: find keys that have different kwargs
+        # Make copy of in_code_fluent_keys and stored_fluent_keys to check references
+        in_code_fluent_keys_copy = deepcopy(in_code_fluent_keys)
+        stored_fluent_keys_copy = deepcopy(stored_fluent_keys)
+
         for key, fluent_key in in_code_fluent_keys.items():
             if key not in stored_fluent_keys:
                 continue
 
-            fluent_key_placeable_set = extract_kwargs(fluent_key)
-            stored_fluent_key_placeable_set = extract_kwargs(stored_fluent_keys[key])
+            fluent_key_placeable_set = extract_kwargs(
+                key=fluent_key,
+                terms=stored_terms,
+                all_fluent_keys=in_code_fluent_keys_copy,
+            )
+            stored_fluent_key_placeable_set = extract_kwargs(
+                key=stored_fluent_keys[key],
+                terms=stored_terms,
+                all_fluent_keys=stored_fluent_keys_copy,
+            )
 
             if fluent_key_placeable_set != stored_fluent_key_placeable_set:
                 keys_to_comment[key] = stored_fluent_keys.pop(key)
@@ -88,20 +108,23 @@ def extract(
             keys_to_comment[key] = stored_fluent_keys.pop(key)
 
         for fluent_key in keys_to_comment.values():
-            comment_ftl_key(fluent_key, serializer)
+            comment_ftl_key(key=fluent_key, serializer=serializer)
 
         # Comment Junk elements if needed
         if comment_junks is True:
             for fluent_key in leave_as_is:
                 if isinstance(fluent_key.translation, fl_ast.Junk):
-                    comment_ftl_key(fluent_key, serializer)
+                    comment_ftl_key(key=fluent_key, serializer=serializer)
 
-        sorted_fluent_keys = sort_fluent_keys_by_path(stored_fluent_keys)
+        sorted_fluent_keys = sort_fluent_keys_by_path(fluent_keys=stored_fluent_keys)
 
-        for path, keys in sort_fluent_keys_by_path(keys_to_add).items():
+        for path, keys in sort_fluent_keys_by_path(fluent_keys=keys_to_add).items():
             sorted_fluent_keys.setdefault(path, []).extend(keys)
 
-        for path, keys in sort_fluent_keys_by_path(keys_to_comment).items():
+        for path, keys in sort_fluent_keys_by_path(fluent_keys=keys_to_comment).items():
+            sorted_fluent_keys.setdefault(path, []).extend(keys)
+
+        for path, keys in sort_fluent_keys_by_path(fluent_keys=stored_terms).items():
             sorted_fluent_keys.setdefault(path, []).extend(keys)
 
         leave_as_is_with_path: dict[Path, list[FluentKey]] = {}
@@ -114,7 +137,7 @@ def extract(
 
         for path, keys in sorted_fluent_keys.items():
             ftl, _ = generate_ftl(
-                keys,
+                fluent_keys=keys,
                 serializer=serializer,
                 leave_as_is=leave_as_is_with_path.get(path, []),
             )

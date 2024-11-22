@@ -19,6 +19,7 @@ from ftl_extract.exceptions import (
     FTLExtractorDifferentPathsError,
     FTLExtractorDifferentTranslationError,
 )
+from ftl_extract.utils import to_json_no_span
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
@@ -47,6 +48,30 @@ class FluentKey:
     path: Path
     locale: str | None = field(default=None)
     position: int | float = field(default=inf)
+
+    def __repr__(self) -> str:
+        return (
+            f"FluentKey("
+            f"code_path={self.code_path},"
+            f"key={self.key},"
+            f"path={self.path},"
+            f"locale={self.locale},"
+            f"position={self.position},"
+            f"translation={self.translation.to_json(fn=to_json_no_span)}"
+            f")"
+        )
+
+    def __str__(self) -> str:
+        return (
+            f"FluentKey(\n"
+            f"\tcode_path={self.code_path},\n"
+            f"\tkey={self.key},\n"
+            f"\tpath={self.path},\n"
+            f"\tlocale={self.locale},\n"
+            f"\tposition={self.position},\n"
+            f"\ttranslation={self.translation.to_json(fn=to_json_no_span)}\n"
+            f")"
+        )
 
 
 class I18nMatcher(ast.NodeVisitor):

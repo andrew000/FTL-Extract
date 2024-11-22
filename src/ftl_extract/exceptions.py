@@ -35,3 +35,19 @@ class FTLExtractorDifferentTranslationError(FTLExtractorError):
             f"Translation {key!r} already exists with different elements: "
             f"{self.current_translation} != {self.new_translation}",
         )
+
+
+class FTLExtractorCantFindReferenceError(FTLExtractorError):
+    def __init__(self, key: str | None, key_path: Path | None, reference_key: str) -> None:
+        self.key = key
+        self.key_path = key_path
+        self.reference_key = reference_key
+        super().__init__(f"Can't find reference {reference_key!r} for key {key!r} at {key_path}")
+
+
+class FTLExtractorCantFindTermError(FTLExtractorError):
+    def __init__(self, key: str | None, key_path: Path | None, term_key: str) -> None:
+        self.key = key
+        self.key_path = key_path
+        self.term_key = term_key
+        super().__init__(f"Can't find term {term_key!r} for key {key!r} at {key_path}")

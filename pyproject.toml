@@ -14,9 +14,10 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = [
+    "fluent-runtime==0.4.0",
     "isort==5.13.2",
     "pre-commit==4.0.1",
-    "ruff==0.7.4",
+    "ruff==0.8.0",
     "mypy==1.13.0",
     "typing-extensions==4.12.2",
 ]
@@ -94,7 +95,7 @@ exclude = [
 select = ["ALL"]
 ignore = [
     "A003",
-    "ANN002", "ANN003", "ANN101", "ANN102", "ANN401",
+    "ANN002", "ANN003", "ANN401",
     "C901",
     "D100", "D101", "D102", "D103", "D104", "D105", "D106", "D107", "D203", "D205", "D212",
     "ERA001",

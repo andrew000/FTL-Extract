@@ -12,11 +12,13 @@ if TYPE_CHECKING:
 
 
 def import_from_ftl(
+    *,
     path: Path,
     locale: str,
-) -> tuple[dict[str, FluentKey], Resource, list[FluentKey]]:
+) -> tuple[dict[str, FluentKey], dict[str, FluentKey], Resource, list[FluentKey]]:
     """Import `FluentKey`s from FTL."""
-    ftl_keys = {}
+    ftl_keys: dict[str, FluentKey] = {}
+    terms: dict[str, FluentKey] = {}
     leave_as_is = []
 
     resource = parse(path.read_text(encoding="utf-8"), with_spans=True)
@@ -24,6 +26,15 @@ def import_from_ftl(
     for position, entry in enumerate(resource.body, start=0):
         if isinstance(entry, ast.Message):
             ftl_keys[entry.id.name] = FluentKey(
+                code_path=Path(),
+                key=entry.id.name,
+                translation=entry,
+                path=path,
+                locale=locale,
+                position=position,
+            )
+        elif isinstance(entry, ast.Term):
+            terms[entry.id.name] = FluentKey(
                 code_path=Path(),
                 key=entry.id.name,
                 translation=entry,
@@ -43,18 +54,23 @@ def import_from_ftl(
                 ),
             )
 
-    return ftl_keys, resource, leave_as_is
+    return ftl_keys, terms, resource, leave_as_is
 
 
-def import_ftl_from_dir(path: Path, locale: str) -> tuple[dict[str, FluentKey], list[FluentKey]]:
+def import_ftl_from_dir(
+    *,
+    path: Path,
+    locale: str,
+) -> tuple[dict[str, FluentKey], dict[str, FluentKey], list[FluentKey]]:
     """Import `FluentKey`s from directory of FTL files."""
     ftl_files = (path / locale).rglob("*.ftl") if path.is_dir() else [path]
-    ftl_keys = {}
+    ftl_keys: dict[str, FluentKey] = {}
+    terms: dict[str, FluentKey] = {}
     leave_as_is = []
 
     for ftl_file in ftl_files:
-        keys, _, as_is_keys = import_from_ftl(ftl_file, locale)
+        keys, terms, _, as_is_keys = import_from_ftl(path=ftl_file, locale=locale)
         ftl_keys.update(keys)
         leave_as_is.extend(as_is_keys)
 
-    return ftl_keys, leave_as_is
+    return ftl_keys, terms, leave_as_is

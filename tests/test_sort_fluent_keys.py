@@ -18,7 +18,7 @@ def test_sort_fluent_keys_by_single_path() -> None:
     expected = {
         Path("path/to/file1.ftl"): [fluent_keys["key-1"]],
     }
-    assert sort_fluent_keys_by_path(fluent_keys) == expected
+    assert sort_fluent_keys_by_path(fluent_keys=fluent_keys) == expected
 
 
 def test_sort_fluent_keys_by_multiple_paths() -> None:
@@ -30,7 +30,7 @@ def test_sort_fluent_keys_by_multiple_paths() -> None:
         Path("path/to/file1.ftl"): [fluent_keys["key-1"]],
         Path("path/to/file2.ftl"): [fluent_keys["key-2"]],
     }
-    assert sort_fluent_keys_by_path(fluent_keys) == expected
+    assert sort_fluent_keys_by_path(fluent_keys=fluent_keys) == expected
 
 
 def test_sort_fluent_keys_by_same_path() -> None:
@@ -41,13 +41,13 @@ def test_sort_fluent_keys_by_same_path() -> None:
     expected = {
         Path("path/to/file.ftl"): [fluent_keys["key-1"], fluent_keys["key-2"]],
     }
-    assert sort_fluent_keys_by_path(fluent_keys) == expected
+    assert sort_fluent_keys_by_path(fluent_keys=fluent_keys) == expected
 
 
 def test_sort_fluent_keys_empty_dict() -> None:
     fluent_keys = {}
     expected = {}
-    assert sort_fluent_keys_by_path(fluent_keys) == expected
+    assert sort_fluent_keys_by_path(fluent_keys=fluent_keys) == expected
 
 
 def test_sort_fluent_keys_with_nonexistent_path() -> None:
@@ -57,4 +57,4 @@ def test_sort_fluent_keys_with_nonexistent_path() -> None:
     expected = {
         Path("nonexistent/path.ftl"): [fluent_keys["key-1"]],
     }
-    assert sort_fluent_keys_by_path(fluent_keys) == expected
+    assert sort_fluent_keys_by_path(fluent_keys=fluent_keys) == expected

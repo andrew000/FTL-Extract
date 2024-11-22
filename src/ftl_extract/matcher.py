@@ -140,7 +140,7 @@ class I18nMatcher(ast.NodeVisitor):
                 self.generic_visit(node)
 
         elif isinstance(node.func, ast.Name) and node.func.id in self.func_names:
-            if not node.args:
+            if not node.args or not isinstance(node.args[0], ast.Constant):
                 return
 
             fluent_key = create_fluent_key(

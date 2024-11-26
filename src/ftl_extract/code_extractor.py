@@ -18,7 +18,7 @@ if TYPE_CHECKING:
     from ftl_extract.matcher import FluentKey
 
 
-def find_py_files(path: Path) -> Iterator[Path]:
+def find_py_files(*, path: Path) -> Iterator[Path]:
     """
     First step: find all .py files in given path.
 
@@ -31,6 +31,7 @@ def find_py_files(path: Path) -> Iterator[Path]:
 
 
 def parse_file(
+    *,
     path: Path,
     i18n_keys: str | Iterable[str],
     ignore_attributes: str | Iterable[str],
@@ -66,7 +67,7 @@ def parse_file(
     return matcher.fluent_keys
 
 
-def post_process_fluent_keys(fluent_keys: dict[str, FluentKey], default_ftl_file: Path) -> None:
+def post_process_fluent_keys(*, fluent_keys: dict[str, FluentKey], default_ftl_file: Path) -> None:
     """
     Third step: post-process parsed `FluentKey`.
 
@@ -84,6 +85,7 @@ def post_process_fluent_keys(fluent_keys: dict[str, FluentKey], default_ftl_file
 
 
 def find_conflicts(
+    *,
     current_fluent_keys: dict[str, FluentKey],
     new_fluent_keys: dict[str, FluentKey],
 ) -> None:
@@ -117,6 +119,7 @@ def find_conflicts(
 
 
 def extract_fluent_keys(
+    *,
     path: Path,
     i18n_keys: str | Iterable[str],
     ignore_attributes: str | Iterable[str],
@@ -143,7 +146,7 @@ def extract_fluent_keys(
     """
     fluent_keys: dict[str, FluentKey] = {}
 
-    for file in find_py_files(path):
+    for file in find_py_files(path=path):
         keys = parse_file(
             path=file,
             i18n_keys=i18n_keys,
@@ -151,14 +154,14 @@ def extract_fluent_keys(
             ignore_kwargs=ignore_kwargs,
             default_ftl_file=default_ftl_file,
         )
-        post_process_fluent_keys(keys, default_ftl_file)
-        find_conflicts(fluent_keys, keys)
+        post_process_fluent_keys(fluent_keys=keys, default_ftl_file=default_ftl_file)
+        find_conflicts(current_fluent_keys=fluent_keys, new_fluent_keys=keys)
         fluent_keys.update(keys)
 
     return fluent_keys
 
 
-def sort_fluent_keys_by_path(fluent_keys: dict[str, FluentKey]) -> dict[Path, list[FluentKey]]:
+def sort_fluent_keys_by_path(*, fluent_keys: dict[str, FluentKey]) -> dict[Path, list[FluentKey]]:
     """
     Sort `FluentKey`s by their paths.
 

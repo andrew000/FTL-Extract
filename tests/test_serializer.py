@@ -56,7 +56,7 @@ def test_custom_serializer_produces_correct_ftl_for_single_key(
     single_fluent_key: list[FluentKey],
 ) -> None:
     ftl_string, resource = generate_ftl(
-        single_fluent_key,
+        fluent_keys=single_fluent_key,
         serializer=FluentSerializer(),
         leave_as_is=[],
     )
@@ -68,7 +68,7 @@ def test_custom_serializer_produces_correct_ftl_for_multiple_keys(
     multiple_fluent_keys: list[FluentKey],
 ) -> None:
     ftl_string, resource = generate_ftl(
-        multiple_fluent_keys,
+        fluent_keys=multiple_fluent_keys,
         serializer=FluentSerializer(),
         leave_as_is=[],
     )
@@ -81,7 +81,7 @@ def test_custom_serializer_handles_empty_fluent_keys_list_properly(
     empty_fluent_keys: list[FluentKey],
 ) -> None:
     ftl_string, resource = generate_ftl(
-        empty_fluent_keys,
+        fluent_keys=empty_fluent_keys,
         serializer=FluentSerializer(),
         leave_as_is=[],
     )
@@ -91,7 +91,7 @@ def test_custom_serializer_handles_empty_fluent_keys_list_properly(
 
 def test_generate_ftl_includes_leave_as_is_elements() -> None:
     ftl_string, resource = generate_ftl(
-        [
+        fluent_keys=[
             FluentKey(
                 code_path=Path("test.py"),
                 key="test_key",

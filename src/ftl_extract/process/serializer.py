@@ -14,6 +14,7 @@ if TYPE_CHECKING:
 
 
 def generate_ftl(
+    *,
     fluent_keys: Iterable[FluentKey],
     serializer: FluentSerializer,
     leave_as_is: Iterable[FluentKey],

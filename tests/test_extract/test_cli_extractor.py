@@ -85,7 +85,11 @@ def test_extract_with_keys_to_comment_and_add(
         ),
         patch(
             "ftl_extract.ftl_extractor.import_ftl_from_dir",
-            return_value=({"key-1": MagicMock(spec=FluentKey, path=stored_fluent_key_path)}, []),
+            return_value=(
+                {"key-1": MagicMock(spec=FluentKey, path=stored_fluent_key_path)},
+                {},
+                [],
+            ),
         ),
         patch("ftl_extract.ftl_extractor.comment_ftl_key") as mock_comment_ftl_key,
         patch(
@@ -93,7 +97,7 @@ def test_extract_with_keys_to_comment_and_add(
             return_value=("generated ftl", None),
         ) as mock_generate_ftl,
     ):
-        extract(code_path, output_path, ("en",), ("i18n",))
+        extract(code_path=code_path, output_path=output_path, language=("en",), i18n_keys=("i18n",))
         mock_comment_ftl_key.assert_called()
         mock_generate_ftl.assert_called()
 
@@ -114,14 +118,14 @@ def test_extract_with_keys_only_to_add(
         ),
         patch(
             "ftl_extract.ftl_extractor.import_ftl_from_dir",
-            return_value=({"key-1": mock_fluent_key}, []),
+            return_value=({"key-1": mock_fluent_key}, {}, []),
         ),
         patch(
             "ftl_extract.ftl_extractor.generate_ftl",
             return_value=("generated ftl", None),
         ) as mock_generate_ftl,
     ):
-        extract(code_path, output_path, ("en",), ("i18n",))
+        extract(code_path=code_path, output_path=output_path, language=("en",), i18n_keys=("i18n",))
         mock_generate_ftl.assert_called()
 
 
@@ -193,19 +197,22 @@ def test_comment_junk_elements_if_needed(setup_environment: tuple[Path, Path]) -
 
     with (
         patch("ftl_extract.ftl_extractor.extract_fluent_keys", return_value={}),
-        patch("ftl_extract.ftl_extractor.import_ftl_from_dir", return_value=({}, [mock_junk_key])),
+        patch(
+            "ftl_extract.ftl_extractor.import_ftl_from_dir",
+            return_value=({}, {}, [mock_junk_key]),
+        ),
         patch("ftl_extract.ftl_extractor.comment_ftl_key") as mock_comment_ftl_key,
         patch("fluent.syntax.serializer.FluentSerializer", return_value=mock_serializer),
     ):
         extract(
-            code_path,
-            output_path,
-            ("en",),
-            ("i18n",),
+            code_path=code_path,
+            output_path=output_path,
+            language=("en",),
+            i18n_keys=("i18n",),
             comment_junks=True,
             serializer=mock_serializer,
         )
-        mock_comment_ftl_key.assert_called_once_with(mock_junk_key, mock_serializer)
+        mock_comment_ftl_key.assert_called_once_with(key=mock_junk_key, serializer=mock_serializer)
 
 
 def test_expand_ignore_attributes_updates_ignore_attributes(
@@ -218,15 +225,15 @@ def test_expand_ignore_attributes_updates_ignore_attributes(
 
     with (
         patch("ftl_extract.ftl_extractor.extract_fluent_keys", return_value={}),
-        patch("ftl_extract.ftl_extractor.import_ftl_from_dir", return_value=({}, [])),
+        patch("ftl_extract.ftl_extractor.import_ftl_from_dir", return_value=({}, {}, [])),
         patch("ftl_extract.ftl_extractor.comment_ftl_key"),
         patch("ftl_extract.ftl_extractor.generate_ftl", return_value=("generated ftl", None)),
     ):
         extract(
-            code_path,
-            output_path,
-            ("en",),
-            ("i18n",),
+            code_path=code_path,
+            output_path=output_path,
+            language=("en",),
+            i18n_keys=("i18n",),
             ignore_attributes=initial_ignore_attributes,
             expand_ignore_attributes=expand_ignore_attributes,
         )
@@ -254,17 +261,17 @@ def test_stored_fluent_keys_code_path_update(setup_environment: tuple[Path, Path
         patch("ftl_extract.ftl_extractor.extract_fluent_keys", return_value=in_code_fluent_keys),
         patch(
             "ftl_extract.ftl_extractor.import_ftl_from_dir",
-            return_value=(stored_fluent_keys, []),
+            return_value=(stored_fluent_keys, {}, []),
         ),
         patch("ftl_extract.ftl_extractor.extract_kwargs", return_value=set()),
         patch("ftl_extract.ftl_extractor.comment_ftl_key"),
         patch("ftl_extract.ftl_extractor.generate_ftl", return_value=("generated ftl", None)),
     ):
         extract(
-            code_path,
-            output_path,
-            ("en",),
-            ("i18n",),
+            code_path=code_path,
+            output_path=output_path,
+            language=("en",),
+            i18n_keys=("i18n",),
         )
 
         assert stored_fluent_keys["key-1"].code_path == mock_fluent_key.code_path
@@ -287,17 +294,17 @@ def test_keys_to_comment_and_add_on_different_kwargs(setup_environment: tuple[Pa
         patch("ftl_extract.ftl_extractor.extract_fluent_keys", return_value=in_code_fluent_keys),
         patch(
             "ftl_extract.ftl_extractor.import_ftl_from_dir",
-            return_value=(stored_fluent_keys, []),
+            return_value=(stored_fluent_keys, {}, []),
         ),
         patch("ftl_extract.ftl_extractor.extract_kwargs", side_effect=[{"arg1"}, {"arg2"}]),
         patch("ftl_extract.ftl_extractor.comment_ftl_key"),
         patch("ftl_extract.ftl_extractor.generate_ftl", return_value=("generated ftl", None)),
     ):
         extract(
-            code_path,
-            output_path,
-            ("en",),
-            ("i18n",),
+            code_path=code_path,
+            output_path=output_path,
+            language=("en",),
+            i18n_keys=("i18n",),
         )
 
         assert "key-1" not in stored_fluent_keys

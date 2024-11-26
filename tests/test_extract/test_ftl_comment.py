@@ -34,17 +34,21 @@ key-5 = ⚠️ Header Text. Header Text.
 def test_ftl_comment(tmp_path: Path) -> None:
     (tmp_path / "test.ftl").write_text(CONTENT, encoding="utf-8")
 
-    ftl_keys, resource, leave_as_is = import_from_ftl(tmp_path / "test.ftl", "en")
+    ftl_keys, _, _, leave_as_is = import_from_ftl(path=tmp_path / "test.ftl", locale="en")
 
     serializer = FluentSerializer(with_junk=True)
 
-    comment_ftl_key(ftl_keys["key-1"], serializer=serializer)
-    comment_ftl_key(ftl_keys["key-2"], serializer=serializer)
-    comment_ftl_key(ftl_keys["key-3"], serializer=serializer)
-    comment_ftl_key(ftl_keys["key-4"], serializer=serializer)
-    comment_ftl_key(ftl_keys["key-5"], serializer=serializer)
+    comment_ftl_key(key=ftl_keys["key-1"], serializer=serializer)
+    comment_ftl_key(key=ftl_keys["key-2"], serializer=serializer)
+    comment_ftl_key(key=ftl_keys["key-3"], serializer=serializer)
+    comment_ftl_key(key=ftl_keys["key-4"], serializer=serializer)
+    comment_ftl_key(key=ftl_keys["key-5"], serializer=serializer)
 
-    ftl, _ = generate_ftl(ftl_keys.values(), serializer=serializer, leave_as_is=leave_as_is)
+    ftl, _ = generate_ftl(
+        fluent_keys=ftl_keys.values(),
+        serializer=serializer,
+        leave_as_is=leave_as_is,
+    )
     (tmp_path / "test.ftl").write_text(ftl, encoding="utf-8")
 
     ftl = (tmp_path / "test.ftl").read_text(encoding="utf-8")

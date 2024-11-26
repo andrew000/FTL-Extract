@@ -9,7 +9,7 @@ from ftl_extract.process.kwargs_extractor import extract_kwargs
 
 def extracts_variable_names_from_simple_variable() -> None:
     kwargs = extract_kwargs(
-        FluentKey(
+        key=FluentKey(
             code_path=Path("test.py"),
             key="key-1",
             translation=ast.Message(
@@ -31,7 +31,7 @@ def extracts_variable_names_from_simple_variable() -> None:
 
 def extracts_variable_names_from_select_expression() -> None:
     kwargs = extract_kwargs(
-        FluentKey(
+        key=FluentKey(
             code_path=Path("test.py"),
             key="key-1",
             translation=ast.Message(
@@ -66,7 +66,7 @@ def extracts_variable_names_from_select_expression() -> None:
 
 def returns_empty_set_for_messages_without_variables() -> None:
     kwargs = extract_kwargs(
-        FluentKey(
+        key=FluentKey(
             code_path=Path("test.py"),
             key="key-1",
             translation=ast.Message(
@@ -81,7 +81,7 @@ def returns_empty_set_for_messages_without_variables() -> None:
 
 def test_returns_empty_set_for_comment_translation() -> None:
     kwargs = extract_kwargs(
-        FluentKey(
+        key=FluentKey(
             code_path=Path("test.py"),
             key="key-1",
             translation=ast.Comment(content="This is a comment"),
@@ -93,7 +93,7 @@ def test_returns_empty_set_for_comment_translation() -> None:
 
 def test_returns_empty_set_for_translation_without_value() -> None:
     kwargs = extract_kwargs(
-        FluentKey(
+        key=FluentKey(
             code_path=Path("test.py"),
             key="key-1",
             translation=ast.Message(
@@ -108,7 +108,7 @@ def test_returns_empty_set_for_translation_without_value() -> None:
 
 def test_extracts_variable_names_from_mixed_elements() -> None:
     kwargs = extract_kwargs(
-        FluentKey(
+        key=FluentKey(
             code_path=Path("test.py"),
             key="key-1",
             translation=ast.Message(
@@ -134,7 +134,7 @@ def test_extracts_variable_names_from_mixed_elements() -> None:
 
 def test_extracts_selector_variable_name_from_select_expression() -> None:
     kwargs = extract_kwargs(
-        FluentKey(
+        key=FluentKey(
             code_path=Path("test.py"),
             key="key_select_expression",
             translation=ast.Message(
@@ -173,7 +173,7 @@ def test_extracts_selector_variable_name_from_select_expression() -> None:
 
 def test_nested_extraction() -> None:
     kwargs = extract_kwargs(
-        FluentKey(
+        key=FluentKey(
             code_path=Path("test.py"),
             key="trade-waiting_for_answer",
             translation=ast.Message(

@@ -33,6 +33,7 @@ def extract(
     ignore_kwargs: str | Iterable[str] = IGNORE_KWARGS,
     comment_junks: bool = False,
     default_ftl_file: Path = DEFAULT_FTL_FILE,
+    comment_keys_mode: str = "comment",
     serializer: FluentSerializer | None = None,
 ) -> None:
     if expand_ignore_attributes is not None:
@@ -107,8 +108,16 @@ def extract(
         for key in stored_fluent_keys.keys() - in_code_fluent_keys.keys():
             keys_to_comment[key] = stored_fluent_keys.pop(key)
 
-        for fluent_key in keys_to_comment.values():
-            comment_ftl_key(key=fluent_key, serializer=serializer)
+        if comment_keys_mode == "comment":
+            for fluent_key in keys_to_comment.values():
+                comment_ftl_key(key=fluent_key, serializer=serializer)
+
+        elif comment_keys_mode == "warn":
+            for fluent_key in keys_to_comment.values():
+                echo(
+                    f"Key {fluent_key.key} in "
+                    f"{output_path / lang / fluent_key.path} is not in code.",
+                )
 
         # Comment Junk elements if needed
         if comment_junks is True:

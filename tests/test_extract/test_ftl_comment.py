@@ -1,8 +1,10 @@
 from pathlib import Path
 from typing import Final
+from unittest.mock import patch
 
 from fluent.syntax import FluentSerializer, parse
 
+from ftl_extract.ftl_extractor import extract
 from ftl_extract.ftl_importer import import_from_ftl
 from ftl_extract.process.commentator import comment_ftl_key
 from ftl_extract.process.serializer import generate_ftl
@@ -59,3 +61,31 @@ def test_ftl_comment(tmp_path: Path) -> None:
     assert ftl.body[2].equals(ftl_keys["key-3"].translation)
     assert ftl.body[3].equals(ftl_keys["key-4"].translation)
     assert ftl.body[4].equals(ftl_keys["key-5"].translation)
+
+
+def test_warn_mode_comments_keys(tmp_path: Path) -> None:
+    mock_echo = patch("ftl_extract.ftl_extractor.echo").start()
+
+    code_path = tmp_path / "test_code_path"
+    code_path.mkdir()
+    (code_path / "code.py").write_text(
+        "i18n.get('key-1', var_reference_1='value 1', var_reference_2='value 2')",
+    )
+
+    output_path = tmp_path / "test_output_path"
+    output_path.mkdir()
+    (output_path / "en").mkdir()
+    (output_path / "en" / "_default.ftl").write_text(
+        "key-1 = Key 1 {$var_reference_1} {$var_reference_2}",
+    )
+
+    extract(
+        code_path=code_path,
+        output_path=output_path,
+        language=["en"],
+        i18n_keys=["test_key"],
+        comment_keys_mode="warn",
+    )
+
+    mock_echo.assert_called()
+    patch.stopall()

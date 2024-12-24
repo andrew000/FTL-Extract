@@ -197,7 +197,10 @@ def create_fluent_key(
         path=default_ftl_file,
     )
 
-    keywords = sorted(keywords, key=lambda keyword: keyword.arg)
+    keywords = sorted(
+        keywords,
+        key=lambda keyword: keyword.arg or "",
+    )
 
     for kw in keywords:
         if kw.arg == PATH_LITERAL:

@@ -197,6 +197,8 @@ def create_fluent_key(
         path=default_ftl_file,
     )
 
+    keywords = sorted(keywords, key=lambda keyword: keyword.arg)
+
     for kw in keywords:
         if kw.arg == PATH_LITERAL:
             if kw.value is not None and isinstance(kw.value, ast.Constant):

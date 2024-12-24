@@ -1,6 +1,11 @@
 from __future__ import annotations
 
+from os import environ
+from pprint import pformat
 from typing import TYPE_CHECKING
+
+from ftl_extract.const import FTL_DEBUG_VAR_NAME
+from ftl_extract.utils import to_json_no_span
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -31,10 +36,19 @@ class FTLExtractorDifferentTranslationError(FTLExtractorError):
     ) -> None:
         self.current_translation = current_translation
         self.new_translation = new_translation
-        super().__init__(
-            f"Translation {key!r} already exists with different elements: "
-            f"{self.current_translation} != {self.new_translation}",
-        )
+
+        if bool(environ.get(FTL_DEBUG_VAR_NAME, False)) is True:
+            super().__init__(
+                f"Translation {key!r} already exists with different elements:\n"
+                f"current_translation: "
+                f"{pformat(self.current_translation.to_json(fn=to_json_no_span))}\n!= "
+                f"new_translation: {pformat(self.new_translation.to_json(fn=to_json_no_span))}",
+            )
+        else:
+            super().__init__(
+                f"Translation {key!r} already exists with different elements: "
+                f"{self.current_translation} != {self.new_translation}",
+            )
 
 
 class FTLExtractorCantFindReferenceError(FTLExtractorError):

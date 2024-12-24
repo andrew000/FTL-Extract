@@ -115,8 +115,8 @@ def extract(
         elif comment_keys_mode == "warn":
             for fluent_key in keys_to_comment.values():
                 echo(
-                    f"Key {fluent_key.key} in "
-                    f"{output_path / lang / fluent_key.path} is not in code.",
+                    f"Key `{fluent_key.key}` in "
+                    f"`{output_path / lang / fluent_key.path}` is not in code.",
                 )
 
         # Comment Junk elements if needed

@@ -17,16 +17,16 @@ dev = [
     "fluent-runtime==0.4.0",
     "isort==5.13.2",
     "pre-commit==4.0.1",
-    "ruff==0.8.0",
-    "mypy==1.13.0",
+    "ruff==0.8.4",
+    "mypy==1.14.0",
     "typing-extensions==4.12.2",
 ]
 tests = [
-    "pytest==8.3.3",
+    "pytest==8.3.4",
     "pytest-cov==6.0.0",
     "pytest-html==4.1.1",
     "pytest-mock==3.14.0",
-    "coverage==7.6.7",
+    "coverage==7.6.9",
 ]
 docs = [
     "sphinx==7.4.7",

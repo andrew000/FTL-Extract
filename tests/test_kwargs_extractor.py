@@ -1,8 +1,10 @@
 from pathlib import Path
 
+import pytest
 from fluent.syntax import ast
 
 from ftl_extract.const import DEFAULT_FTL_FILE
+from ftl_extract.exceptions import FTLExtractorCantFindReferenceError, FTLExtractorCantFindTermError
 from ftl_extract.matcher import FluentKey
 from ftl_extract.process.kwargs_extractor import extract_kwargs
 
@@ -307,3 +309,123 @@ def test_nested_extraction() -> None:
     )
 
     assert kwargs == {"first_level_key", "second_level_key"}
+
+
+def test_extract_kwargs_from_message_reference() -> None:
+    key = FluentKey(
+        code_path=Path("test.py"),
+        key="key-1",
+        translation=ast.Message(
+            id=ast.Identifier("test_message"),
+            value=ast.Pattern(
+                elements=[
+                    ast.Placeable(
+                        expression=ast.MessageReference(id=ast.Identifier("referenced_message")),
+                    ),
+                ],
+            ),
+        ),
+        path=DEFAULT_FTL_FILE,
+    )
+
+    referenced_key = FluentKey(
+        code_path=Path("test.py"),
+        key="referenced_message",
+        translation=ast.Message(
+            id=ast.Identifier("referenced_message"),
+            value=ast.Pattern(
+                elements=[
+                    ast.TextElement("Referenced message content"),
+                ],
+            ),
+        ),
+        path=DEFAULT_FTL_FILE,
+    )
+
+    all_fluent_keys = {"referenced_message": referenced_key}
+    kwargs = extract_kwargs(key=key, all_fluent_keys=all_fluent_keys)
+
+    assert kwargs == set()
+
+
+def test_raises_error_for_missing_reference_key() -> None:
+    key = FluentKey(
+        code_path=Path("test.py"),
+        key="key-1",
+        translation=ast.Message(
+            id=ast.Identifier("test_message"),
+            value=ast.Pattern(
+                elements=[
+                    ast.Placeable(
+                        expression=ast.MessageReference(id=ast.Identifier("missing_reference")),
+                    ),
+                ],
+            ),
+        ),
+        path=DEFAULT_FTL_FILE,
+    )
+
+    all_fluent_keys = {}  # Empty dictionary to simulate missing reference
+
+    with pytest.raises(FTLExtractorCantFindReferenceError):
+        extract_kwargs(key=key, all_fluent_keys=all_fluent_keys)
+
+
+def test_extract_kwargs_from_term_reference() -> None:
+    key = FluentKey(
+        code_path=Path("test.py"),
+        key="key-1",
+        translation=ast.Message(
+            id=ast.Identifier("test_message"),
+            value=ast.Pattern(
+                elements=[
+                    ast.Placeable(
+                        expression=ast.TermReference(id=ast.Identifier("referenced_term")),
+                    ),
+                ],
+            ),
+        ),
+        path=DEFAULT_FTL_FILE,
+    )
+
+    referenced_term = FluentKey(
+        code_path=Path("test.py"),
+        key="referenced_term",
+        translation=ast.Term(
+            id=ast.Identifier("referenced_term"),
+            value=ast.Pattern(
+                elements=[
+                    ast.TextElement("Referenced term content"),
+                ],
+            ),
+        ),
+        path=DEFAULT_FTL_FILE,
+    )
+
+    terms = {"referenced_term": referenced_term}
+    kwargs = extract_kwargs(key=key, terms=terms)
+
+    assert kwargs == set()
+
+
+def test_raises_error_for_missing_term() -> None:
+    key = FluentKey(
+        code_path=Path("test.py"),
+        key="key-1",
+        translation=ast.Message(
+            id=ast.Identifier("test_message"),
+            value=ast.Pattern(
+                elements=[
+                    ast.Placeable(
+                        expression=ast.TermReference(id=ast.Identifier("missing_term")),
+                    ),
+                ],
+            ),
+        ),
+        path=DEFAULT_FTL_FILE,
+    )
+
+    terms = {}  # Empty dictionary to simulate missing term
+
+    with pytest.raises(FTLExtractorCantFindTermError):
+        extract_kwargs(key=key, terms=terms)

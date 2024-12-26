@@ -1,8 +1,13 @@
 from pathlib import Path
 from typing import Final
+from unittest.mock import Mock, patch
+
+from fluent.syntax.ast import Identifier, Pattern, Term, TextElement
 
 from ftl_extract.code_extractor import extract_fluent_keys
 from ftl_extract.const import DEFAULT_FTL_FILE, IGNORE_ATTRIBUTES, IGNORE_KWARGS
+from ftl_extract.ftl_extractor import extract
+from ftl_extract.matcher import FluentKey
 
 CONTENT: Final[str] = """
 def test(i18n):
@@ -235,3 +240,30 @@ def test_extract_fluent_keys_no_files(tmp_path: Path) -> None:
         default_ftl_file=DEFAULT_FTL_FILE,
     )
     assert not fluent_keys
+
+
+def test_term_paths_are_made_relative_to_output_path(tmp_path: Path) -> None:
+    code_path, output_path = (tmp_path / "test.py"), (tmp_path / "output")
+    code_path.touch()
+
+    lang = "en"
+    mock_term = Mock(FluentKey)
+    mock_term.key = "term-1"
+    mock_term.path = output_path / lang / "terms.ftl"
+    mock_term.translation = Term(
+        id=Identifier("term-1"),
+        value=Pattern([TextElement(mock_term.key)]),
+    )
+
+    with patch(
+        "ftl_extract.ftl_extractor.import_ftl_from_dir",
+        return_value=({}, {"term-1": mock_term}, []),
+    ):
+        extract(
+            code_path=code_path,
+            output_path=output_path,
+            language=(lang,),
+            i18n_keys=("i18n",),
+        )
+
+    assert mock_term.path == Path("terms.ftl")

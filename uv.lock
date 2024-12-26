@@ -308,7 +308,7 @@ wheels = [
 
 [[package]]
 name = "ftl-extract"
-version = "0.5.0.dev0"
+version = "0.5.0"
 source = { editable = "." }
 dependencies = [
     { name = "click" },

@@ -116,7 +116,7 @@ def extract(
             for fluent_key in keys_to_comment.values():
                 keys_to_add.pop(fluent_key.key, None)
                 echo(
-                    f"Key `{fluent_key.key}` in "
+                    f"Key `{fluent_key.key}` with such kwargs in "
                     f"`{output_path / lang / fluent_key.path}` is not in code.",
                 )
 

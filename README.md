@@ -34,8 +34,8 @@ $ ftl_extract project_path/code_path project_path/locales
 
 By default, FTL-Extract will create a directory named `en` and put all keys into `_default.ftl` file.
 
-In more cases, you may want to extract keys to specific `.ftl` files.
-So, you must add `_path` argument to `i18n.get` function in your code.
+In some cases, you may want to extract keys to specific `.ftl` files.
+So, there is new keyword argument `_path` in `i18n.get` and `i18n.<key>`.
 
 ```python
 # Before
@@ -43,6 +43,12 @@ i18n.get("key-1", arg1="value1", arg2="value2")
 
 # After
 i18n.get("key-1", arg1="value1", arg2="value2", _path="dir/ftl_file.ftl")
+
+# Also
+i18n.key_1(arg1="value1", arg2="value2", _path="dir/ftl_file.ftl")
+
+# Or
+i18n.some.key_1(arg1="value1", arg2="value2", _path="dir/ftl_file.ftl")
 ```
 
 ***
@@ -73,52 +79,6 @@ $ ftl_extract project_path/code_path project_path/locales
 
 ## FAQ
 
-#### ❓ - What changed 🤔
-
-You just need to add `_path` argument to `i18n.get` function and specify the path to the `.ftl` file where you want to
-put the key.
-
-It may be just a filename like `file.ftl` or a path to a file like `dir/file.ftl`.
-
-<details>
-    <summary><b>❌ CustomFluentRuntimeCore</b></summary>
-
-### ❗️ Is not actual anymore
-
-#### ❓ - My `FluentRuntimeCore` throws an error 🤯, when I use `_path` argument
-
-Now there is a little problem with integration with [aiogram-i18n](https://github.com/aiogram/i18n)
-
-To fix any possible problems - when you create a `i18n` middleware in your code:
-
-```python
-i18n_middleware = I18nMiddleware(
-    core=FluentRuntimeCore(path=Path(__file__).parent / "locales" / "{locale}"),
-    manager=FSMManager(),
-)
-```
-
-you should replace `FluentRuntimeCore` with your own patched core.
-
-_**🤖 Example of your own `Core`**_
-
-```python
-class CustomFluentRuntimeCore(FluentRuntimeCore):
-    def get(self, message_id: str, locale: Optional[str] = None, /, **kwargs: Any) -> str:
-
-    # PATCH START #
-    kwargs.pop("_path", None)
-    # PATCH END #
-
-    locale = self.get_locale(locale=locale)
-    translator: FluentBundle = self.get_translator(locale=locale)
-    ...
-```
-
-Then just use this `CustomFluentRuntimeCore` in your `i18n` middleware as erlier.
-
-</details>
-
 #### ❓ - How to add more languages to the project ?
 
 ```shell
@@ -146,13 +106,13 @@ $ ftl_extract \
   -l 'pl' \
   -l 'de' \
   -l 'ja' \
-  -l 'ru' \
   -k 'i18n' \
   -k 'L' \
   -k 'LF' \
   -k 'LazyProxy' \
   -a 'core' \
-  --comment-junks
+  --comment-junks \
+  --comment-keys-mode 'comment'
 ```
 
 ***

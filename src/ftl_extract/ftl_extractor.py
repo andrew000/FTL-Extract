@@ -114,6 +114,7 @@ def extract(
 
         elif comment_keys_mode == "warn":
             for fluent_key in keys_to_comment.values():
+                keys_to_add.pop(fluent_key.key, None)
                 echo(
                     f"Key `{fluent_key.key}` in "
                     f"`{output_path / lang / fluent_key.path}` is not in code.",

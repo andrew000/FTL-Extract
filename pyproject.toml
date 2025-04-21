@@ -15,25 +15,25 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
     "fluent-runtime==0.4.0",
-    "isort==5.13.2",
-    "pre-commit==4.0.1",
-    "ruff==0.8.4",
-    "mypy==1.14.0",
+    "isort==6.0.1",
+    "pre-commit==4.2.0",
+    "ruff==0.11.6",
+    "mypy==1.15.0",
     "typing-extensions==4.12.2",
 ]
 tests = [
-    "pytest==8.3.4",
-    "pytest-cov==6.0.0",
+    "pytest==8.3.5",
+    "pytest-cov==6.1.1",
     "pytest-html==4.1.1",
     "pytest-mock==3.14.0",
-    "coverage==7.6.10",
+    "coverage==7.8.0",
 ]
 docs = [
     "sphinx==7.4.7",
     "sphinx-rtd-theme==3.0.2",
     "sphinx-autobuild==2024.10.3",
     "furo==2024.8.6",
-    "pytz==2024.2",
+    "pytz==2025.1",
 ]
 
 [project.urls]
@@ -107,7 +107,7 @@ ignore = [
     "PLW0120",
     "RUF001",
     "S101",
-    "TD002", "TD003",
+    "TC006", "TD002", "TD003",
 ]
 
 [tool.ruff.format]

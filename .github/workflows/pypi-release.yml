@@ -9,10 +9,7 @@ jobs:
     name: 📦 Build and publish
     runs-on: ubuntu-latest
     env:
-      UV_PYTHON: "3.12.8"
-    environment:
-      name: pypi
-      url: https://pypi.org/p/ftl-extract
+      UV_PYTHON: "3.9.22"
     permissions:
       id-token: write  # IMPORTANT: mandatory for trusted publishing
 
@@ -23,7 +20,7 @@ jobs:
       - name: Install uv
         uses: astral-sh/setup-uv@v5
         with:
-          version: "0.5.11"
+          version: "latest"
           enable-cache: true
 
       - name: Set up Python ${{ env.UV_PYTHON }}
@@ -36,7 +33,7 @@ jobs:
         run: uv build
 
       - name: Verify wheel installation
-        run: uv run --verbose --with ./dist/$(find ./dist/*.whl -printf "%f") --no-project --refresh-package ftl_extract -- python -c "import ftl_extract; print(ftl_extract.__version__)"
+        run: uv run --verbose --with ftl_extract --no-project --refresh-package ftl_extract -- python -c "import ftl_extract; print(ftl_extract.__version__)"
 
       - name: 🐍 Publish distribution 📦
         run: uv publish

@@ -15,5 +15,5 @@ IGNORE_ATTRIBUTES: Final[frozenset[str]] = frozenset(
 )
 IGNORE_KWARGS: Final[frozenset[str]] = frozenset()
 DEFAULT_FTL_FILE: Final[Path] = Path("_default.ftl")
-FTL_DEBUG_VAR_NAME: Final = "FTL_DEBUG"
+FTL_DEBUG_VAR_NAME: Final[str] = "FTL_DEBUG"
 COMMENT_KEYS_MODE: tuple[str, ...] = ("comment", "warn")

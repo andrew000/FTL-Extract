@@ -37,7 +37,7 @@ class FTLExtractorDifferentTranslationError(FTLExtractorError):
         self.current_translation = current_translation
         self.new_translation = new_translation
 
-        if bool(environ.get(FTL_DEBUG_VAR_NAME, False)) is True:
+        if bool(environ.get(FTL_DEBUG_VAR_NAME, "")) is True:
             super().__init__(
                 f"Translation {key!r} already exists with different elements:\n"
                 f"current_translation: "

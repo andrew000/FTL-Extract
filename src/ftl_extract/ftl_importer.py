@@ -10,6 +10,8 @@ from ftl_extract.matcher import FluentKey
 if TYPE_CHECKING:
     from fluent.syntax.ast import Resource
 
+    from ftl_extract.utils import ExtractionStatistics
+
 
 def import_from_ftl(
     *,
@@ -61,6 +63,7 @@ def import_ftl_from_dir(
     *,
     path: Path,
     locale: str,
+    statistics: ExtractionStatistics | None = None,
 ) -> tuple[dict[str, FluentKey], dict[str, FluentKey], list[FluentKey]]:
     """Import `FluentKey`s from directory of FTL files."""
     ftl_files = (path / locale).rglob("*.ftl") if path.is_dir() else [path]
@@ -73,5 +76,8 @@ def import_ftl_from_dir(
         stored_ftl_keys.update(keys)
         stored_terms.update(terms)
         stored_leave_as_is_keys.extend(leave_as_is_keys)
+
+        if statistics:
+            statistics.ftl_files_count[locale] += 1
 
     return stored_ftl_keys, stored_terms, stored_leave_as_is_keys

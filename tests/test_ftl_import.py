@@ -60,7 +60,10 @@ def test_import_ftl_from_dir_with_no_ftl_files(tmp_path: Path) -> None:
 
 def test_import_ftl_from_dir_with_nonexistent_directory() -> None:
     with pytest.raises(FileNotFoundError):
-        import_ftl_from_dir(path=Path("/path/to/nonexistent/dir"), locale="en")
+        import_ftl_from_dir(
+            path=Path("/path/to/nonexistent/dir"),
+            locale="en",
+        )
 
 
 def test_import_from_ftl_appends_non_message_entries_correctly(mock_ftl_content: str) -> None:

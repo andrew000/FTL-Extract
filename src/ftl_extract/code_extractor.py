@@ -10,12 +10,13 @@ from ftl_extract.exceptions import (
     FTLExtractorDifferentPathsError,
     FTLExtractorDifferentTranslationError,
 )
-from ftl_extract.matcher import I18nMatcher
+from ftl_extract.matcher import FluentKey, I18nMatcher
 
 if TYPE_CHECKING:
     from collections.abc import Iterable, Iterator
 
     from ftl_extract.matcher import FluentKey
+    from ftl_extract.utils import ExtractionStatistics
 
 
 def find_py_files(*, path: Path) -> Iterator[Path]:
@@ -125,6 +126,7 @@ def extract_fluent_keys(
     ignore_attributes: str | Iterable[str],
     ignore_kwargs: str | Iterable[str],
     default_ftl_file: Path,
+    statistics: ExtractionStatistics | None = None,
 ) -> dict[str, FluentKey]:
     """
     Extract all `FluentKey`s from given path.
@@ -140,6 +142,8 @@ def extract_fluent_keys(
     :type ignore_kwargs: str | Iterable[str]
     :param default_ftl_file: Default name of FTL file.
     :type default_ftl_file: Path
+    :param statistics: Statistics of extraction.
+    :type statistics: ExtractionStatistics
     :return: Dict with `key` and `FluentKey`.
     :rtype: dict[str, FluentKey]
 
@@ -157,6 +161,9 @@ def extract_fluent_keys(
         post_process_fluent_keys(fluent_keys=keys, default_ftl_file=default_ftl_file)
         find_conflicts(current_fluent_keys=fluent_keys, new_fluent_keys=keys)
         fluent_keys.update(keys)
+
+        if statistics and keys:
+            statistics.py_files_count += 1
 
     return fluent_keys
 

@@ -7,9 +7,9 @@ if TYPE_CHECKING:
     from typing import Final
 
 
-I18N_LITERAL: Final = "i18n"
-GET_LITERAL: Final = "get"
-PATH_LITERAL: Final = "_path"
+I18N_LITERAL: Final[str] = "i18n"
+GET_LITERAL: Final[str] = "get"
+PATH_LITERAL: Final[str] = "_path"
 IGNORE_ATTRIBUTES: Final[frozenset[str]] = frozenset(
     {"set_locale", "use_locale", "use_context", "set_context"},
 )

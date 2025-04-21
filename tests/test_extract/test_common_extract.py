@@ -2,12 +2,14 @@ from pathlib import Path
 from typing import Final
 from unittest.mock import Mock, patch
 
+from fluent.syntax import parse
 from fluent.syntax.ast import Identifier, Pattern, Term, TextElement
 
 from ftl_extract.code_extractor import extract_fluent_keys
 from ftl_extract.const import DEFAULT_FTL_FILE, IGNORE_ATTRIBUTES, IGNORE_KWARGS
 from ftl_extract.ftl_extractor import extract
 from ftl_extract.matcher import FluentKey
+from ftl_extract.utils import ExtractionStatistics
 
 CONTENT: Final[str] = """
 def test(i18n):
@@ -52,6 +54,7 @@ def test_common_extract(tmp_path: Path) -> None:
         ignore_attributes=IGNORE_ATTRIBUTES,
         ignore_kwargs=IGNORE_KWARGS,
         default_ftl_file=DEFAULT_FTL_FILE,
+        statistics=ExtractionStatistics(),
     )
     assert fluent_keys  # Check if `fluent_keys` is not empty.
     assert len(fluent_keys) == fluent_keys_len  # Check if `fluent_keys` has `fluent_keys_len` keys.
@@ -238,6 +241,7 @@ def test_extract_fluent_keys_no_files(tmp_path: Path) -> None:
         ignore_attributes=IGNORE_ATTRIBUTES,
         ignore_kwargs=IGNORE_KWARGS,
         default_ftl_file=DEFAULT_FTL_FILE,
+        statistics=ExtractionStatistics(),
     )
     assert not fluent_keys
 
@@ -267,3 +271,22 @@ def test_term_paths_are_made_relative_to_output_path(tmp_path: Path) -> None:
         )
 
     assert mock_term.path == Path("terms.ftl")
+
+
+def test_different_types_of_keys(tmp_path: Path) -> None:
+    code_path = Path("tests/files/py/default.py")
+    parse(Path("tests/files/locales/en/_default.ftl").read_text(encoding="utf-8"))
+    output_path = Path(tmp_path) / "output"
+    output_path.mkdir(exist_ok=True)
+
+    statistics = extract(
+        code_path=code_path,
+        output_path=output_path,
+        language=("en",),
+        i18n_keys=("i18n",),
+        dry_run=True,
+    )
+
+    assert all(
+        ftl_keys_commented == 0 for ftl_keys_commented in statistics.ftl_keys_commented.values()
+    )

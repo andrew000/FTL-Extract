@@ -48,6 +48,7 @@ class FluentKey:
     path: Path
     locale: str | None = field(default=None)
     position: int | float = field(default=inf)
+    depends_on_keys: set[str] = field(default_factory=set)
 
     def __repr__(self) -> str:
         return (

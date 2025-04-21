@@ -14,7 +14,11 @@ Use the package manager [pip](https://pip.pypa.io/en/stable) to install FTL-Extr
 $ pip install FTL-Extract
 ```
 
-Or add it to your `pyproject.toml` and run `poetry update`
+Or use modern tool like [UV](https://docs.astral.sh/uv/) to install FTL-Extract.
+
+```shell
+$ uv add --dev FTL-Extract
+```
 
 ***
 
@@ -74,6 +78,8 @@ $ ftl_extract project_path/code_path project_path/locales
 - `--default-ftl-file` - specify the default `.ftl` file name.
 - `--comment-keys-mode` - specify the comment keys mode. It will comment keys that are not used in the code or print
   warnings about them. Available modes: `comment`, `warn`.
+- `--dry-run` - run the command without making any changes to the files.
+- `-v` or `--verbose` - print additional information about the process.
 
 ***
 
@@ -103,16 +109,14 @@ $ ftl_extract \
   './app/bot/locales' \
   -l 'en' \
   -l 'uk' \
-  -l 'pl' \
-  -l 'de' \
-  -l 'ja' \
   -k 'i18n' \
   -k 'L' \
   -k 'LF' \
   -k 'LazyProxy' \
   -a 'core' \
   --comment-junks \
-  --comment-keys-mode 'comment'
+  --comment-keys-mode 'warn' \
+  --verbose
 ```
 
 ***

@@ -36,3 +36,9 @@ jobs:
 
       - name: Test with pytest
         run: make test
+
+      - name: Try building
+        run: uv build
+
+      - name: Verify wheel installation
+        run: uv run --verbose --with ftl_extract --no-project --refresh-package ftl_extract -- python -c "import ftl_extract; print(ftl_extract.__version__)"

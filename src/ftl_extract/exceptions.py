@@ -60,8 +60,11 @@ class FTLExtractorCantFindReferenceError(FTLExtractorError):
 
 
 class FTLExtractorCantFindTermError(FTLExtractorError):
-    def __init__(self, key: str, key_path: Path, term_key: str) -> None:
+    def __init__(self, key: str, locale: str, key_path: Path, term_key: str) -> None:
         self.key = key
+        self.locale = locale
         self.key_path = key_path
         self.term_key = term_key
-        super().__init__(f"Can't find term {term_key!r} for key {key!r} at {key_path}")
+        super().__init__(
+            f"Can't find term {term_key!r} for key {key!r} with locale {locale!r} at: {key_path}",
+        )

@@ -78,6 +78,9 @@ def test_extract_with_keys_to_comment_and_add(
     stored_fluent_key_path = (output_path / "en").resolve().joinpath("different/path.ftl")
     mock_fluent_key.path = Path("some/path.ftl")  # Path in code
 
+    mock_return_fluent_key = MagicMock(spec=FluentKey, path=stored_fluent_key_path)
+    mock_return_fluent_key.translation = MagicMock(spec=fl_ast.Message)
+
     with (
         patch(
             "ftl_extract.ftl_extractor.extract_fluent_keys",
@@ -86,7 +89,7 @@ def test_extract_with_keys_to_comment_and_add(
         patch(
             "ftl_extract.ftl_extractor.import_ftl_from_dir",
             return_value=(
-                {"key-1": MagicMock(spec=FluentKey, path=stored_fluent_key_path)},
+                {"key-1": mock_return_fluent_key},
                 {},
                 [],
             ),
@@ -143,7 +146,25 @@ def test_extraction_with_valid_paths_succeeds(
         [code_path.as_posix(), output_path.as_posix()],
     )
     assert result.exit_code == 0
-    assert f"Extracting from {code_path}..." in result.output
+    assert f"Extracting from {code_path}" in result.output
+    mock_extract_function.assert_called_once()
+
+
+def test_extraction_with_verbose_enabled(
+    runner: click.testing.CliRunner,
+    mock_extract_function: patch,
+    tmp_path: Path,
+) -> None:
+    tmp_path.joinpath("path/to/code").mkdir(parents=True)
+    code_path = tmp_path.joinpath("path/to/code")
+    output_path = tmp_path.joinpath("path/to/output")
+
+    result = runner.invoke(
+        cast(BaseCommand, cli_extract),
+        [code_path.as_posix(), output_path.as_posix(), "--verbose"],
+    )
+    assert result.exit_code == 0
+    assert "Extraction statistics:" in result.output
     mock_extract_function.assert_called_once()
 
 
@@ -248,10 +269,12 @@ def test_stored_fluent_keys_code_path_update(setup_environment: tuple[Path, Path
     code_path, output_path = setup_environment
     mock_fluent_key = MagicMock(spec=FluentKey)
     mock_fluent_key.path = Path("_default.ftl")
+    mock_fluent_key.translation = MagicMock(spec=fl_ast.Message)
     mock_fluent_key.code_path = code_path / "some_code_path.py"
 
     stored_fluent_key = MagicMock(spec=FluentKey)
     stored_fluent_key.path = Path(output_path / "en" / "_default.ftl")
+    stored_fluent_key.translation = MagicMock(spec=fl_ast.Message)
     stored_fluent_key.code_path = None
 
     in_code_fluent_keys = {"key-1": mock_fluent_key}
@@ -281,10 +304,12 @@ def test_keys_to_comment_and_add_on_different_kwargs(setup_environment: tuple[Pa
     code_path, output_path = setup_environment
     mock_fluent_key = MagicMock(spec=FluentKey)
     mock_fluent_key.path = Path("_default.ftl")
+    mock_fluent_key.translation = MagicMock(spec=fl_ast.Message)
     mock_fluent_key.code_path = code_path / "some_code_path.py"
 
     stored_fluent_key = MagicMock(spec=FluentKey)
     stored_fluent_key.path = Path(output_path / "en" / "_default.ftl")
+    stored_fluent_key.translation = MagicMock(spec=fl_ast.Message)
     stored_fluent_key.code_path = None
 
     in_code_fluent_keys = {"key-1": mock_fluent_key}
@@ -397,3 +422,26 @@ def test_i18n_matcher_ignore_kwargs(setup_environment: tuple[Path, Path]) -> Non
 
     assert isinstance(matcher.fluent_keys["key"].translation.value.elements[0], fl_ast.TextElement)
     assert len(matcher.fluent_keys) == 1
+
+
+def test_continue_skips_keys_in_depend_keys(setup_environment: tuple[Path, Path]) -> None:
+    code_path, output_path = setup_environment
+
+    (code_path / "test.py").parent.mkdir(parents=True, exist_ok=True)
+    (code_path / "test.py").write_text("i18n.text()", encoding="utf-8")
+
+    (output_path / "en" / "_default.ftl").parent.mkdir(parents=True, exist_ok=True)
+    (output_path / "en" / "_default.ftl").write_text(
+        "reference-text = This is a reference text.\ntext = Reference: { reference-text }\n",
+        encoding="utf-8",
+    )
+
+    statistics = extract(
+        code_path=code_path,
+        output_path=output_path,
+        language=("en",),
+        i18n_keys=("i18n",),
+        comment_keys_mode="warn",
+    )
+
+    assert statistics.ftl_keys_commented["en"] == 0

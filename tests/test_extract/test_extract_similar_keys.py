@@ -156,9 +156,12 @@ def test_ftl_extractor_cant_find_term_error() -> None:
     key_path = Path("/path/to/locale/en/example.ftl")
     term_key = "example_term"
 
-    error = FTLExtractorCantFindTermError(key, key_path, term_key)
+    error = FTLExtractorCantFindTermError(key, "en", key_path, term_key)
 
     assert error.key == key
     assert error.key_path == key_path
     assert error.term_key == term_key
-    assert str(error) == f"Can't find term {term_key!r} for key {key!r} at {key_path}"
+    assert (
+        str(error)
+        == f"Can't find term {term_key!r} for key {key!r} with locale 'en' at: {key_path}"
+    )

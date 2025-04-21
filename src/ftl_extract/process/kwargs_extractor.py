@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 from fluent.syntax import ast
 
@@ -25,6 +25,7 @@ def _extract_kwargs_from_selector_expression(
     kwargs: set[str],
     terms: dict[str, FluentKey],
     all_fluent_keys: dict[str, FluentKey],
+    depend_keys: set[str] | None = None,
 ) -> None:
     if isinstance(selector_expression.selector, ast.VariableReference):
         _extract_kwargs_from_variable_reference(
@@ -41,6 +42,7 @@ def _extract_kwargs_from_selector_expression(
                     kwargs=kwargs,
                     terms=terms,
                     all_fluent_keys=all_fluent_keys,
+                    depend_keys=depend_keys,
                 )
 
 
@@ -51,6 +53,7 @@ def _extract_kwargs_from_message_reference(
     kwargs: set[str],
     terms: dict[str, FluentKey],
     all_fluent_keys: dict[str, FluentKey],
+    depend_keys: set[str] | None = None,
 ) -> None:
     reference_key = all_fluent_keys.get(message_reference.id.name, None)
 
@@ -61,7 +64,14 @@ def _extract_kwargs_from_message_reference(
             reference_key=message_reference.id.name,
         )
 
-    kwargs.update(extract_kwargs(key=reference_key, terms=terms, all_fluent_keys=all_fluent_keys))
+    kwargs.update(
+        extract_kwargs(
+            key=reference_key,
+            terms=terms,
+            all_fluent_keys=all_fluent_keys,
+            depend_keys=depend_keys,
+        ),
+    )
 
 
 def _extract_kwargs_from_term_reference(
@@ -77,6 +87,7 @@ def _extract_kwargs_from_term_reference(
     if not term:
         raise FTLExtractorCantFindTermError(
             key=key.key,
+            locale=cast(str, key.locale),
             key_path=key.path,
             term_key=term_expression.id.name,
         )
@@ -91,6 +102,7 @@ def _extract_kwargs_from_placeable(
     kwargs: set[str],
     terms: dict[str, FluentKey],
     all_fluent_keys: dict[str, FluentKey],
+    depend_keys: set[str] | None = None,
 ) -> None:
     expression = placeable.expression
 
@@ -104,15 +116,24 @@ def _extract_kwargs_from_placeable(
             kwargs=kwargs,
             terms=terms,
             all_fluent_keys=all_fluent_keys,
+            depend_keys=depend_keys,
         )
 
     elif isinstance(expression, ast.MessageReference):
+        # Add `ast.MessageReference.id.name` to depends_on_keys
+        # to avoid key to be removed
+        key.depends_on_keys.add(expression.id.name)
+        if depend_keys is not None:
+            depend_keys.add(expression.id.name)
+
+        # Extract kwargs
         _extract_kwargs_from_message_reference(
             key=key,
             message_reference=expression,
             kwargs=kwargs,
             terms=terms,
             all_fluent_keys=all_fluent_keys,
+            depend_keys=depend_keys,
         )
 
     elif isinstance(expression, ast.TermReference):
@@ -130,10 +151,12 @@ def extract_kwargs(
     key: FluentKey,
     terms: dict[str, FluentKey] | None = None,
     all_fluent_keys: dict[str, FluentKey] | None = None,
+    depend_keys: set[str] | None = None,
 ) -> set[str]:
     kwargs: set[str] = set()
     terms = terms or {}
     all_fluent_keys = all_fluent_keys or {}
+    depend_keys = depend_keys if depend_keys is not None else set()
 
     if not isinstance(key.translation, (ast.Message, ast.Term)):
         return kwargs
@@ -149,6 +172,7 @@ def extract_kwargs(
                 kwargs=kwargs,
                 terms=terms,
                 all_fluent_keys=all_fluent_keys,
+                depend_keys=depend_keys,
             )
 
     return kwargs

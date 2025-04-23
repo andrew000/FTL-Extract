@@ -23,7 +23,7 @@ FTL_DEBUG_VAR_NAME: Final[str] = "FTL_DEBUG"
 COMMENT_KEYS_MODE: Final[tuple[str, ...]] = ("comment", "warn")
 DEFAULT_EXCLUDE_DIRS: Final[tuple[str, ...]] = (
     ".venv",
-    ".env",
+    "venv",
     ".git",
     "__pycache__",
     ".pytest_cache",

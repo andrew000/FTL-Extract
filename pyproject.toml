@@ -1,7 +1,7 @@
 [project]
 name = "FTL-Extract"
 description = "Extracts FTL files from a directory and outputs them to a directory"
-version = "0.7.0"
+version = "0.7.1"
 authors = [{ name = "andrew000", email = "help@kusbot.com" }]
 keywords = ["ftl", "ftl-extract", "ftl-extractor"]
 readme = "README.md"

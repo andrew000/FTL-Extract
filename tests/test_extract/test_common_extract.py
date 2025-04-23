@@ -5,11 +5,17 @@ from unittest.mock import Mock, patch
 from fluent.syntax import parse
 from fluent.syntax.ast import Identifier, Pattern, Term, TextElement
 
-from ftl_extract.code_extractor import extract_fluent_keys
-from ftl_extract.const import DEFAULT_FTL_FILE, IGNORE_ATTRIBUTES, IGNORE_KWARGS
+from ftl_extract.code_extractor import extract_fluent_keys, find_py_files
+from ftl_extract.const import (
+    DEFAULT_EXCLUDE_DIRS,
+    DEFAULT_FTL_FILE,
+    DEFAULT_I18N_KEYS,
+    DEFAULT_IGNORE_ATTRIBUTES,
+    DEFAULT_IGNORE_KWARGS,
+)
 from ftl_extract.ftl_extractor import extract
 from ftl_extract.matcher import FluentKey
-from ftl_extract.utils import ExtractionStatistics
+from ftl_extract.utils import ExtractionStatistics, prepare_exclude_dirs
 
 CONTENT: Final[str] = """
 def test(i18n):
@@ -50,9 +56,13 @@ def test_common_extract(tmp_path: Path) -> None:
 
     fluent_keys = extract_fluent_keys(
         path=tmp_path,
-        i18n_keys=("i18n", "L", "LF"),
-        ignore_attributes=IGNORE_ATTRIBUTES,
-        ignore_kwargs=IGNORE_KWARGS,
+        i18n_keys=DEFAULT_I18N_KEYS,
+        exclude_dirs=prepare_exclude_dirs(
+            exclude_dirs=DEFAULT_EXCLUDE_DIRS,
+            exclude_dirs_append=(),
+        ),
+        ignore_attributes=DEFAULT_IGNORE_ATTRIBUTES,
+        ignore_kwargs=DEFAULT_IGNORE_KWARGS,
         default_ftl_file=DEFAULT_FTL_FILE,
         statistics=ExtractionStatistics(),
     )
@@ -237,9 +247,13 @@ def test_common_extract(tmp_path: Path) -> None:
 def test_extract_fluent_keys_no_files(tmp_path: Path) -> None:
     fluent_keys = extract_fluent_keys(
         path=tmp_path,
-        i18n_keys="i18n",
-        ignore_attributes=IGNORE_ATTRIBUTES,
-        ignore_kwargs=IGNORE_KWARGS,
+        i18n_keys=DEFAULT_I18N_KEYS,
+        exclude_dirs=prepare_exclude_dirs(
+            exclude_dirs=DEFAULT_EXCLUDE_DIRS,
+            exclude_dirs_append=(),
+        ),
+        ignore_attributes=DEFAULT_IGNORE_ATTRIBUTES,
+        ignore_kwargs=DEFAULT_IGNORE_KWARGS,
         default_ftl_file=DEFAULT_FTL_FILE,
         statistics=ExtractionStatistics(),
     )
@@ -290,3 +304,34 @@ def test_different_types_of_keys(tmp_path: Path) -> None:
     assert all(
         ftl_keys_commented == 0 for ftl_keys_commented in statistics.ftl_keys_commented.values()
     )
+
+
+def test_find_py_files(tmp_path: Path) -> None:
+    # Normal file
+    (tmp_path / "test.py").write_text(CONTENT)
+
+    # Dir with file
+    (tmp_path / "dir").mkdir()
+    (tmp_path / "dir" / "test.py").write_text(CONTENT)
+
+    py_files = find_py_files(
+        search_path=tmp_path,
+        exclude_dirs=prepare_exclude_dirs(
+            exclude_dirs=DEFAULT_EXCLUDE_DIRS,
+            exclude_dirs_append=(),
+        ),
+    )
+
+    assert len(tuple(py_files)) == 2  # noqa: PLR2004
+
+
+def test_find_py_files_not_file_nor_dir(tmp_path: Path) -> None:
+    py_files = find_py_files(
+        search_path=tmp_path / "test",
+        exclude_dirs=prepare_exclude_dirs(
+            exclude_dirs=DEFAULT_EXCLUDE_DIRS,
+            exclude_dirs_append=(),
+        ),
+    )
+
+    assert len(tuple(py_files)) == 0

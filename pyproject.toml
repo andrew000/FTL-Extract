@@ -87,6 +87,7 @@ exclude = [
     "venv",
     ".venv",
     "tests/.files",
+    "tests/files/py",
     "dist",
     "build",
 ]

@@ -7,14 +7,20 @@ import pytest
 from fluent.syntax import ast
 
 from ftl_extract.code_extractor import extract_fluent_keys
-from ftl_extract.const import DEFAULT_FTL_FILE, IGNORE_ATTRIBUTES, IGNORE_KWARGS
+from ftl_extract.const import (
+    DEFAULT_EXCLUDE_DIRS,
+    DEFAULT_FTL_FILE,
+    DEFAULT_I18N_KEYS,
+    DEFAULT_IGNORE_ATTRIBUTES,
+    DEFAULT_IGNORE_KWARGS,
+)
 from ftl_extract.exceptions import (
     FTLExtractorCantFindReferenceError,
     FTLExtractorCantFindTermError,
     FTLExtractorDifferentPathsError,
     FTLExtractorDifferentTranslationError,
 )
-from ftl_extract.utils import to_json_no_span
+from ftl_extract.utils import prepare_exclude_dirs, to_json_no_span
 
 CONTENT_1: Final[str] = """
 # For `test_extract_similar_keys_in_different_paths_from_one_py_file` test.
@@ -60,9 +66,13 @@ def test_extract_similar_keys_in_different_paths_from_one_py_file(tmp_path: Path
     with pytest.raises(FTLExtractorDifferentPathsError):
         extract_fluent_keys(
             path=tmp_path,
-            i18n_keys="i18n",
-            ignore_attributes=IGNORE_ATTRIBUTES,
-            ignore_kwargs=IGNORE_KWARGS,
+            i18n_keys=DEFAULT_I18N_KEYS,
+            exclude_dirs=prepare_exclude_dirs(
+                exclude_dirs=DEFAULT_EXCLUDE_DIRS,
+                exclude_dirs_append=(),
+            ),
+            ignore_attributes=DEFAULT_IGNORE_ATTRIBUTES,
+            ignore_kwargs=DEFAULT_IGNORE_KWARGS,
             default_ftl_file=DEFAULT_FTL_FILE,
         )
 
@@ -77,9 +87,13 @@ def test_extract_similar_fluent_keys_in_different_paths_from_different_py_files(
     with pytest.raises(FTLExtractorDifferentPathsError):
         extract_fluent_keys(
             path=tmp_path,
-            i18n_keys="i18n",
-            ignore_attributes=IGNORE_ATTRIBUTES,
-            ignore_kwargs=IGNORE_KWARGS,
+            i18n_keys=DEFAULT_I18N_KEYS,
+            exclude_dirs=prepare_exclude_dirs(
+                exclude_dirs=DEFAULT_EXCLUDE_DIRS,
+                exclude_dirs_append=(),
+            ),
+            ignore_attributes=DEFAULT_IGNORE_ATTRIBUTES,
+            ignore_kwargs=DEFAULT_IGNORE_KWARGS,
             default_ftl_file=DEFAULT_FTL_FILE,
         )
 
@@ -116,9 +130,13 @@ def test_extract_similar_fluent_keys_with_different_translation_one_py_file(tmp_
     with pytest.raises(FTLExtractorDifferentTranslationError):
         extract_fluent_keys(
             path=tmp_path,
-            i18n_keys="i18n",
-            ignore_attributes=IGNORE_ATTRIBUTES,
-            ignore_kwargs=IGNORE_KWARGS,
+            i18n_keys=DEFAULT_I18N_KEYS,
+            exclude_dirs=prepare_exclude_dirs(
+                exclude_dirs=DEFAULT_EXCLUDE_DIRS,
+                exclude_dirs_append=(),
+            ),
+            ignore_attributes=DEFAULT_IGNORE_ATTRIBUTES,
+            ignore_kwargs=DEFAULT_IGNORE_KWARGS,
             default_ftl_file=DEFAULT_FTL_FILE,
         )
 
@@ -133,9 +151,13 @@ def test_extract_similar_fluent_keys_with_different_translation_different_py_fil
     with pytest.raises(FTLExtractorDifferentTranslationError):
         extract_fluent_keys(
             path=tmp_path,
-            i18n_keys="i18n",
-            ignore_attributes=IGNORE_ATTRIBUTES,
-            ignore_kwargs=IGNORE_KWARGS,
+            i18n_keys=DEFAULT_I18N_KEYS,
+            exclude_dirs=prepare_exclude_dirs(
+                exclude_dirs=DEFAULT_EXCLUDE_DIRS,
+                exclude_dirs_append=(),
+            ),
+            ignore_attributes=DEFAULT_IGNORE_ATTRIBUTES,
+            ignore_kwargs=DEFAULT_IGNORE_KWARGS,
             default_ftl_file=DEFAULT_FTL_FILE,
         )
 

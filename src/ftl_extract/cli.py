@@ -5,7 +5,14 @@ from time import perf_counter_ns
 
 import click
 
-from ftl_extract.const import COMMENT_KEYS_MODE, DEFAULT_FTL_FILE, IGNORE_KWARGS
+from ftl_extract.const import (
+    COMMENT_KEYS_MODE,
+    DEFAULT_EXCLUDE_DIRS,
+    DEFAULT_FTL_FILE,
+    DEFAULT_I18N_KEYS,
+    DEFAULT_IGNORE_ATTRIBUTES,
+    DEFAULT_IGNORE_KWARGS,
+)
 from ftl_extract.ftl_extractor import extract
 
 
@@ -23,27 +30,43 @@ from ftl_extract.ftl_extractor import extract
 @click.option(
     "--i18n_keys",
     "-k",
-    default=("i18n", "L", "LazyProxy", "LazyFilter"),
+    default=DEFAULT_I18N_KEYS,
     multiple=True,
     show_default=True,
     help="Names of function that is used to get translation.",
 )
 @click.option(
+    "--exclude-dirs",
+    "-e",
+    multiple=True,
+    default=DEFAULT_EXCLUDE_DIRS,
+    show_default=True,
+    help="Exclude directories.",
+)
+@click.option(
+    "--exclude-dirs-append",
+    "-E",
+    default=(),
+    multiple=True,
+    help="Append directories to exclude.",
+)
+@click.option(
     "--ignore-attributes",
-    default=("set_locale", "use_locale", "use_context", "set_context"),
+    "-i",
+    default=DEFAULT_IGNORE_ATTRIBUTES,
     multiple=True,
     show_default=True,
     help="Ignore attributes, like `i18n.set_locale`.",
 )
 @click.option(
     "--expand-ignore-attributes",
-    "-a",
+    "-I",
     multiple=True,
-    help="Expand default|targeted ignore attributes.",
+    help="Expand ignore attributes.",
 )
 @click.option(
     "--ignore-kwargs",
-    default=IGNORE_KWARGS,
+    default=DEFAULT_IGNORE_KWARGS,
     multiple=True,
     show_default=True,
     help="Ignore kwargs, like `when` from `aiogram_dialog.I18nFormat(..., when=...)`.",
@@ -63,10 +86,10 @@ from ftl_extract.ftl_extractor import extract
 )
 @click.option(
     "--comment-keys-mode",
-    default="comment",
+    default=COMMENT_KEYS_MODE[0],
     show_default=True,
     help="Comment keys mode.",
-    type=click.Choice(COMMENT_KEYS_MODE),
+    type=click.Choice(COMMENT_KEYS_MODE, case_sensitive=False),
 )
 @click.option(
     "--dry-run",
@@ -89,14 +112,16 @@ def cli_extract(
     output_path: Path,
     language: tuple[str, ...],
     i18n_keys: tuple[str, ...],
+    exclude_dirs: tuple[str, ...],
+    exclude_dirs_append: tuple[str, ...],
     ignore_attributes: tuple[str, ...],
-    expand_ignore_attributes: tuple[str, ...] | None = None,
-    ignore_kwargs: tuple[str, ...] = (),
-    comment_junks: bool = False,
-    default_ftl_file: Path = DEFAULT_FTL_FILE,
-    comment_keys_mode: str = "comment",
-    dry_run: bool = False,
-    verbose: bool = False,
+    expand_ignore_attributes: tuple[str, ...],
+    ignore_kwargs: tuple[str, ...],
+    comment_junks: bool,
+    default_ftl_file: Path,
+    comment_keys_mode: str,
+    dry_run: bool,
+    verbose: bool,
 ) -> None:
     click.echo(f"Extracting from {code_path}")
     start_time = perf_counter_ns()
@@ -106,6 +131,8 @@ def cli_extract(
         output_path=output_path,
         language=language,
         i18n_keys=i18n_keys,
+        exclude_dirs=exclude_dirs,
+        exclude_dirs_append=exclude_dirs_append,
         ignore_attributes=ignore_attributes,
         expand_ignore_attributes=expand_ignore_attributes,
         ignore_kwargs=ignore_kwargs,

@@ -19,24 +19,38 @@ if TYPE_CHECKING:
     from ftl_extract.utils import ExtractionStatistics
 
 
-def find_py_files(*, path: Path) -> Iterator[Path]:
+def find_py_files(*, search_path: Path, exclude_dirs: frozenset[Path]) -> Iterator[Path]:
     """
     First step: find all .py files in given path.
 
-    :param path: Path to directory with .py files.
-    :type path: Path
+    :param search_path: Path to directory with .py files.
+    :type search_path: Path
+    :param exclude_dirs: Exclude directories from search.
+    :type exclude_dirs: frozenset[Path]
     :return: Iterator with Path to .py files.
     :rtype: Iterator[Path]
     """
-    yield from path.rglob("[!{.}]*.py") if path.is_dir() else [path]
+    if search_path.is_dir():
+        for path in search_path.rglob("[!{.}]*.py"):
+            if path.is_file() and not any(
+                path.is_relative_to(exclude_dir) for exclude_dir in exclude_dirs
+            ):
+                yield path
+    else:
+        # If search_path is not a directory, check if it is a file
+        if search_path.is_file() and search_path.suffix == ".py":
+            yield search_path
+        else:
+            # If search_path is not a directory or file, return an empty iterator
+            yield from iter([])
 
 
 def parse_file(
     *,
     path: Path,
-    i18n_keys: str | Iterable[str],
-    ignore_attributes: str | Iterable[str],
-    ignore_kwargs: str | Iterable[str],
+    i18n_keys: Iterable[str],
+    ignore_attributes: Iterable[str],
+    ignore_kwargs: Iterable[str],
     default_ftl_file: Path,
 ) -> dict[str, FluentKey]:
     """
@@ -45,12 +59,12 @@ def parse_file(
     :param path: Path to .py file.
     :type path: Path
     :param i18n_keys: Names of function that is used to get translation.
-    :type i18n_keys: str | Iterable[str]
+    :type i18n_keys: Iterable[str]
     :param ignore_attributes: Ignore attributes, like `i18n.set_locale`.
-    :type ignore_attributes: str | Iterable[str]
+    :type ignore_attributes: Iterable[str]
     :param ignore_kwargs: Ignore kwargs, like `when` from
     `aiogram_dialog.I18nFormat(..., when=...)`.
-    :type ignore_kwargs: str | Iterable[str]
+    :type ignore_kwargs: Iterable[str]
     :param default_ftl_file: Default name of FTL file.
     :type default_ftl_file: Path
     :return: Dict with `key` and `FluentKey`.
@@ -60,7 +74,7 @@ def parse_file(
     matcher = I18nMatcher(
         code_path=path,
         default_ftl_file=default_ftl_file,
-        func_names=i18n_keys,
+        i18n_keys=i18n_keys,
         ignore_attributes=ignore_attributes,
         ignore_kwargs=ignore_kwargs,
     )
@@ -122,9 +136,10 @@ def find_conflicts(
 def extract_fluent_keys(
     *,
     path: Path,
-    i18n_keys: str | Iterable[str],
-    ignore_attributes: str | Iterable[str],
-    ignore_kwargs: str | Iterable[str],
+    i18n_keys: Iterable[str],
+    exclude_dirs: frozenset[Path],
+    ignore_attributes: Iterable[str],
+    ignore_kwargs: Iterable[str],
     default_ftl_file: Path,
     statistics: ExtractionStatistics | None = None,
 ) -> dict[str, FluentKey]:
@@ -134,12 +149,14 @@ def extract_fluent_keys(
     :param path: Path to [.py file] / [directory with .py files].
     :type path: Path
     :param i18n_keys: Names of function that is used to get translation.
-    :type i18n_keys: str | Iterable[str]
+    :type i18n_keys: Iterable[str]
+    :param exclude_dirs: Exclude directories from search.
+    :type exclude_dirs: frozenset[Path]
     :param ignore_attributes: Ignore attributes, like `i18n.set_locale`.
-    :type ignore_attributes: str | Iterable[str]
+    :type ignore_attributes: Iterable[str]
     :param ignore_kwargs: Ignore kwargs, like `when` from
     `aiogram_dialog.I18nFormat(..., when=...)`.
-    :type ignore_kwargs: str | Iterable[str]
+    :type ignore_kwargs: Iterable[str]
     :param default_ftl_file: Default name of FTL file.
     :type default_ftl_file: Path
     :param statistics: Statistics of extraction.
@@ -150,7 +167,7 @@ def extract_fluent_keys(
     """
     fluent_keys: dict[str, FluentKey] = {}
 
-    for file in find_py_files(path=path):
+    for file in find_py_files(search_path=path, exclude_dirs=exclude_dirs):
         keys = parse_file(
             path=file,
             i18n_keys=i18n_keys,

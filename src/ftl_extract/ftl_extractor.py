@@ -9,12 +9,19 @@ from fluent.syntax import ast as fl_ast
 
 from ftl_extract import extract_fluent_keys
 from ftl_extract.code_extractor import sort_fluent_keys_by_path
-from ftl_extract.const import DEFAULT_FTL_FILE, IGNORE_ATTRIBUTES, IGNORE_KWARGS
+from ftl_extract.const import (
+    COMMENT_KEYS_MODE,
+    DEFAULT_EXCLUDE_DIRS,
+    DEFAULT_FTL_FILE,
+    DEFAULT_I18N_KEYS,
+    DEFAULT_IGNORE_ATTRIBUTES,
+    DEFAULT_IGNORE_KWARGS,
+)
 from ftl_extract.ftl_importer import import_ftl_from_dir
 from ftl_extract.process.commentator import comment_ftl_key
 from ftl_extract.process.kwargs_extractor import extract_kwargs
 from ftl_extract.process.serializer import generate_ftl
-from ftl_extract.utils import ExtractionStatistics
+from ftl_extract.utils import ExtractionStatistics, prepare_exclude_dirs
 
 if TYPE_CHECKING:
     from collections.abc import Iterable, Sequence
@@ -28,13 +35,15 @@ def extract(
     code_path: Path,
     output_path: Path,
     language: Sequence[str],
-    i18n_keys: Iterable[str],
-    ignore_attributes: str | Iterable[str] = IGNORE_ATTRIBUTES,
-    expand_ignore_attributes: Iterable[str] | None = None,
-    ignore_kwargs: str | Iterable[str] = IGNORE_KWARGS,
-    comment_junks: bool = False,
+    i18n_keys: Iterable[str] | str = DEFAULT_I18N_KEYS,
+    exclude_dirs: tuple[str, ...] = DEFAULT_EXCLUDE_DIRS,
+    exclude_dirs_append: tuple[str, ...] = (),
+    ignore_attributes: str | Iterable[str] = DEFAULT_IGNORE_ATTRIBUTES,
+    expand_ignore_attributes: Iterable[str] = (),
+    ignore_kwargs: str | Iterable[str] = DEFAULT_IGNORE_KWARGS,
+    comment_junks: bool = True,
     default_ftl_file: Path = DEFAULT_FTL_FILE,
-    comment_keys_mode: str = "comment",
+    comment_keys_mode: str = COMMENT_KEYS_MODE[0],
     serializer: FluentSerializer | None = None,
     dry_run: bool = False,
 ) -> ExtractionStatistics:
@@ -44,6 +53,11 @@ def extract(
     statistics.ftl_keys_updated = dict.fromkeys(language, 0)
     statistics.ftl_keys_added = dict.fromkeys(language, 0)
     statistics.ftl_keys_commented = dict.fromkeys(language, 0)
+
+    exclude_dirs = prepare_exclude_dirs(
+        exclude_dirs=exclude_dirs,
+        exclude_dirs_append=exclude_dirs_append,
+    )
 
     if expand_ignore_attributes is not None:
         ignore_attributes = frozenset(set(ignore_attributes) | set(expand_ignore_attributes or []))
@@ -55,6 +69,7 @@ def extract(
     in_code_fluent_keys = extract_fluent_keys(
         path=code_path,
         i18n_keys=i18n_keys,
+        exclude_dirs=exclude_dirs,
         ignore_attributes=ignore_attributes,
         ignore_kwargs=ignore_kwargs,
         default_ftl_file=default_ftl_file,

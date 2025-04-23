@@ -10,10 +10,21 @@ if TYPE_CHECKING:
 I18N_LITERAL: Final[str] = "i18n"
 GET_LITERAL: Final[str] = "get"
 PATH_LITERAL: Final[str] = "_path"
-IGNORE_ATTRIBUTES: Final[frozenset[str]] = frozenset(
-    {"set_locale", "use_locale", "use_context", "set_context"},
+DEFAULT_I18N_KEYS: Final[tuple[str, ...]] = (I18N_LITERAL, "L", "LazyProxy", "LazyFilter")
+DEFAULT_IGNORE_ATTRIBUTES: Final[tuple[str, ...]] = (
+    "set_locale",
+    "use_locale",
+    "use_context",
+    "set_context",
 )
-IGNORE_KWARGS: Final[frozenset[str]] = frozenset()
+DEFAULT_IGNORE_KWARGS: Final[tuple[str, ...]] = ()
 DEFAULT_FTL_FILE: Final[Path] = Path("_default.ftl")
 FTL_DEBUG_VAR_NAME: Final[str] = "FTL_DEBUG"
-COMMENT_KEYS_MODE: tuple[str, ...] = ("comment", "warn")
+COMMENT_KEYS_MODE: Final[tuple[str, ...]] = ("comment", "warn")
+DEFAULT_EXCLUDE_DIRS: Final[tuple[str, ...]] = (
+    ".venv",
+    ".env",
+    ".git",
+    "__pycache__",
+    ".pytest_cache",
+)

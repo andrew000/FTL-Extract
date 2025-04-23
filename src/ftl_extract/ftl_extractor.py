@@ -35,12 +35,12 @@ def extract(
     code_path: Path,
     output_path: Path,
     language: Sequence[str],
-    i18n_keys: Iterable[str] | str = DEFAULT_I18N_KEYS,
+    i18n_keys: Iterable[str] = DEFAULT_I18N_KEYS,
     exclude_dirs: tuple[str, ...] = DEFAULT_EXCLUDE_DIRS,
     exclude_dirs_append: tuple[str, ...] = (),
-    ignore_attributes: str | Iterable[str] = DEFAULT_IGNORE_ATTRIBUTES,
+    ignore_attributes: Iterable[str] = DEFAULT_IGNORE_ATTRIBUTES,
     expand_ignore_attributes: Iterable[str] = (),
-    ignore_kwargs: str | Iterable[str] = DEFAULT_IGNORE_KWARGS,
+    ignore_kwargs: Iterable[str] = DEFAULT_IGNORE_KWARGS,
     comment_junks: bool = True,
     default_ftl_file: Path = DEFAULT_FTL_FILE,
     comment_keys_mode: str = COMMENT_KEYS_MODE[0],
@@ -59,8 +59,8 @@ def extract(
         exclude_dirs_append=exclude_dirs_append,
     )
 
-    if expand_ignore_attributes is not None:
-        ignore_attributes = frozenset(set(ignore_attributes) | set(expand_ignore_attributes or []))
+    if expand_ignore_attributes:
+        ignore_attributes = (*ignore_attributes, *expand_ignore_attributes)
 
     if serializer is None:
         serializer = FluentSerializer(with_junk=True)

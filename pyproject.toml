@@ -45,9 +45,8 @@ Repository = "https://github.com/andrew000/FTL-Extract"
 ftl-extract = "ftl_extract.cli:cli_extract"
 ftl_extract = "ftl_extract.cli:cli_extract"
 
-[build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.build"
+[tool.uv]
+package = true
 
 [tool.pytest.ini_options]
 testpaths = "tests"

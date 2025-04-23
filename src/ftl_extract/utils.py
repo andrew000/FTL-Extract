@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any
 
 
@@ -18,3 +19,13 @@ class ExtractionStatistics:
     ftl_keys_updated: dict[str, int] = field(default_factory=dict)  # dict[lang, count]
     ftl_keys_added: dict[str, int] = field(default_factory=dict)  # dict[lang, count]
     ftl_keys_commented: dict[str, int] = field(default_factory=dict)  # dict[lang, count]
+
+
+def prepare_exclude_dirs(
+    *,
+    exclude_dirs: tuple[str, ...],
+    exclude_dirs_append: tuple[str, ...],
+) -> frozenset[Path]:
+    return frozenset(
+        [Path(exclude_dir) for exclude_dir in exclude_dirs + exclude_dirs_append],
+    )

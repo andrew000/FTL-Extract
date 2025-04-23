@@ -9,10 +9,10 @@ from typing import TYPE_CHECKING, cast
 from fluent.syntax import ast as fluent_ast
 
 from ftl_extract.const import (
+    DEFAULT_I18N_KEYS,
+    DEFAULT_IGNORE_ATTRIBUTES,
+    DEFAULT_IGNORE_KWARGS,
     GET_LITERAL,
-    I18N_LITERAL,
-    IGNORE_ATTRIBUTES,
-    IGNORE_KWARGS,
     PATH_LITERAL,
 )
 from ftl_extract.exceptions import (
@@ -80,9 +80,9 @@ class I18nMatcher(ast.NodeVisitor):
         self,
         code_path: Path,
         default_ftl_file: Path,
-        func_names: str | Iterable[str] = I18N_LITERAL,
-        ignore_attributes: str | Iterable[str] = IGNORE_ATTRIBUTES,
-        ignore_kwargs: str | Iterable[str] = IGNORE_KWARGS,
+        i18n_keys: Iterable[str] = DEFAULT_I18N_KEYS,
+        ignore_attributes: Iterable[str] = DEFAULT_IGNORE_ATTRIBUTES,
+        ignore_kwargs: Iterable[str] = DEFAULT_IGNORE_KWARGS,
     ) -> None:
         """
 
@@ -90,28 +90,18 @@ class I18nMatcher(ast.NodeVisitor):
         :type code_path: Path
         :param default_ftl_file: Default name of FTL file.
         :type default_ftl_file: Path
-        :param func_names: Name of function that is used to get translation. Default is "i18n".
-        :type func_names: str | Iterable[str]
+        :param i18n_keys: Name of function that is used to get translation. Default is ("i18n",).
+        :type i18n_keys: Iterable[str]
         :param ignore_attributes: Ignore attributes, like `i18n.set_locale`.
-        :type ignore_attributes: str | Iterable[str]
+        :type ignore_attributes: Iterable[str]
         :param ignore_kwargs: Ignore kwargs, like `when` from
         `aiogram_dialog.I18nFormat(..., when=...)`.
-        :type ignore_kwargs: str | Iterable[str]
+        :type ignore_kwargs: Iterable[str]
         """
         self.code_path = code_path
-        self.func_names = (
-            frozenset({func_names}) if isinstance(func_names, str) else frozenset(func_names)
-        )
-        self.ignore_attributes = (
-            frozenset({ignore_attributes})
-            if isinstance(ignore_attributes, str)
-            else frozenset(ignore_attributes)
-        )
-        self.ignore_kwargs = (
-            frozenset({ignore_kwargs})
-            if isinstance(ignore_kwargs, str)
-            else frozenset(ignore_kwargs)
-        )
+        self.i18n_keys = frozenset(i18n_keys)
+        self.ignore_attributes = frozenset(ignore_attributes)
+        self.ignore_kwargs = frozenset(ignore_kwargs)
         self.default_ftl_file = default_ftl_file
         self.fluent_keys: dict[str, FluentKey] = {}
 
@@ -124,7 +114,7 @@ class I18nMatcher(ast.NodeVisitor):
                 attrs.append(attr.attr)
                 attr = attr.value
 
-            if isinstance(attr, ast.Name) and attr.id in self.func_names:
+            if isinstance(attr, ast.Name) and attr.id in self.i18n_keys:
                 if len(attrs) == 1 and attrs[0] == GET_LITERAL:
                     # Check if the call has args
                     if not node.args:
@@ -165,7 +155,7 @@ class I18nMatcher(ast.NodeVisitor):
             else:
                 self.generic_visit(node)
 
-        elif isinstance(node.func, ast.Name) and node.func.id in self.func_names:
+        elif isinstance(node.func, ast.Name) and node.func.id in self.i18n_keys:
             if not node.args or not isinstance(node.args[0], ast.Constant):
                 return
 

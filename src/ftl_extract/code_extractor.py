@@ -49,6 +49,7 @@ def parse_file(
     *,
     path: Path,
     i18n_keys: Iterable[str],
+    i18n_keys_prefix: Iterable[str],
     ignore_attributes: Iterable[str],
     ignore_kwargs: Iterable[str],
     default_ftl_file: Path,
@@ -60,6 +61,8 @@ def parse_file(
     :type path: Path
     :param i18n_keys: Names of function that is used to get translation.
     :type i18n_keys: Iterable[str]
+    :param i18n_keys_prefix: Prefix names of function that is used to get translation.
+    :type i18n_keys_prefix: Iterable[str]
     :param ignore_attributes: Ignore attributes, like `i18n.set_locale`.
     :type ignore_attributes: Iterable[str]
     :param ignore_kwargs: Ignore kwargs, like `when` from
@@ -75,6 +78,7 @@ def parse_file(
         code_path=path,
         default_ftl_file=default_ftl_file,
         i18n_keys=i18n_keys,
+        i18n_keys_prefix=i18n_keys_prefix,
         ignore_attributes=ignore_attributes,
         ignore_kwargs=ignore_kwargs,
     )
@@ -137,6 +141,7 @@ def extract_fluent_keys(
     *,
     path: Path,
     i18n_keys: Iterable[str],
+    i18n_keys_prefix: Iterable[str],
     exclude_dirs: frozenset[Path],
     ignore_attributes: Iterable[str],
     ignore_kwargs: Iterable[str],
@@ -150,6 +155,8 @@ def extract_fluent_keys(
     :type path: Path
     :param i18n_keys: Names of function that is used to get translation.
     :type i18n_keys: Iterable[str]
+    :param i18n_keys_prefix: Prefix names of function that is used to get translation.
+    :type i18n_keys_prefix: Iterable[str]
     :param exclude_dirs: Exclude directories from search.
     :type exclude_dirs: frozenset[Path]
     :param ignore_attributes: Ignore attributes, like `i18n.set_locale`.
@@ -171,6 +178,7 @@ def extract_fluent_keys(
         keys = parse_file(
             path=file,
             i18n_keys=i18n_keys,
+            i18n_keys_prefix=i18n_keys_prefix,
             ignore_attributes=ignore_attributes,
             ignore_kwargs=ignore_kwargs,
             default_ftl_file=default_ftl_file,

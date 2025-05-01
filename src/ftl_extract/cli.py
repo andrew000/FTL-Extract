@@ -28,7 +28,7 @@ from ftl_extract.ftl_extractor import extract
     help="Language of translation.",
 )
 @click.option(
-    "--i18n_keys",
+    "--i18n-keys",
     "-k",
     default=DEFAULT_I18N_KEYS,
     multiple=True,
@@ -41,6 +41,13 @@ from ftl_extract.ftl_extractor import extract
     default=(),
     multiple=True,
     help="Append names of function that is used to get translation.",
+)
+@click.option(
+    "--i18n-keys-prefix",
+    "-p",
+    default=(),
+    multiple=True,
+    help="Prefix names of function that is used to get translation. `self.i18n.*()`",
 )
 @click.option(
     "--exclude-dirs",
@@ -120,6 +127,7 @@ def cli_extract(
     language: tuple[str, ...],
     i18n_keys: tuple[str, ...],
     i18n_keys_append: tuple[str, ...],
+    i18n_keys_prefix: tuple[str, ...],
     exclude_dirs: tuple[str, ...],
     exclude_dirs_append: tuple[str, ...],
     ignore_attributes: tuple[str, ...],
@@ -140,6 +148,7 @@ def cli_extract(
         language=language,
         i18n_keys=i18n_keys,
         i18n_keys_append=i18n_keys_append,
+        i18n_keys_prefix=i18n_keys_prefix,
         exclude_dirs=exclude_dirs,
         exclude_dirs_append=exclude_dirs_append,
         ignore_attributes=ignore_attributes,

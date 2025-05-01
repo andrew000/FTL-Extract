@@ -67,6 +67,7 @@ def test_extract_similar_keys_in_different_paths_from_one_py_file(tmp_path: Path
         extract_fluent_keys(
             path=tmp_path,
             i18n_keys=DEFAULT_I18N_KEYS,
+            i18n_keys_prefix=(),
             exclude_dirs=prepare_exclude_dirs(
                 exclude_dirs=DEFAULT_EXCLUDE_DIRS,
                 exclude_dirs_append=(),
@@ -88,6 +89,7 @@ def test_extract_similar_fluent_keys_in_different_paths_from_different_py_files(
         extract_fluent_keys(
             path=tmp_path,
             i18n_keys=DEFAULT_I18N_KEYS,
+            i18n_keys_prefix=(),
             exclude_dirs=prepare_exclude_dirs(
                 exclude_dirs=DEFAULT_EXCLUDE_DIRS,
                 exclude_dirs_append=(),
@@ -131,6 +133,7 @@ def test_extract_similar_fluent_keys_with_different_translation_one_py_file(tmp_
         extract_fluent_keys(
             path=tmp_path,
             i18n_keys=DEFAULT_I18N_KEYS,
+            i18n_keys_prefix=(),
             exclude_dirs=prepare_exclude_dirs(
                 exclude_dirs=DEFAULT_EXCLUDE_DIRS,
                 exclude_dirs_append=(),
@@ -152,6 +155,7 @@ def test_extract_similar_fluent_keys_with_different_translation_different_py_fil
         extract_fluent_keys(
             path=tmp_path,
             i18n_keys=DEFAULT_I18N_KEYS,
+            i18n_keys_prefix=(),
             exclude_dirs=prepare_exclude_dirs(
                 exclude_dirs=DEFAULT_EXCLUDE_DIRS,
                 exclude_dirs_append=(),

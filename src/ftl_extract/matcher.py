@@ -81,6 +81,7 @@ class I18nMatcher(ast.NodeVisitor):
         code_path: Path,
         default_ftl_file: Path,
         i18n_keys: Iterable[str] = DEFAULT_I18N_KEYS,
+        i18n_keys_prefix: Iterable[str] = (),
         ignore_attributes: Iterable[str] = DEFAULT_IGNORE_ATTRIBUTES,
         ignore_kwargs: Iterable[str] = DEFAULT_IGNORE_KWARGS,
     ) -> None:
@@ -92,6 +93,8 @@ class I18nMatcher(ast.NodeVisitor):
         :type default_ftl_file: Path
         :param i18n_keys: Name of function that is used to get translation. Default is ("i18n",).
         :type i18n_keys: Iterable[str]
+        :param i18n_keys_prefix: Prefix names of function that is used to get translation.
+        :type i18n_keys_prefix: Iterable[str]
         :param ignore_attributes: Ignore attributes, like `i18n.set_locale`.
         :type ignore_attributes: Iterable[str]
         :param ignore_kwargs: Ignore kwargs, like `when` from
@@ -100,133 +103,127 @@ class I18nMatcher(ast.NodeVisitor):
         """
         self.code_path = code_path
         self.i18n_keys = frozenset(i18n_keys)
+        self.i18n_keys_prefix = frozenset(i18n_keys_prefix)
         self.ignore_attributes = frozenset(ignore_attributes)
         self.ignore_kwargs = frozenset(ignore_kwargs)
         self.default_ftl_file = default_ftl_file
         self.fluent_keys: dict[str, FluentKey] = {}
 
     def visit_Call(self, node: ast.Call) -> None:  # noqa: N802
-        # Check if the call matches the pattern
         if isinstance(node.func, ast.Attribute):
-            attr: ast.Attribute | ast.expr = node.func
-            attrs = []
-            while isinstance(attr, ast.Attribute):
-                attrs.append(attr.attr)
-                attr = attr.value
-
-            if isinstance(attr, ast.Name) and attr.id in self.i18n_keys:
-                if len(attrs) == 1 and attrs[0] == GET_LITERAL:
-                    # Check if the call has args
-                    if not node.args:
-                        return  # Skip if no args
-
-                    # Add the first arg as the translation key
-                    attrs.clear()
-                    if isinstance(arg := node.args[0], ast.Constant):
-                        key = cast(ast.Constant, arg).value
-
-                    else:
-                        self.generic_visit(node)
-                        return
-
-                    fluent_key = create_fluent_key(
-                        code_path=self.code_path,
-                        key=key,
-                        keywords=node.keywords,
-                        ignore_kwargs=self.ignore_kwargs,
-                        default_ftl_file=self.default_ftl_file,
-                    )
-
-                    process_fluent_key(self.fluent_keys, fluent_key)
-
-                else:
-                    if attrs[-1] in self.ignore_attributes:
-                        self.generic_visit(node)
-                        return
-
-                    fluent_key = create_fluent_key(
-                        code_path=self.code_path,
-                        key="-".join(reversed(attrs)),
-                        keywords=node.keywords,
-                        ignore_kwargs=self.ignore_kwargs,
-                        default_ftl_file=self.default_ftl_file,
-                    )
-                    process_fluent_key(self.fluent_keys, fluent_key)
-            else:
-                self.generic_visit(node)
+            self._process_attribute_call(node)
 
         elif isinstance(node.func, ast.Name) and node.func.id in self.i18n_keys:
-            if not node.args or not isinstance(node.args[0], ast.Constant):
-                return
-
-            fluent_key = create_fluent_key(
-                code_path=self.code_path,
-                key=cast(ast.Constant, node.args[0]).value,
-                keywords=node.keywords,
-                ignore_kwargs=self.ignore_kwargs,
-                default_ftl_file=self.default_ftl_file,
-            )
-            process_fluent_key(self.fluent_keys, fluent_key)
+            self._process_name_call(node)
 
         self.generic_visit(node)
 
+    def _process_attribute_call(self, node: ast.Call) -> None:
+        attr: ast.Attribute | ast.expr = node.func
+        attrs = []
+        while isinstance(attr, ast.Attribute):
+            attrs.append(attr.attr)
+            attr = attr.value
 
-def create_fluent_key(
-    code_path: Path,
-    key: str,
-    keywords: list[ast.keyword],
-    ignore_kwargs: frozenset[str],
-    default_ftl_file: Path,
-) -> FluentKey:
-    fluent_key = FluentKey(
-        code_path=code_path,
-        key=key,
-        translation=fluent_ast.Message(
-            id=fluent_ast.Identifier(name=key),
-            value=fluent_ast.Pattern(elements=[fluent_ast.TextElement(value=key)]),
-        ),
-        path=default_ftl_file,
-    )
+        if isinstance(attr, ast.Name):
+            self._process_attribute_name_call(node, attr, attrs)
 
-    keywords = sorted(
-        keywords,
-        key=lambda keyword: keyword.arg or "",
-    )
+    def _process_name_call(self, node: ast.Call) -> None:
+        if not node.args or not isinstance(node.args[0], ast.Constant):
+            return
 
-    for kw in keywords:
-        if kw.arg == PATH_LITERAL:
-            if kw.value is not None and isinstance(kw.value, ast.Constant):
-                fluent_key.path = Path(cast(ast.Constant, kw.value).value)
-        elif isinstance(kw.arg, str):
-            if kw.arg in ignore_kwargs:
-                continue
+        fluent_key = self._create_fluent_key(node=node, key=cast(ast.Constant, node.args[0]).value)
+        self._add_fluent_key(new_fluent_key=fluent_key)
 
-            cast(
-                fluent_ast.Pattern,
-                cast(fluent_ast.Message, fluent_key.translation).value,
-            ).elements.append(
-                fluent_ast.Placeable(
-                    expression=fluent_ast.VariableReference(id=fluent_ast.Identifier(name=kw.arg)),
-                ),
-            )
+    def _process_attribute_name_call(
+        self,
+        node: ast.Call,
+        attr: ast.Name,
+        attrs: list[str],
+    ) -> None:
+        if attr.id in self.i18n_keys:
+            self._process_i18n_key_call(node, attrs)
 
-    return fluent_key
+        elif attr.id in self.i18n_keys_prefix and attrs and attrs[-1] in self.i18n_keys:
+            del attrs[-1]
+            self._process_i18n_key_call(node, attrs)
 
+    def _process_i18n_key_call(self, node: ast.Call, attrs: list[str]) -> None:
+        if len(attrs) == 1 and attrs[0] == GET_LITERAL:
+            self._process_i18n_key_call_get_literal(node, attrs)
 
-def process_fluent_key(fluent_keys: dict[str, FluentKey], new_fluent_key: FluentKey) -> None:
-    if new_fluent_key.key in fluent_keys:
-        if fluent_keys[new_fluent_key.key].path != new_fluent_key.path:
-            raise FTLExtractorDifferentPathsError(
-                new_fluent_key.key,
-                new_fluent_key.path,
-                fluent_keys[new_fluent_key.key].path,
-            )
-        if not fluent_keys[new_fluent_key.key].translation.equals(new_fluent_key.translation):
-            raise FTLExtractorDifferentTranslationError(
-                new_fluent_key.key,
-                cast(fluent_ast.Message, new_fluent_key.translation),
-                cast(fluent_ast.Message, fluent_keys[new_fluent_key.key].translation),
-            )
+        else:
+            self._process_i18n_key_call_attrs(node, attrs)
 
-    else:
-        fluent_keys[new_fluent_key.key] = new_fluent_key
+    def _process_i18n_key_call_get_literal(self, node: ast.Call, attrs: list[str]) -> None:
+        if not node.args:
+            return  # Skip if no args
+
+        # Add the first arg as the translation key
+        attrs.clear()
+        if isinstance(arg := node.args[0], ast.Constant):
+            key = cast(ast.Constant, arg).value
+
+            fluent_key = self._create_fluent_key(node=node, key=key)
+            self._add_fluent_key(new_fluent_key=fluent_key)
+
+    def _process_i18n_key_call_attrs(self, node: ast.Call, attrs: list[str]) -> None:
+        if attrs[-1] in self.ignore_attributes:
+            return
+
+        fluent_key = self._create_fluent_key(node=node, key="-".join(reversed(attrs)))
+        self._add_fluent_key(new_fluent_key=fluent_key)
+
+    def _create_fluent_key(self, *, node: ast.Call, key: str) -> FluentKey:
+        fluent_key = FluentKey(
+            code_path=self.code_path,
+            key=key,
+            translation=fluent_ast.Message(
+                id=fluent_ast.Identifier(name=key),
+                value=fluent_ast.Pattern(elements=[fluent_ast.TextElement(value=key)]),
+            ),
+            path=self.default_ftl_file,
+        )
+
+        keywords = sorted(node.keywords, key=lambda keyword: keyword.arg or "")
+
+        for kw in keywords:
+            if kw.arg == PATH_LITERAL:
+                if kw.value is not None and isinstance(kw.value, ast.Constant):
+                    fluent_key.path = Path(cast(ast.Constant, kw.value).value)
+            elif isinstance(kw.arg, str):
+                if kw.arg in self.ignore_kwargs:
+                    continue
+
+                cast(
+                    fluent_ast.Pattern,
+                    cast(fluent_ast.Message, fluent_key.translation).value,
+                ).elements.append(
+                    fluent_ast.Placeable(
+                        expression=fluent_ast.VariableReference(
+                            id=fluent_ast.Identifier(name=kw.arg),
+                        ),
+                    ),
+                )
+
+        return fluent_key
+
+    def _add_fluent_key(self, *, new_fluent_key: FluentKey) -> None:
+        if new_fluent_key.key in self.fluent_keys:
+            if self.fluent_keys[new_fluent_key.key].path != new_fluent_key.path:
+                raise FTLExtractorDifferentPathsError(
+                    new_fluent_key.key,
+                    new_fluent_key.path,
+                    self.fluent_keys[new_fluent_key.key].path,
+                )
+            if not self.fluent_keys[new_fluent_key.key].translation.equals(
+                new_fluent_key.translation,
+            ):
+                raise FTLExtractorDifferentTranslationError(
+                    new_fluent_key.key,
+                    cast(fluent_ast.Message, new_fluent_key.translation),
+                    cast(fluent_ast.Message, self.fluent_keys[new_fluent_key.key].translation),
+                )
+
+        else:
+            self.fluent_keys[new_fluent_key.key] = new_fluent_key

@@ -46,17 +46,25 @@ def test(i18n):
     i18n.attr.key.four(arg_1=arg1, arg_2=arg2)
     i18n.attr.key.five(arg_1=obj.arg1, arg_2=obj.arg2)
     i18n.attr.key.six(arg_1=obj.arg1(), arg_2=obj.arg2())
+
+    self.i18n.prefix.key.one()
+    self.i18n.prefix.key.two(_path="content/file.ftl")
+    self.i18n.prefix.key.three(arg_1="arg-1", arg_2="arg-2", _path="content/file.ftl")
+    self.i18n.prefix.key.four(arg_1=arg1, arg_2=arg2)
+    self.i18n.prefix.key.five(arg_1=obj.arg1, arg_2=obj.arg2)
+    self.i18n.prefix.key.six(arg_1=obj.arg1(), arg_2=obj.arg2())
 """
 
 
 def test_common_extract(tmp_path: Path) -> None:
     (tmp_path / "test.py").write_text(CONTENT)
 
-    fluent_keys_len = 24  # Number of keys in `CONTENT`.
+    fluent_keys_len = 30  # Number of keys in `CONTENT`.
 
     fluent_keys = extract_fluent_keys(
         path=tmp_path,
         i18n_keys=DEFAULT_I18N_KEYS,
+        i18n_keys_prefix=("self",),
         exclude_dirs=prepare_exclude_dirs(
             exclude_dirs=DEFAULT_EXCLUDE_DIRS,
             exclude_dirs_append=(),
@@ -243,11 +251,62 @@ def test_common_extract(tmp_path: Path) -> None:
     assert fluent_keys["attr-key-six"].translation.value.elements[2].expression.id.name == "arg_2"
     assert fluent_keys["attr-key-six"].code_path == tmp_path / "test.py"
 
+    assert fluent_keys["prefix-key-one"].key == "prefix-key-one"
+    assert fluent_keys["prefix-key-one"].path == Path("_default.ftl")
+    assert fluent_keys["prefix-key-one"].translation.value.elements[0].value == "prefix-key-one"
+    assert fluent_keys["prefix-key-one"].code_path == tmp_path / "test.py"
+
+    assert fluent_keys["prefix-key-two"].key == "prefix-key-two"
+    assert fluent_keys["prefix-key-two"].path == Path("content/file.ftl")
+    assert fluent_keys["prefix-key-two"].translation.value.elements[0].value == "prefix-key-two"
+    assert fluent_keys["prefix-key-two"].code_path == tmp_path / "test.py"
+
+    assert fluent_keys["prefix-key-three"].key == "prefix-key-three"
+    assert fluent_keys["prefix-key-three"].path == Path("content/file.ftl")
+    assert fluent_keys["prefix-key-three"].translation.value.elements[0].value == "prefix-key-three"
+    assert (
+        fluent_keys["prefix-key-three"].translation.value.elements[1].expression.id.name == "arg_1"
+    )
+    assert (
+        fluent_keys["prefix-key-three"].translation.value.elements[2].expression.id.name == "arg_2"
+    )
+    assert fluent_keys["prefix-key-three"].code_path == tmp_path / "test.py"
+
+    assert fluent_keys["prefix-key-four"].key == "prefix-key-four"
+    assert fluent_keys["prefix-key-four"].path == Path("_default.ftl")
+    assert fluent_keys["prefix-key-four"].translation.value.elements[0].value == "prefix-key-four"
+    assert (
+        fluent_keys["prefix-key-four"].translation.value.elements[1].expression.id.name == "arg_1"
+    )
+    assert (
+        fluent_keys["prefix-key-four"].translation.value.elements[2].expression.id.name == "arg_2"
+    )
+    assert fluent_keys["prefix-key-four"].code_path == tmp_path / "test.py"
+
+    assert fluent_keys["prefix-key-five"].key == "prefix-key-five"
+    assert fluent_keys["prefix-key-five"].path == Path("_default.ftl")
+    assert fluent_keys["prefix-key-five"].translation.value.elements[0].value == "prefix-key-five"
+    assert (
+        fluent_keys["prefix-key-five"].translation.value.elements[1].expression.id.name == "arg_1"
+    )
+    assert (
+        fluent_keys["prefix-key-five"].translation.value.elements[2].expression.id.name == "arg_2"
+    )
+    assert fluent_keys["prefix-key-five"].code_path == tmp_path / "test.py"
+
+    assert fluent_keys["prefix-key-six"].key == "prefix-key-six"
+    assert fluent_keys["prefix-key-six"].path == Path("_default.ftl")
+    assert fluent_keys["prefix-key-six"].translation.value.elements[0].value == "prefix-key-six"
+    assert fluent_keys["prefix-key-six"].translation.value.elements[1].expression.id.name == "arg_1"
+    assert fluent_keys["prefix-key-six"].translation.value.elements[2].expression.id.name == "arg_2"
+    assert fluent_keys["prefix-key-six"].code_path == tmp_path / "test.py"
+
 
 def test_extract_fluent_keys_no_files(tmp_path: Path) -> None:
     fluent_keys = extract_fluent_keys(
         path=tmp_path,
         i18n_keys=DEFAULT_I18N_KEYS,
+        i18n_keys_prefix=(),
         exclude_dirs=prepare_exclude_dirs(
             exclude_dirs=DEFAULT_EXCLUDE_DIRS,
             exclude_dirs_append=(),

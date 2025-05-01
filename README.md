@@ -69,9 +69,11 @@ $ ftl_extract project_path/code_path project_path/locales
 ### 📚 Additional arguments
 
 - `-l` or `--language` - add a new language to the project.
-- `-k` or `--i18n_keys` - add additional i18n keys to the extractor.
-- `--ignore-attributes` - ignore specific attributes of the `i18n.*` like `i18n.set_locale`.
-- `-a` or `--expand-ignore-attributes` - add more attributes to ignore to the default list.
+- `-k` or `--i18n-keys` - add additional i18n keys to the extractor.
+- `-K` or `--i18n-keys-append` - add additional i18n keys to the extractor and append them to the default list.
+- `-p` or `--i18n-keys-prefix` - add a prefix to the i18n keys. For example, `self.i18n.<key>()`.
+- `-i` or `--ignore-attributes` - ignore specific attributes of the `i18n.*` like `i18n.set_locale`.
+- `-a` or `--append-ignore-attributes` - add more attributes to ignore to the default list.
 - `--ignore-kwargs` - ignore specific kwargs of the i18n_keys like `when=...` in
   `aiogram_dialog.I18nFormat(..., when=...)`.
 - `--comment-junks` - comments errored translations in the `.ftl` file.
@@ -109,13 +111,12 @@ $ ftl_extract \
   './app/bot/locales' \
   -l 'en' \
   -l 'uk' \
-  -k 'i18n' \
-  -k 'L' \
-  -k 'LF' \
-  -k 'LazyProxy' \
-  -a 'core' \
+  -K 'LF' \
+  -I 'core' \
+  -E './tests' \
+  --ignore-kwargs 'when' \
   --comment-junks \
-  --comment-keys-mode 'warn' \
+  --comment-keys-mode 'comment' \
   --verbose
 ```
 

@@ -12,3 +12,4 @@ __pycache__/
 /reports/
 /htmlcov/
 *.egg-info
+build/

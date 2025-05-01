@@ -37,6 +37,7 @@ def extract(
     language: Sequence[str],
     i18n_keys: Iterable[str] = DEFAULT_I18N_KEYS,
     i18n_keys_append: Iterable[str] = (),
+    i18n_keys_prefix: Iterable[str] = (),
     exclude_dirs: tuple[str, ...] = DEFAULT_EXCLUDE_DIRS,
     exclude_dirs_append: tuple[str, ...] = (),
     ignore_attributes: Iterable[str] = DEFAULT_IGNORE_ATTRIBUTES,
@@ -73,6 +74,7 @@ def extract(
     in_code_fluent_keys = extract_fluent_keys(
         path=code_path,
         i18n_keys=i18n_keys,
+        i18n_keys_prefix=i18n_keys_prefix,
         exclude_dirs=exclude_dirs,
         ignore_attributes=ignore_attributes,
         ignore_kwargs=ignore_kwargs,

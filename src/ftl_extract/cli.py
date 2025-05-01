@@ -36,6 +36,13 @@ from ftl_extract.ftl_extractor import extract
     help="Names of function that is used to get translation.",
 )
 @click.option(
+    "--i18n-keys-append",
+    "-K",
+    default=(),
+    multiple=True,
+    help="Append names of function that is used to get translation.",
+)
+@click.option(
     "--exclude-dirs",
     "-e",
     multiple=True,
@@ -59,10 +66,10 @@ from ftl_extract.ftl_extractor import extract
     help="Ignore attributes, like `i18n.set_locale`.",
 )
 @click.option(
-    "--expand-ignore-attributes",
+    "--append-ignore-attributes",
     "-I",
     multiple=True,
-    help="Expand ignore attributes.",
+    help="Append attributes to ignore.",
 )
 @click.option(
     "--ignore-kwargs",
@@ -112,10 +119,11 @@ def cli_extract(
     output_path: Path,
     language: tuple[str, ...],
     i18n_keys: tuple[str, ...],
+    i18n_keys_append: tuple[str, ...],
     exclude_dirs: tuple[str, ...],
     exclude_dirs_append: tuple[str, ...],
     ignore_attributes: tuple[str, ...],
-    expand_ignore_attributes: tuple[str, ...],
+    append_ignore_attributes: tuple[str, ...],
     ignore_kwargs: tuple[str, ...],
     comment_junks: bool,
     default_ftl_file: Path,
@@ -131,10 +139,11 @@ def cli_extract(
         output_path=output_path,
         language=language,
         i18n_keys=i18n_keys,
+        i18n_keys_append=i18n_keys_append,
         exclude_dirs=exclude_dirs,
         exclude_dirs_append=exclude_dirs_append,
         ignore_attributes=ignore_attributes,
-        expand_ignore_attributes=expand_ignore_attributes,
+        append_ignore_attributes=append_ignore_attributes,
         ignore_kwargs=ignore_kwargs,
         comment_junks=comment_junks,
         default_ftl_file=default_ftl_file,

@@ -145,7 +145,8 @@ class I18nMatcher(ast.NodeVisitor):
             self._process_i18n_key_call(node, attrs)
 
         elif attr.id in self.i18n_keys_prefix and attrs and attrs[-1] in self.i18n_keys:
-            # Remove the last attribute to handle cases where the prefix key is followed by a valid i18n key.
+            # Remove the last attribute to handle cases where the prefix key is followed by a
+            # valid i18n key.
             del attrs[-1]
             self._process_i18n_key_call(node, attrs)
 

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from copy import deepcopy
 from typing import TYPE_CHECKING
 
 from click import echo
@@ -118,9 +117,6 @@ def extract(
                 stored_fluent_keys[key].code_path = fluent_key.code_path
 
         # Second step: find keys that have different kwargs
-        # Make copy of in_code_fluent_keys and stored_fluent_keys to check references
-        in_code_fluent_keys_copy = deepcopy(in_code_fluent_keys)
-        stored_fluent_keys_copy = deepcopy(stored_fluent_keys)
 
         # Keys that are not in code but stored keys are depends on them
         depend_keys: set[str] = set()
@@ -132,13 +128,13 @@ def extract(
             fluent_key_placeable_set = extract_kwargs(
                 key=fluent_key,
                 terms=stored_terms,
-                all_fluent_keys=in_code_fluent_keys_copy,
+                all_fluent_keys=in_code_fluent_keys.copy(),
                 depend_keys=depend_keys,
             )
             stored_fluent_key_placeable_set = extract_kwargs(
                 key=stored_fluent_keys[key],
                 terms=stored_terms,
-                all_fluent_keys=stored_fluent_keys_copy,
+                all_fluent_keys=stored_fluent_keys.copy(),
                 depend_keys=depend_keys,
             )
 

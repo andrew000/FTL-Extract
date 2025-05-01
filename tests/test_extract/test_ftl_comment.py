@@ -2,7 +2,7 @@ from pathlib import Path
 from typing import Final
 from unittest.mock import patch
 
-from fluent.syntax import FluentSerializer, parse
+from fluent.syntax import FluentParser, FluentSerializer, parse
 
 from ftl_extract.ftl_extractor import extract
 from ftl_extract.ftl_importer import import_from_ftl
@@ -36,7 +36,11 @@ key-5 = ⚠️ Header Text. Header Text.
 def test_ftl_comment(tmp_path: Path) -> None:
     (tmp_path / "test.ftl").write_text(CONTENT, encoding="utf-8")
 
-    ftl_keys, _, _, leave_as_is = import_from_ftl(path=tmp_path / "test.ftl", locale="en")
+    ftl_keys, _, _, leave_as_is = import_from_ftl(
+        path=tmp_path / "test.ftl",
+        locale="en",
+        parser=FluentParser(with_spans=True),
+    )
 
     serializer = FluentSerializer(with_junk=True)
 

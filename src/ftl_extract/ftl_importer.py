@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from fluent.syntax import ast, parse
+from fluent.syntax import FluentParser, ast
 
 from ftl_extract.matcher import FluentKey
 
@@ -17,13 +17,14 @@ def import_from_ftl(
     *,
     path: Path,
     locale: str,
+    parser: FluentParser,
 ) -> tuple[dict[str, FluentKey], dict[str, FluentKey], Resource, list[FluentKey]]:
     """Import `FluentKey`s from FTL."""
     ftl_keys: dict[str, FluentKey] = {}
     terms: dict[str, FluentKey] = {}
     leave_as_is = []
 
-    resource = parse(path.read_text(encoding="utf-8"), with_spans=True)
+    resource = parser.parse(path.read_text(encoding="utf-8"))
 
     for position, entry in enumerate(resource.body, start=0):
         if isinstance(entry, ast.Message):
@@ -70,9 +71,14 @@ def import_ftl_from_dir(
     stored_ftl_keys: dict[str, FluentKey] = {}
     stored_terms: dict[str, FluentKey] = {}
     stored_leave_as_is_keys = []
+    parser = FluentParser(with_spans=True)
 
     for ftl_file in ftl_files:
-        keys, terms, _, leave_as_is_keys = import_from_ftl(path=ftl_file, locale=locale)
+        keys, terms, _, leave_as_is_keys = import_from_ftl(
+            path=ftl_file,
+            locale=locale,
+            parser=parser,
+        )
         stored_ftl_keys.update(keys)
         stored_terms.update(terms)
         stored_leave_as_is_keys.extend(leave_as_is_keys)

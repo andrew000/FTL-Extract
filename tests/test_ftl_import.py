@@ -2,7 +2,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 import pytest
-from fluent.syntax import ast
+from fluent.syntax import FluentParser, ast
 
 from ftl_extract.ftl_importer import import_from_ftl, import_ftl_from_dir
 
@@ -25,6 +25,7 @@ def test_import_from_ftl_with_valid_ftl_file(mock_ftl_content: str) -> None:
         keys, _, resource, _ = import_from_ftl(
             path=Path("/path/to/locale/en/example.ftl"),
             locale="en",
+            parser=FluentParser(with_spans=True),
         )
         assert "hello" in keys
         assert "welcome" in keys
@@ -36,6 +37,7 @@ def test_import_from_ftl_with_empty_ftl_file() -> None:
         keys, _, resource, _ = import_from_ftl(
             path=Path("/path/to/locale/en/empty.ftl"),
             locale="en",
+            parser=FluentParser(with_spans=True),
         )
         assert len(keys) == 0
         assert len(resource.body) == 0
@@ -71,6 +73,7 @@ def test_import_from_ftl_appends_non_message_entries_correctly(mock_ftl_content:
         _, _, _, leave_as_is = import_from_ftl(
             path=Path("/path/to/locale/en/various_entries.ftl"),
             locale="en",
+            parser=FluentParser(with_spans=True),
         )
         assert len(leave_as_is) == 4  # noqa: PLR2004
         assert isinstance(leave_as_is[0].translation, ast.Comment)

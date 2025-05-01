@@ -241,7 +241,7 @@ def test_append_ignore_attributes_updates_ignore_attributes(
 ) -> None:
     code_path, output_path = setup_environment
     initial_ignore_attributes = ["attr1", "attr2"]
-    expand_ignore_attributes = ["attr3", "attr4"]
+    append_ignore_attributes = ["attr3", "attr4"]
     expected_ignore_attributes = frozenset({"attr1", "attr2", "attr3", "attr4"})
 
     with (
@@ -256,11 +256,11 @@ def test_append_ignore_attributes_updates_ignore_attributes(
             language=("en",),
             i18n_keys=("i18n",),
             ignore_attributes=initial_ignore_attributes,
-            append_ignore_attributes=expand_ignore_attributes,
+            append_ignore_attributes=append_ignore_attributes,
         )
 
         assert (
-            frozenset(initial_ignore_attributes) | frozenset(expand_ignore_attributes)
+            frozenset(initial_ignore_attributes) | frozenset(append_ignore_attributes)
             == expected_ignore_attributes
         )
 
@@ -268,7 +268,7 @@ def test_append_ignore_attributes_updates_ignore_attributes(
 def test_append_i18n_keys(setup_environment: tuple[Path, Path]) -> None:
     code_path, output_path = setup_environment
     initial_i18n_keys = ("i18n1", "i18n2")
-    expand_i18n_keys = ("i18n3", "i18n4")
+    i18n_keys_append = ("i18n3", "i18n4")
     expected_i18n_keys = ("i18n1", "i18n2", "i18n3", "i18n4")
 
     with (
@@ -282,10 +282,10 @@ def test_append_i18n_keys(setup_environment: tuple[Path, Path]) -> None:
             output_path=output_path,
             language=("en",),
             i18n_keys=initial_i18n_keys,
-            i18n_keys_append=expand_i18n_keys,
+            i18n_keys_append=i18n_keys_append,
         )
 
-        assert (*initial_i18n_keys, *expand_i18n_keys) == expected_i18n_keys
+        assert (*initial_i18n_keys, *i18n_keys_append) == expected_i18n_keys
 
 
 def test_stored_fluent_keys_code_path_update(setup_environment: tuple[Path, Path]) -> None:

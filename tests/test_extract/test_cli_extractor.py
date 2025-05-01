@@ -236,7 +236,7 @@ def test_comment_junk_elements_if_needed(setup_environment: tuple[Path, Path]) -
         mock_comment_ftl_key.assert_called_once_with(key=mock_junk_key, serializer=mock_serializer)
 
 
-def test_expand_ignore_attributes_updates_ignore_attributes(
+def test_append_ignore_attributes_updates_ignore_attributes(
     setup_environment: tuple[Path, Path],
 ) -> None:
     code_path, output_path = setup_environment
@@ -256,13 +256,36 @@ def test_expand_ignore_attributes_updates_ignore_attributes(
             language=("en",),
             i18n_keys=("i18n",),
             ignore_attributes=initial_ignore_attributes,
-            expand_ignore_attributes=expand_ignore_attributes,
+            append_ignore_attributes=expand_ignore_attributes,
         )
 
         assert (
             frozenset(initial_ignore_attributes) | frozenset(expand_ignore_attributes)
             == expected_ignore_attributes
         )
+
+
+def test_append_i18n_keys(setup_environment: tuple[Path, Path]) -> None:
+    code_path, output_path = setup_environment
+    initial_i18n_keys = ("i18n1", "i18n2")
+    expand_i18n_keys = ("i18n3", "i18n4")
+    expected_i18n_keys = ("i18n1", "i18n2", "i18n3", "i18n4")
+
+    with (
+        patch("ftl_extract.ftl_extractor.extract_fluent_keys", return_value={}),
+        patch("ftl_extract.ftl_extractor.import_ftl_from_dir", return_value=({}, {}, [])),
+        patch("ftl_extract.ftl_extractor.comment_ftl_key"),
+        patch("ftl_extract.ftl_extractor.generate_ftl", return_value=("generated ftl", None)),
+    ):
+        extract(
+            code_path=code_path,
+            output_path=output_path,
+            language=("en",),
+            i18n_keys=initial_i18n_keys,
+            i18n_keys_append=expand_i18n_keys,
+        )
+
+        assert (*initial_i18n_keys, *expand_i18n_keys) == expected_i18n_keys
 
 
 def test_stored_fluent_keys_code_path_update(setup_environment: tuple[Path, Path]) -> None:

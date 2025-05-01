@@ -28,7 +28,7 @@ from ftl_extract.ftl_extractor import extract
     help="Language of translation.",
 )
 @click.option(
-    "--i18n_keys",
+    "--i18n-key",
     "-k",
     default=DEFAULT_I18N_KEYS,
     multiple=True,
@@ -36,7 +36,7 @@ from ftl_extract.ftl_extractor import extract
     help="Names of function that is used to get translation.",
 )
 @click.option(
-    "--i18n-keys-append",
+    "--i18n-key-append",
     "-K",
     default=(),
     multiple=True,

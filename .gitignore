@@ -13,3 +13,9 @@ __pycache__/
 /htmlcov/
 *.egg-info
 build/
+/target
+/.idea
+/dist
+*.dll
+*.so
+*.pyd

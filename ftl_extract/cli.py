@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 from time import perf_counter_ns
+from typing import Literal
 
 import click
 
@@ -14,6 +15,8 @@ from ftl_extract.const import (
     DEFAULT_IGNORE_KWARGS,
 )
 from ftl_extract.ftl_extractor import extract
+
+from .ftl_extract import fast_extract
 
 
 @click.command()
@@ -106,6 +109,13 @@ from ftl_extract.ftl_extractor import extract
     type=click.Choice(COMMENT_KEYS_MODE, case_sensitive=False),
 )
 @click.option(
+    "--fast",
+    default=False,
+    is_flag=True,
+    show_default=True,
+    help="Use Rust implementation for extraction.",
+)
+@click.option(
     "--dry-run",
     is_flag=True,
     default=False,
@@ -135,39 +145,61 @@ def cli_extract(
     ignore_kwargs: tuple[str, ...],
     comment_junks: bool,
     default_ftl_file: Path,
-    comment_keys_mode: str,
+    comment_keys_mode: Literal["comment", "warn"],
+    fast: bool,
     dry_run: bool,
     verbose: bool,
 ) -> None:
     click.echo(f"Extracting from {code_path}")
     start_time = perf_counter_ns()
 
-    statistics = extract(
-        code_path=code_path,
-        output_path=output_path,
-        language=language,
-        i18n_keys=i18n_keys,
-        i18n_keys_append=i18n_keys_append,
-        i18n_keys_prefix=i18n_keys_prefix,
-        exclude_dirs=exclude_dirs,
-        exclude_dirs_append=exclude_dirs_append,
-        ignore_attributes=ignore_attributes,
-        append_ignore_attributes=append_ignore_attributes,
-        ignore_kwargs=ignore_kwargs,
-        comment_junks=comment_junks,
-        default_ftl_file=default_ftl_file,
-        comment_keys_mode=comment_keys_mode,
-        dry_run=dry_run,
-    )
+    if fast is True:
+        click.echo("Fast mode is enabled. Rust implementation will be used.")
+        fast_extract(
+            code_path=code_path,
+            output_path=output_path,
+            language=language,
+            i18n_keys=set(i18n_keys),
+            i18n_keys_append=set(i18n_keys_append),
+            i18n_keys_prefix=set(i18n_keys_prefix),
+            exclude_dirs=set(exclude_dirs),
+            exclude_dirs_append=set(exclude_dirs_append),
+            ignore_attributes=set(ignore_attributes),
+            append_ignore_attributes=set(append_ignore_attributes),
+            ignore_kwargs=set(ignore_kwargs),
+            comment_junks=comment_junks,
+            default_ftl_file=default_ftl_file,
+            comment_keys_mode=comment_keys_mode,
+            dry_run=dry_run,
+        )
 
-    if verbose:
-        click.echo("Extraction statistics:")
-        click.echo(f"  - Py files count: {statistics.py_files_count}")
-        click.echo(f"  - FTL files count: {statistics.ftl_files_count}")
-        click.echo(f"  - FTL keys in code: {statistics.ftl_in_code_keys_count}")
-        click.echo(f"  - FTL keys stored: {statistics.ftl_stored_keys_count}")
-        click.echo(f"  - FTL keys updated: {statistics.ftl_keys_updated}")
-        click.echo(f"  - FTL keys added: {statistics.ftl_keys_added}")
-        click.echo(f"  - FTL keys commented: {statistics.ftl_keys_commented}")
+    else:
+        statistics = extract(
+            code_path=code_path,
+            output_path=output_path,
+            language=language,
+            i18n_keys=i18n_keys,
+            i18n_keys_append=i18n_keys_append,
+            i18n_keys_prefix=i18n_keys_prefix,
+            exclude_dirs=exclude_dirs,
+            exclude_dirs_append=exclude_dirs_append,
+            ignore_attributes=ignore_attributes,
+            append_ignore_attributes=append_ignore_attributes,
+            ignore_kwargs=ignore_kwargs,
+            comment_junks=comment_junks,
+            default_ftl_file=default_ftl_file,
+            comment_keys_mode=comment_keys_mode,
+            dry_run=dry_run,
+        )
+
+        if verbose:
+            click.echo("Extraction statistics:")
+            click.echo(f"  - Py files count: {statistics.py_files_count}")
+            click.echo(f"  - FTL files count: {statistics.ftl_files_count}")
+            click.echo(f"  - FTL keys in code: {statistics.ftl_in_code_keys_count}")
+            click.echo(f"  - FTL keys stored: {statistics.ftl_stored_keys_count}")
+            click.echo(f"  - FTL keys updated: {statistics.ftl_keys_updated}")
+            click.echo(f"  - FTL keys added: {statistics.ftl_keys_added}")
+            click.echo(f"  - FTL keys commented: {statistics.ftl_keys_commented}")
 
     click.echo(f"Done in {(perf_counter_ns() - start_time) * 1e-9:.3f}s.")

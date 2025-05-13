@@ -7,6 +7,11 @@ keywords = ["ftl", "ftl-extract", "ftl-extractor"]
 readme = "README.md"
 license = "MIT"
 requires-python = ">=3.9"
+classifiers = [
+    "Programming Language :: Rust",
+    "Programming Language :: Python :: Implementation :: CPython",
+    "Programming Language :: Python :: Implementation :: PyPy",
+]
 dependencies = [
     "fluent-syntax>=0.19",
     "click==8.*",
@@ -14,6 +19,7 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = [
+    "maturin>=1.8.4",
     "fluent-runtime==0.4.0",
     "isort==6.0.1",
     "pre-commit==4.2.0",
@@ -44,6 +50,20 @@ Repository = "https://github.com/andrew000/FTL-Extract"
 [project.scripts]
 ftl-extract = "ftl_extract.cli:cli_extract"
 ftl_extract = "ftl_extract.cli:cli_extract"
+
+[build-system]
+requires = ["maturin>=1.8,<2.0"]
+build-backend = "maturin"
+
+[tool.maturin]
+features = ["pyo3/extension-module"]
+
+[tool.setuptools.packages.find]
+include = ["ftl_extract"]
+
+#[[tool.setuptools-rust.ext-modules]]
+#target = "setuptools_rust_starter._setuptools_rust_starter"
+#path = "Cargo.toml"
 
 [tool.uv]
 package = true

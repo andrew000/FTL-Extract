@@ -1,4 +1,4 @@
-code_dir = src
+py_code_dir = ftl_extract
 docs_dir = docs
 docs_source_dir = $(docs_dir)/source
 reports_dir = reports
@@ -10,45 +10,53 @@ else
 	mkdir_cmd := $(shell mkdir -p $(reports_dir))
 endif
 
-.PHONY lint:
+.PHONY: lint
 lint:
 	echo "Running ruff..."
-	uv run ruff check --config pyproject.toml --diff $(code_dir) $(tests_dir)
+	uv run ruff check --config pyproject.toml --diff $(py_code_dir) $(tests_dir)
 
 	echo "Running MyPy..."
 	uv run mypy --config-file pyproject.toml
 
-.PHONY format:
+.PHONY: format
 format:
 	echo "Running ruff check with --fix..."
-	uv run ruff check --config pyproject.toml --fix --unsafe-fixes $(code_dir) $(tests_dir)
+	uv run ruff check --config pyproject.toml --fix --unsafe-fixes $(py_code_dir) $(tests_dir)
 
 	echo "Running ruff..."
-	uv run ruff format --config pyproject.toml $(code_dir) $(tests_dir)
+	uv run ruff format --config pyproject.toml $(py_code_dir) $(tests_dir)
 
 	echo "Running isort..."
-	uv run isort --settings-file pyproject.toml $(code_dir) $(tests_dir)
+	uv run isort --settings-file pyproject.toml $(py_code_dir) $(tests_dir)
 
-.PHONY livehtml:
+.PHONY: livehtml
 livehtml:
 	uv run sphinx-autobuild "$(docs_source_dir)" "$(docs_dir)/_build/html" $(SPHINXOPTS) $(O)
 
-.PHONY test:
+.PHONY: test
 test:
 	echo "Running tests..."
-	uv run pytest -vv --cov=$(code_dir) --cov-report=html --cov-report=term --cov-config=.coveragerc $(tests_dir)
+	uv run pytest -vv --cov=$(py_code_dir) --cov-report=html --cov-report=term --cov-config=.coveragerc $(tests_dir)
 
-.PHONY test-coverage:
+.PHONY: test-coverage
 test-coverage:
 	echo "Running tests with coverage..."
 	$(mkdir_cmd)
-	uv run pytest -vv --cov=$(code_dir) --cov-config=.coveragerc --html=$(reports_dir)/tests/index.html tests/
+	uv run pytest -vv --cov=$(py_code_dir) --cov-config=.coveragerc --html=$(reports_dir)/tests/index.html tests/
 	uv run coverage html -d $(reports_dir)/coverage
 
-.PHONY outdated:
+.PHONY: outdated
 outdated:
 	uv tree --universal --outdated
 
-.PHONY sync:
+.PHONY: sync
 sync:
 	uv sync --extra dev --extra tests --extra docs
+
+.PHONY: build-release
+build-release:
+	maturin build --release --profile release --strip -o dist
+
+.PHONY: build-dev
+build-dev:
+	maturin build --profile dev --strip -o dist

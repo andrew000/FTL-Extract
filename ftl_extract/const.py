@@ -6,7 +6,6 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from typing import Final
 
-
 I18N_LITERAL: Final[str] = "i18n"
 GET_LITERAL: Final[str] = "get"
 PATH_LITERAL: Final[str] = "_path"

@@ -5,7 +5,7 @@ from unittest.mock import MagicMock, patch
 
 import click.testing
 import pytest
-from click import BaseCommand
+from click import Command
 from fluent.syntax import FluentSerializer
 from fluent.syntax import ast as fl_ast
 
@@ -142,7 +142,7 @@ def test_extraction_with_valid_paths_succeeds(
     output_path = tmp_path.joinpath("path/to/output")
 
     result = runner.invoke(
-        cast(BaseCommand, cli_extract),
+        cast(Command, cli_extract),
         [code_path.as_posix(), output_path.as_posix()],
     )
     assert result.exit_code == 0
@@ -160,7 +160,7 @@ def test_extraction_with_verbose_enabled(
     output_path = tmp_path.joinpath("path/to/output")
 
     result = runner.invoke(
-        cast(BaseCommand, cli_extract),
+        cast(Command, cli_extract),
         [code_path.as_posix(), output_path.as_posix(), "--verbose"],
     )
     assert result.exit_code == 0
@@ -178,7 +178,7 @@ def test_extraction_with_multiple_languages_handles_all(
     output_path = tmp_path.joinpath("path/to/output")
 
     result = runner.invoke(
-        cast(BaseCommand, cli_extract),
+        cast(Command, cli_extract),
         [code_path.as_posix(), output_path.as_posix(), "-l", "en", "-l", "fr"],
     )
     assert result.exit_code == 0
@@ -186,7 +186,7 @@ def test_extraction_with_multiple_languages_handles_all(
 
 
 def test_extraction_with_nonexistent_code_path_fails(runner: click.testing.CliRunner) -> None:
-    result = runner.invoke(cast(BaseCommand, cli_extract), ["nonexistent/path", "path/to/output"])
+    result = runner.invoke(cast(Command, cli_extract), ["nonexistent/path", "path/to/output"])
     assert result.exit_code != 0
     assert "Invalid value for 'CODE_PATH'" in result.output
 
@@ -201,7 +201,7 @@ def test_extraction_with_invalid_i18n_keys_ignores_them(
     output_path = tmp_path.joinpath("path/to/output")
 
     result = runner.invoke(
-        cast(BaseCommand, cli_extract),
+        cast(Command, cli_extract),
         [code_path.as_posix(), output_path.as_posix(), "-k", "nonexistent_key"],
     )
     assert result.exit_code == 0

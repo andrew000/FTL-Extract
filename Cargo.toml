@@ -10,7 +10,7 @@ authors = ["Andrew King <help@kusbot.com>"]
 license = "MIT"
 
 [package.metadata.maturin]
-python-source = "python"
+python-source = "ftl_extract"
 
 [workspace]
 
@@ -38,7 +38,7 @@ fluent-syntax = { git = "https://github.com/andrew000/fluent-rs.git", rev = "9bc
 globwalk = { version = "0.9.1" }
 lazy_static = { version = "1.5.0" }
 mimalloc = { version = "0.1.46" }
-pyo3 = { version = "0.24.2", features = ["extension-module", "experimental-inspect"] }
+pyo3 = { version = "0.25.0", features = ["extension-module", "experimental-inspect"] }
 rayon = { version = "1.10.0" }
 rustpython-ast = { git = "https://github.com/RustPython/Parser.git", rev = "d2f137b372ec08ce4a243564a80f8f9153c45a23", features = ["visitor"] }
 rustpython-parser = { git = "https://github.com/RustPython/Parser.git", rev = "d2f137b372ec08ce4a243564a80f8f9153c45a23" }

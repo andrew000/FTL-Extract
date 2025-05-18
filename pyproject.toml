@@ -19,11 +19,11 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = [
-    "maturin>=1.8.4",
+    "maturin==1.8.6",
     "fluent-runtime==0.4.0",
     "isort==6.0.1",
     "pre-commit==4.2.0",
-    "ruff==0.11.8",
+    "ruff==0.11.9",
     "mypy==1.15.0",
     "typing-extensions==4.12.2",
 ]

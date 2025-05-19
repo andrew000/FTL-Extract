@@ -1,6 +1,7 @@
 #![allow(unused_variables)]
 
 use crate::ftl::consts;
+use anyhow::{Result, bail};
 use fluent::types::AnyEq;
 use hashbrown::{HashMap, HashSet};
 use rustpython_ast::{self as py_ast, Keyword, MatchCase};
@@ -146,7 +147,7 @@ impl<'a> I18nMatcher<'a> {
             .str()
             .unwrap();
 
-        self.add_fluent_key(node, key);
+        self.add_fluent_key(node, key).unwrap();
     }
 
     fn process_attribute_name_call(
@@ -199,7 +200,7 @@ impl<'a> I18nMatcher<'a> {
                 .unwrap()
                 .clone();
 
-            self.add_fluent_key(node, key);
+            self.add_fluent_key(node, key).unwrap();
         }
     }
 
@@ -223,7 +224,8 @@ impl<'a> I18nMatcher<'a> {
                 .map(|s| s.to_string())
                 .collect::<Vec<String>>()
                 .join("-"),
-        );
+        )
+        .unwrap();
     }
 
     fn create_fluent_key(
@@ -307,17 +309,17 @@ impl<'a> I18nMatcher<'a> {
         &mut self,
         node: &py_ast::ExprCall<py_ast::text_size::TextRange>,
         key: String,
-    ) {
+    ) -> Result<()> {
         let new_fluent_key = self.create_fluent_key(node, key);
 
         if self.fluent_keys.contains_key(&new_fluent_key.key) {
             if self.fluent_keys[&new_fluent_key.key].path != new_fluent_key.path {
-                panic!(
+                bail!(
                     "Fluent key {} has different paths: {} and {}",
                     new_fluent_key.key,
                     new_fluent_key.path.display(),
                     self.fluent_keys[&new_fluent_key.key].path.display()
-                );
+                )
             }
             if !self.fluent_keys[&new_fluent_key.key]
                 .message
@@ -325,7 +327,7 @@ impl<'a> I18nMatcher<'a> {
                 .unwrap()
                 .equals(new_fluent_key.message.as_ref().unwrap())
             {
-                panic!(
+                bail!(
                     "Fluent key {} has different translations:\n{:?}\nand\n{:?}",
                     new_fluent_key.key,
                     &new_fluent_key.message.as_ref().unwrap(),
@@ -339,5 +341,7 @@ impl<'a> I18nMatcher<'a> {
             self.fluent_keys
                 .insert(new_fluent_key.key.clone(), new_fluent_key);
         }
+
+        Ok(())
     }
 }

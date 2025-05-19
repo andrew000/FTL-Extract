@@ -13,8 +13,7 @@ license.workspace = true
 name = "extractor"
 
 [dependencies]
-#anyhow = { version = "1.0.98" }
-#tracing = { version = "0.1.41" }
+anyhow = { version = "1.0.98" }
 clap = { version = "4.5.38", features = ["derive"] }
 fluent = { git = "https://github.com/andrew000/fluent-rs.git", rev = "9bc487b61173579a20cd1d3d45ba1cd7675c6cfd" }
 fluent-syntax = { git = "https://github.com/andrew000/fluent-rs.git", rev = "9bc487b61173579a20cd1d3d45ba1cd7675c6cfd" }

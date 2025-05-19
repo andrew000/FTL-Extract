@@ -32,7 +32,8 @@ mod tests {
             &PathBuf::from(consts::DEFAULT_FTL_FILENAME),
             CommentsKeyModes::Comment,
             true,
-        );
+        )
+        .unwrap();
         println!("Extracted fluent keys in {:?}", start_time.elapsed());
     }
 }

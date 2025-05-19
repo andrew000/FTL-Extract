@@ -1,4 +1,5 @@
 use crate::ftl::matcher::FluentKey;
+use crate::ftl::utils::ExtractionStatistics;
 use fluent_syntax::ast::Entry;
 use globwalk::GlobWalkerBuilder;
 use hashbrown::{HashMap, HashSet};
@@ -118,6 +119,7 @@ fn import_from_ftl(
 pub(crate) fn import_ftl_from_dir(
     path: &Path,
     locale: &String,
+    statistics: &mut ExtractionStatistics,
 ) -> (
     HashMap<String, FluentKey>,
     HashMap<String, FluentKey>,
@@ -147,6 +149,8 @@ pub(crate) fn import_ftl_from_dir(
         stored_ftl_keys.extend(keys);
         stored_terms.extend(terms);
         stored_leave_as_is_keys.extend(leave_as_is);
+
+        *statistics.ftl_files_count.get_mut(locale).unwrap() += 1;
     }
 
     (stored_ftl_keys, stored_terms, stored_leave_as_is_keys)

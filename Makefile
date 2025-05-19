@@ -1,4 +1,4 @@
-py_code_dir = ftl_extract
+py_code_dir = src/ftl_extract
 docs_dir = docs
 docs_source_dir = $(docs_dir)/source
 reports_dir = reports
@@ -51,7 +51,7 @@ outdated:
 
 .PHONY: sync
 sync:
-	uv sync --extra dev --extra tests --extra docs
+	uv sync --reinstall-package ftl_extract --extra dev --extra tests --extra docs
 
 .PHONY: build
 build:

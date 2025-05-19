@@ -1,0 +1,38 @@
+pub mod ftl;
+
+use mimalloc::MiMalloc;
+
+#[global_allocator]
+static GLOBAL: MiMalloc = MiMalloc;
+
+#[cfg(test)]
+mod tests {
+    use super::ftl::consts;
+    use super::ftl::ftl_extractor::extraxt;
+    use crate::ftl::consts::CommentsKeyModes;
+    use hashbrown::HashSet;
+    use std::path::PathBuf;
+
+    #[test]
+    fn test_extract() {
+        let start_time = std::time::Instant::now();
+        extraxt(
+            &std::path::PathBuf::from(r"tests\files\py"),
+            &std::path::PathBuf::from(r"tests\files\locales"),
+            Vec::from(["en".to_string()]),
+            consts::DEFAULT_I18N_KEYS.clone(),
+            HashSet::from(["LF".to_string(), "cls_i18n".to_string()]),
+            HashSet::from(["self".to_string(), "cls".to_string()]),
+            consts::DEFAULT_EXCLUDE_DIRS.clone(),
+            HashSet::from([]),
+            consts::DEFAULT_IGNORE_ATTRIBUTES.clone(),
+            HashSet::from(["core".to_string()]),
+            HashSet::from(["when".to_string()]),
+            true,
+            &PathBuf::from(consts::DEFAULT_FTL_FILENAME),
+            CommentsKeyModes::Comment,
+            true,
+        );
+        println!("Extracted fluent keys in {:?}", start_time.elapsed());
+    }
+}

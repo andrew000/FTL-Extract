@@ -1,5 +1,4 @@
-[package]
-name = "ftl_extract"
+[workspace.package]
 version = "0.0.1"
 edition = "2024"
 rust-version = "1.86.0"
@@ -8,15 +7,18 @@ documentation = "https://example.com"
 repository = "https://example.com"
 authors = ["Andrew King <help@kusbot.com>"]
 license = "MIT"
-
-[package.metadata.maturin]
-python-source = "ftl_extract"
+include = ["src/**/*.rs"]
 
 [workspace]
+resolver = "3"
+members = [
+    "src/extractor",
+    "src/cli",
+]
 
-[lib]
-name = "ftl_extract"
-crate-type = ["cdylib"]
+[workspace.dependencies]
+extractor = { path = "src/extractor" }
+cli = { path = "src/cli" }
 
 [profile.release]
 opt-level = 3
@@ -25,26 +27,7 @@ lto = true
 codegen-units = 1
 
 [profile.test]
-opt-level = 3
-strip = true
-lto = true
-codegen-units = 1
-
-[dependencies]
-#anyhow = { version = "1.0.98" }
-#tracing = { version = "0.1.41" }
-fluent = { git = "https://github.com/andrew000/fluent-rs.git", rev = "9bc487b61173579a20cd1d3d45ba1cd7675c6cfd" }
-fluent-syntax = { git = "https://github.com/andrew000/fluent-rs.git", rev = "9bc487b61173579a20cd1d3d45ba1cd7675c6cfd" }
-globwalk = { version = "0.9.1" }
-lazy_static = { version = "1.5.0" }
-mimalloc = { version = "0.1.46" }
-pyo3 = { version = "0.25.0", features = ["extension-module", "experimental-inspect"] }
-rayon = { version = "1.10.0" }
-rustpython-ast = { git = "https://github.com/RustPython/Parser.git", rev = "d2f137b372ec08ce4a243564a80f8f9153c45a23", features = ["visitor"] }
-rustpython-parser = { git = "https://github.com/RustPython/Parser.git", rev = "d2f137b372ec08ce4a243564a80f8f9153c45a23" }
-
-[lints.rust]
-dead_code = "allow"
-
-[lints.clippy]
-too_many_arguments = "allow"
+#opt-level = 3
+#strip = true
+#lto = true
+#codegen-units = 1

@@ -1,10 +1,11 @@
 use crate::ftl::code_extractor::{extract_fluent_keys, sort_fluent_keys_by_path};
+use crate::ftl::consts::CommentsKeyModes;
 use crate::ftl::ftl_importer::import_ftl_from_dir;
 use crate::ftl::matcher::FluentKey;
 use crate::ftl::process::commentator::comment_ftl_key;
 use crate::ftl::process::kwargs_extractor::extract_kwargs;
 use crate::ftl::process::serializer::generate_ftl;
-use std::collections::{HashMap, HashSet};
+use hashbrown::{HashMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -22,9 +23,9 @@ pub fn extraxt(
     ignore_kwargs: HashSet<String>, // = consts::DEFAULT_IGNORE_KWARGS,
     comment_junks: bool,            // = true,
     default_ftl_file: &Path,        // = consts::DEFAULT_FTL_FILENAME
-    comment_keys_mode: String,      // = consts::CommentsKeyModes::Comment,
+    comment_keys_mode: CommentsKeyModes, // = consts::CommentsKeyModes::Comment,
     dry_run: bool,                  // = false,
-) -> Result<(), String> {
+) {
     if !i18n_keys_append.is_empty() {
         i18n_keys.extend(i18n_keys_append);
     };
@@ -138,13 +139,13 @@ pub fn extraxt(
             stored_fluent_keys.remove(&key);
         }
 
-        match comment_keys_mode.as_str() {
-            "comment" => {
+        match comment_keys_mode {
+            CommentsKeyModes::Comment => {
                 for fluent_key in keys_to_comment.values_mut() {
                     comment_ftl_key(fluent_key);
                 }
             }
-            "warn" => {
+            CommentsKeyModes::Warn => {
                 for fluent_key in keys_to_comment.values_mut() {
                     keys_to_add.remove(&fluent_key.key);
                     println!(
@@ -157,7 +158,6 @@ pub fn extraxt(
                     );
                 }
             }
-            &_ => todo!(),
         }
         // Comment Junk elements if needed
         if comment_junks {
@@ -215,8 +215,6 @@ pub fn extraxt(
             }
         }
     }
-
-    Ok(())
 }
 
 fn write(path: PathBuf, ftl: String) {

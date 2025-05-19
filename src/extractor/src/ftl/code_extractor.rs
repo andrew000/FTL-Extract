@@ -1,10 +1,10 @@
 use crate::ftl::matcher::{FluentKey, I18nMatcher};
 use fluent::types::AnyEq;
 use globwalk::GlobWalkerBuilder;
+use hashbrown::{HashMap, HashSet};
 use rayon::prelude::*;
 use rustpython_ast::Visitor;
 use rustpython_parser::Mode;
-use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, RwLock};

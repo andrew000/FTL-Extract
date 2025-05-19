@@ -348,10 +348,11 @@ dependencies = [
 dev = [
     { name = "fluent-runtime" },
     { name = "isort" },
-    { name = "maturin" },
     { name = "mypy" },
     { name = "pre-commit" },
     { name = "ruff" },
+    { name = "setuptools" },
+    { name = "setuptools-rust" },
     { name = "typing-extensions" },
 ]
 docs = [
@@ -377,7 +378,6 @@ requires-dist = [
     { name = "fluent-syntax", specifier = ">=0.19" },
     { name = "furo", marker = "extra == 'docs'", specifier = "==2024.8.6" },
     { name = "isort", marker = "extra == 'dev'", specifier = "==6.0.1" },
-    { name = "maturin", marker = "extra == 'dev'", specifier = "==1.8.6" },
     { name = "mypy", marker = "extra == 'dev'", specifier = "==1.15.0" },
     { name = "pre-commit", marker = "extra == 'dev'", specifier = "==4.2.0" },
     { name = "pytest", marker = "extra == 'tests'", specifier = "==8.3.5" },
@@ -386,6 +386,8 @@ requires-dist = [
     { name = "pytest-mock", marker = "extra == 'tests'", specifier = "==3.14.0" },
     { name = "pytz", marker = "extra == 'docs'", specifier = "==2025.1" },
     { name = "ruff", marker = "extra == 'dev'", specifier = "==0.11.9" },
+    { name = "setuptools", marker = "extra == 'dev'", specifier = "==80.7.1" },
+    { name = "setuptools-rust", marker = "extra == 'dev'", specifier = "==1.11.1" },
     { name = "sphinx", marker = "extra == 'docs'", specifier = "==7.4.7" },
     { name = "sphinx-autobuild", marker = "extra == 'docs'", specifier = "==2024.10.3" },
     { name = "sphinx-rtd-theme", marker = "extra == 'docs'", specifier = "==3.0.2" },
@@ -552,29 +554,6 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/17/d8/5811082f85bb88410ad7e452263af048d685669bbbfb7b595e8689152498/MarkupSafe-3.0.2-cp39-cp39-musllinux_1_2_x86_64.whl", hash = "sha256:eb7972a85c54febfb25b5c4b4f3af4dcc731994c7da0d8a0b4a6eb0640e1d178", size = 20946, upload-time = "2024-10-18T15:21:50.441Z" },
     { url = "https://files.pythonhosted.org/packages/7c/31/bd635fb5989440d9365c5e3c47556cfea121c7803f5034ac843e8f37c2f2/MarkupSafe-3.0.2-cp39-cp39-win32.whl", hash = "sha256:8c4e8c3ce11e1f92f6536ff07154f9d49677ebaaafc32db9db4620bc11ed480f", size = 15063, upload-time = "2024-10-18T15:21:51.385Z" },
     { url = "https://files.pythonhosted.org/packages/b3/73/085399401383ce949f727afec55ec3abd76648d04b9f22e1c0e99cb4bec3/MarkupSafe-3.0.2-cp39-cp39-win_amd64.whl", hash = "sha256:6e296a513ca3d94054c2c881cc913116e90fd030ad1c656b3869762b754f5f8a", size = 15506, upload-time = "2024-10-18T15:21:52.974Z" },
-]
-
-[[package]]
-name = "maturin"
-version = "1.8.6"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "tomli", marker = "python_full_version < '3.11'" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/34/bc/c7df50a359c3a31490785c77d1ddd5fc83cc8cc07a4eddd289dbae53545a/maturin-1.8.6.tar.gz", hash = "sha256:0e0dc2e0bfaa2e1bd238e0236cf8a2b7e2250ccaa29c1aa8d0e61fa664b0289d", size = 203320, upload-time = "2025-05-13T13:56:11.033Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/d3/f1/e493add40aebdab88ac1aefb41b9c84ac288fb00025bc96b9213ee02c958/maturin-1.8.6-py3-none-linux_armv6l.whl", hash = "sha256:1bf4c743dd2b24448e82b8c96251597818956ddf848e1d16b59356512c7e58d8", size = 7831195, upload-time = "2025-05-13T13:55:42.634Z" },
-    { url = "https://files.pythonhosted.org/packages/f0/1c/588afdb7bf79c4f15e33e9af6d7f3b12ec662bc63a22919e3bf39afa2a1e/maturin-1.8.6-py3-none-macosx_10_12_x86_64.macosx_11_0_arm64.macosx_10_12_universal2.whl", hash = "sha256:4ea89cf76048bc760e12b36b608fc3f5ef4f7359c0895e9afe737be34041d948", size = 15276471, upload-time = "2025-05-13T13:55:46.196Z" },
-    { url = "https://files.pythonhosted.org/packages/62/0b/4ce97f7f3a42068fbb42ba47d8b072e098c060fc1f64d8523e5588c57543/maturin-1.8.6-py3-none-macosx_10_12_x86_64.whl", hash = "sha256:4dd2e2f005ca63ac7ef0dddf2d65324ee480277a11544dcc4e7e436af68034dd", size = 7966129, upload-time = "2025-05-13T13:55:48.633Z" },
-    { url = "https://files.pythonhosted.org/packages/84/bf/4eae9d12920c580baf9d47ee63fec3ae0233e90a3aa8987bd7909cdc36a0/maturin-1.8.6-py3-none-manylinux_2_12_i686.manylinux2010_i686.musllinux_1_1_i686.whl", hash = "sha256:b0637604774e2c50ab48a0e9023fe2f071837ecbc817c04ec28e1cfcc25224c2", size = 7835935, upload-time = "2025-05-13T13:55:51.235Z" },
-    { url = "https://files.pythonhosted.org/packages/f9/aa/8090f8b3f5f7ec46bc95deb0f5b29bf52c98156ef594f2e65d20bf94cea1/maturin-1.8.6-py3-none-manylinux_2_12_x86_64.manylinux2010_x86_64.musllinux_1_1_x86_64.whl", hash = "sha256:bec5948c6475954c8089b17fae349966258756bb2ca05e54099e476a08070795", size = 8282553, upload-time = "2025-05-13T13:55:53.266Z" },
-    { url = "https://files.pythonhosted.org/packages/bc/50/4348da6cc16c006dab4e6cd479cf00dc0afa80db289a115a314df9909ee6/maturin-1.8.6-py3-none-manylinux_2_17_aarch64.manylinux2014_aarch64.musllinux_1_1_aarch64.whl", hash = "sha256:62a65f70ebaadd6eb6083f5548413744f2ef12400445778e08d41d4facf15bbe", size = 7618339, upload-time = "2025-05-13T13:55:55.706Z" },
-    { url = "https://files.pythonhosted.org/packages/ce/77/16458e29487d068c8cdb7f06a4403393568a10b44993fe2ec9c3b29fdccd/maturin-1.8.6-py3-none-manylinux_2_17_armv7l.manylinux2014_armv7l.musllinux_1_1_armv7l.whl", hash = "sha256:5c0ff7ad43883920032b63c94c76dcdd5758710d7b72b68db69e7826c40534ac", size = 7686748, upload-time = "2025-05-13T13:55:57.97Z" },
-    { url = "https://files.pythonhosted.org/packages/0c/c1/a52f3c1171c053810606c7c7fae5ce4637446ef9df44f281862d2bef3750/maturin-1.8.6-py3-none-manylinux_2_17_ppc64le.manylinux2014_ppc64le.musllinux_1_1_ppc64le.whl", hash = "sha256:ca30fdb158a24cf312f3e53072a6e987182c103fa613efea2d28b5f52707d04a", size = 9767394, upload-time = "2025-05-13T13:56:00.694Z" },
-    { url = "https://files.pythonhosted.org/packages/e2/ab/abae74f36a0f200384eda985ebeb9ee5dcbb19bfe1558c3335ef6f297094/maturin-1.8.6-py3-none-manylinux_2_17_s390x.manylinux2014_s390x.whl", hash = "sha256:b1e786ec9b5f7315c7e3fcc62b0715f9d99ffe477b06d0d62655a71e6a51a67b", size = 10995574, upload-time = "2025-05-13T13:56:03.101Z" },
-    { url = "https://files.pythonhosted.org/packages/8e/1c/c478578a62c1e34b5b0641a474de78cb56d6c4aad0ba88f90dfa9f2a15f7/maturin-1.8.6-py3-none-win32.whl", hash = "sha256:dade5edfaf508439ff6bbc7be4f207e04c0999c47d9ef7e1bae16258e76b1518", size = 7027171, upload-time = "2025-05-13T13:56:05.472Z" },
-    { url = "https://files.pythonhosted.org/packages/c9/89/2c57d29f25e06696cb3c5b3770ba0b40dfe87f91a879ecbcdc92e071a26b/maturin-1.8.6-py3-none-win_amd64.whl", hash = "sha256:6bc9281b90cd37e2a7985f2e5d6e3d35a1d64cf6e4d04ce5ed25603d162995b9", size = 7947998, upload-time = "2025-05-13T13:56:07.428Z" },
-    { url = "https://files.pythonhosted.org/packages/9d/f5/3ee1c6aa4e277323bef38ea0ec07262a9b88711d1a29cb5bb08ce3807a6f/maturin-1.8.6-py3-none-win_arm64.whl", hash = "sha256:24f66624db69b895b134a8f1592efdf04cd223c9b3b65243ad32080477936d14", size = 6684974, upload-time = "2025-05-13T13:56:09.415Z" },
 ]
 
 [[package]]
@@ -859,6 +838,37 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/22/e6/7ed70048e89b01d728ccc950557a17ecf8df4127b08a56944b9d0bae61bc/ruff-0.11.9-py3-none-win32.whl", hash = "sha256:7fe1bc950e7d7b42caaee2a8a3bc27410547cc032c9558ee2e0f6d3b209e845a", size = 10548627, upload-time = "2025-05-09T16:19:33.657Z" },
     { url = "https://files.pythonhosted.org/packages/90/36/1da5d566271682ed10f436f732e5f75f926c17255c9c75cefb77d4bf8f10/ruff-0.11.9-py3-none-win_amd64.whl", hash = "sha256:52edaa4a6d70f8180343a5b7f030c7edd36ad180c9f4d224959c2d689962d964", size = 11634340, upload-time = "2025-05-09T16:19:35.815Z" },
     { url = "https://files.pythonhosted.org/packages/40/f7/70aad26e5877c8f7ee5b161c4c9fa0100e63fc4c944dc6d97b9c7e871417/ruff-0.11.9-py3-none-win_arm64.whl", hash = "sha256:bcf42689c22f2e240f496d0c183ef2c6f7b35e809f12c1db58f75d9aa8d630ca", size = 10741080, upload-time = "2025-05-09T16:19:39.605Z" },
+]
+
+[[package]]
+name = "semantic-version"
+version = "2.10.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/7d/31/f2289ce78b9b473d582568c234e104d2a342fd658cc288a7553d83bb8595/semantic_version-2.10.0.tar.gz", hash = "sha256:bdabb6d336998cbb378d4b9db3a4b56a1e3235701dc05ea2690d9a997ed5041c", size = 52289, upload-time = "2022-05-26T13:35:23.454Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/6a/23/8146aad7d88f4fcb3a6218f41a60f6c2d4e3a72de72da1825dc7c8f7877c/semantic_version-2.10.0-py2.py3-none-any.whl", hash = "sha256:de78a3b8e0feda74cabc54aab2da702113e33ac9d9eb9d2389bcf1f58b7d9177", size = 15552, upload-time = "2022-05-26T13:35:21.206Z" },
+]
+
+[[package]]
+name = "setuptools"
+version = "80.7.1"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/9e/8b/dc1773e8e5d07fd27c1632c45c1de856ac3dbf09c0147f782ca6d990cf15/setuptools-80.7.1.tar.gz", hash = "sha256:f6ffc5f0142b1bd8d0ca94ee91b30c0ca862ffd50826da1ea85258a06fd94552", size = 1319188, upload-time = "2025-05-15T02:41:00.955Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/a1/18/0e835c3a557dc5faffc8f91092f62fc337c1dab1066715842e7a4b318ec4/setuptools-80.7.1-py3-none-any.whl", hash = "sha256:ca5cc1069b85dc23070a6628e6bcecb3292acac802399c7f8edc0100619f9009", size = 1200776, upload-time = "2025-05-15T02:40:58.887Z" },
+]
+
+[[package]]
+name = "setuptools-rust"
+version = "1.11.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "semantic-version" },
+    { name = "setuptools" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/e0/92/bf8589b1a2b6107cf9ec8daa9954c0b7620643fe1f37d31d75e572d995f5/setuptools_rust-1.11.1.tar.gz", hash = "sha256:7dabc4392252ced314b8050d63276e05fdc5d32398fc7d3cce1f6a6ac35b76c0", size = 310804, upload-time = "2025-04-04T14:28:10.576Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/b3/01/37e1376f80578882e4f2d451f57d1fb42a599832057a123f57d9f26395c8/setuptools_rust-1.11.1-py3-none-any.whl", hash = "sha256:5eaaddaed268dc24a527ffa659ce56b22d3cf17b781247b779efd611031fe8ea", size = 28120, upload-time = "2025-04-04T14:28:09.564Z" },
 ]
 
 [[package]]

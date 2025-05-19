@@ -1,7 +1,7 @@
 use crate::ftl::matcher::FluentKey;
 use fluent_syntax::ast::Entry;
 use globwalk::GlobWalkerBuilder;
-use std::collections::{HashMap, HashSet};
+use hashbrown::{HashMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 

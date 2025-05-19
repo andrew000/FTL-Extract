@@ -2,7 +2,7 @@
 
 use crate::ftl::matcher::FluentKey;
 use fluent_syntax::ast::{CallArguments, Identifier};
-use std::collections::{HashMap, HashSet};
+use hashbrown::{HashMap, HashSet};
 
 pub(crate) fn extract_kwargs(
     key: &mut FluentKey,

@@ -53,10 +53,6 @@ outdated:
 sync:
 	uv sync --extra dev --extra tests --extra docs
 
-.PHONY: build-release
-build-release:
-	maturin build --release --profile release --strip -o dist
-
-.PHONY: build-dev
-build-dev:
-	maturin build --profile dev --strip -o dist
+.PHONY: build
+build:
+	uv build --wheel --sdist

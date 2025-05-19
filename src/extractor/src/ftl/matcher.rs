@@ -2,8 +2,8 @@
 
 use crate::ftl::consts;
 use fluent::types::AnyEq;
+use hashbrown::{HashMap, HashSet};
 use rustpython_ast::{self as py_ast, Keyword, MatchCase};
-use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 
 #[derive(Clone, Debug)]

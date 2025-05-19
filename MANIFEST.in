@@ -1,0 +1,3 @@
+include Cargo.toml
+graft src
+prune tests

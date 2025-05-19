@@ -1,6 +1,5 @@
+use hashbrown::HashSet;
 use lazy_static::lazy_static;
-use pyo3::pyclass;
-use std::collections::HashSet;
 
 pub const I18N_LITERAL: &str = "i18n";
 pub const GET_LITERAL: &str = "get";
@@ -31,11 +30,8 @@ lazy_static! {
     pub static ref DEFAULT_IGNORE_KWARGS: HashSet<String> = HashSet::new();
 }
 
-#[pyclass(eq, eq_int)]
-#[derive(PartialEq, Clone)]
+#[derive(PartialEq, Clone, Debug, clap::ValueEnum)]
 pub enum CommentsKeyModes {
-    #[pyo3(name = "lowercase")]
     Comment,
-    #[pyo3(name = "lowercase")]
     Warn,
 }

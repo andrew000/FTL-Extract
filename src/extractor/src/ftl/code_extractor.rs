@@ -1,4 +1,6 @@
 use crate::ftl::matcher::{FluentKey, I18nMatcher};
+use crate::ftl::utils::ExtractionStatistics;
+use anyhow::{Result, bail};
 use fluent::types::AnyEq;
 use globwalk::GlobWalkerBuilder;
 use hashbrown::{HashMap, HashSet};
@@ -86,7 +88,7 @@ fn post_process_fluent_keys(fluent_keys: &mut HashMap<String, FluentKey>, defaul
 fn find_conflicts(
     current_fluent_keys: &HashMap<String, FluentKey>,
     new_fluent_keys: &HashMap<String, FluentKey>,
-) {
+) -> Result<()> {
     // Find common keys
     let conflict_keys = current_fluent_keys
         .keys()
@@ -94,30 +96,32 @@ fn find_conflicts(
         .collect::<HashSet<_>>();
 
     if conflict_keys.is_empty() {
-        return;
+        return Ok(());
     }
 
     for key in conflict_keys {
         if current_fluent_keys[key].path != new_fluent_keys[key].path {
-            panic!(
+            bail!(
                 "FluentKey conflict: {} in {} and {}",
                 key,
                 current_fluent_keys[key].path.display(),
                 new_fluent_keys[key].path.display()
-            );
+            )
         }
         if !current_fluent_keys[key]
             .message
             .equals(&new_fluent_keys[key].message)
         {
-            panic!(
+            bail!(
                 "FluentKey conflict: {} in {} and {}",
                 key,
                 current_fluent_keys[key].path.display(),
                 new_fluent_keys[key].path.display()
-            );
+            )
         }
     }
+
+    Ok(())
 }
 pub(crate) fn extract_fluent_keys<'a>(
     path: &'a Path,
@@ -127,7 +131,11 @@ pub(crate) fn extract_fluent_keys<'a>(
     ignore_attributes: HashSet<String>,
     ignore_kwargs: HashSet<String>,
     default_ftl_file: &'a Path,
+    statistics: &mut ExtractionStatistics,
 ) -> HashMap<String, FluentKey> {
+    let statistics_guard: Arc<RwLock<&mut ExtractionStatistics>> =
+        Arc::new(RwLock::new(statistics));
+
     let fluent_keys: Arc<RwLock<HashMap<String, FluentKey>>> =
         Arc::new(RwLock::new(HashMap::new()));
 
@@ -146,8 +154,14 @@ pub(crate) fn extract_fluent_keys<'a>(
             post_process_fluent_keys(&mut keys, default_ftl_file);
 
             let read_guard = fluent_keys.read().unwrap();
-            find_conflicts(&read_guard, &keys);
+            find_conflicts(&read_guard, &keys).unwrap();
             drop(read_guard);
+
+            let mut write_guard = statistics_guard.write().unwrap();
+            if !keys.is_empty() {
+                write_guard.py_files_count += 1;
+            }
+            drop(write_guard);
 
             let mut write_guard = fluent_keys.write().unwrap();
             write_guard.extend(keys);

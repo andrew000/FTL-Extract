@@ -171,4 +171,4 @@ def cli_extract(
         click.echo(f"  - FTL keys added: {statistics.ftl_keys_added}")
         click.echo(f"  - FTL keys commented: {statistics.ftl_keys_commented}")
 
-    click.echo(f"Done in {(perf_counter_ns() - start_time) * 1e-9:.3f}s.")
+    click.echo(f"[Python] Done in {(perf_counter_ns() - start_time) * 1e-9:.3f}s.")

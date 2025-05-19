@@ -9,7 +9,7 @@ use std::path::PathBuf;
 
 /// Fluent extractor CLI
 #[derive(Parser, Debug)]
-#[command(version, about, long_about = None)]
+#[command(name = "fast-ftl-extract", version, about)]
 struct Args {
     /// Path to the code directory
     #[arg()]
@@ -67,6 +67,10 @@ struct Args {
     #[arg(long, value_enum, default_value_t = CommentsKeyModes::Comment)]
     comment_keys_mode: CommentsKeyModes,
 
+    /// Verbose output
+    #[arg(short = 'v', long, default_value_t = false)]
+    verbose: bool,
+
     /// Dry run, do not write to files
     #[arg(long, default_value_t = false)]
     dry_run: bool,
@@ -75,15 +79,15 @@ struct Args {
 fn main() {
     let args = Args::parse();
 
-    // println!("Code path: {}", args.code_path.display());
-    // println!("Output path: {}", args.output_path.display());
-
-    // $ cargo run -- tests/files/bot tests/files/bot/locales -l en -K LF -K cls_i18n -p self -p cls -I core --ignore-kwargs when --comment-junks --default-ftl-file _default.ftl --comment-keys-mode warn --dry-run
-
     let start_time = std::time::Instant::now();
-    extraxt(
-        &args.code_path,
-        &args.output_path,
+    println!("Code path: {:?}", args.code_path.canonicalize().unwrap());
+    println!(
+        "Output path: {:?}",
+        args.output_path.canonicalize().unwrap()
+    );
+    let statistics = extraxt(
+        &args.code_path.canonicalize().unwrap(),
+        &args.output_path.canonicalize().unwrap(),
         args.language,
         HashSet::from_iter(args.i18n_keys),
         HashSet::from_iter(args.i18n_keys_append),
@@ -97,6 +101,28 @@ fn main() {
         &args.default_ftl_file,
         args.comment_keys_mode,
         args.dry_run,
-    );
-    println!("Extracted fluent keys in {:?}", start_time.elapsed());
+    )
+    .unwrap();
+
+    if args.verbose {
+        println!("Extraction statistics:");
+        println!("  - Py files count: {}", statistics.py_files_count);
+        println!("  - FTL files count: {:?}", statistics.ftl_files_count);
+        println!(
+            "  - FTL keys in code: {:?}",
+            statistics.ftl_in_code_keys_count
+        );
+        println!(
+            "  - FTL keys stored: {:?}",
+            statistics.ftl_stored_keys_count
+        );
+        println!("  - FTL keys updated: {:?}", statistics.ftl_keys_updated);
+        println!("  - FTL keys added: {:?}", statistics.ftl_keys_added);
+        println!(
+            "  - FTL keys commented: {:?}",
+            statistics.ftl_keys_commented
+        );
+    }
+
+    println!("[Rust] Done in {:?}", start_time.elapsed());
 }

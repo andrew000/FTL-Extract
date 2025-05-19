@@ -5,6 +5,8 @@ use crate::ftl::matcher::FluentKey;
 use crate::ftl::process::commentator::comment_ftl_key;
 use crate::ftl::process::kwargs_extractor::extract_kwargs;
 use crate::ftl::process::serializer::generate_ftl;
+use crate::ftl::utils::ExtractionStatistics;
+use anyhow::Result;
 use hashbrown::{HashMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -25,7 +27,24 @@ pub fn extraxt(
     default_ftl_file: &Path,        // = consts::DEFAULT_FTL_FILENAME
     comment_keys_mode: CommentsKeyModes, // = consts::CommentsKeyModes::Comment,
     dry_run: bool,                  // = false,
-) {
+) -> Result<ExtractionStatistics> {
+    let mut statistics = ExtractionStatistics::new();
+    statistics
+        .ftl_files_count
+        .extend(language.iter().map(|lang| (lang.clone(), 0)));
+    statistics
+        .ftl_stored_keys_count
+        .extend(language.iter().map(|lang| (lang.clone(), 0)));
+    statistics
+        .ftl_keys_updated
+        .extend(language.iter().map(|lang| (lang.clone(), 0)));
+    statistics
+        .ftl_keys_added
+        .extend(language.iter().map(|lang| (lang.clone(), 0)));
+    statistics
+        .ftl_keys_commented
+        .extend(language.iter().map(|lang| (lang.clone(), 0)));
+
     if !i18n_keys_append.is_empty() {
         i18n_keys.extend(i18n_keys_append);
     };
@@ -47,12 +66,14 @@ pub fn extraxt(
         ignore_attributes,
         ignore_kwargs,
         default_ftl_file,
+        &mut statistics,
     );
+    statistics.ftl_in_code_keys_count = in_code_fluent_keys.len();
 
     for lang in &language {
         // Import fluent keys and terms from existing FTL files
         let (mut stored_fluent_keys, mut stored_terms, mut leave_as_is) =
-            import_ftl_from_dir(output_path, lang);
+            import_ftl_from_dir(output_path, lang, &mut statistics);
         for fluent_key in stored_fluent_keys.values_mut() {
             fluent_key.path = fluent_key
                 .path
@@ -80,10 +101,13 @@ pub fn extraxt(
             {
                 keys_to_comment
                     .insert(key.clone(), stored_fluent_keys.remove(key).unwrap().clone());
+                *statistics.ftl_keys_commented.get_mut(lang).unwrap() += 1;
 
                 keys_to_add.insert(key.clone(), fluent_key.clone());
+                *statistics.ftl_keys_updated.get_mut(lang).unwrap() += 1;
             } else if !stored_fluent_keys.contains_key(key) {
                 keys_to_add.insert(key.clone(), fluent_key.clone());
+                *statistics.ftl_keys_added.get_mut(lang).unwrap() += 1;
             } else {
                 stored_fluent_keys.get_mut(key).unwrap().code_path = fluent_key.code_path.clone();
             }
@@ -117,10 +141,11 @@ pub fn extraxt(
             );
 
             if fluent_key_placeable_set != stored_fluent_key_placeable_set {
-                keys_to_comment.insert(key.clone(), stored_fluent_keys.get(key).unwrap().clone());
-                stored_fluent_keys.remove(key);
+                keys_to_comment.insert(key.clone(), stored_fluent_keys.remove(key).unwrap());
+                *statistics.ftl_keys_commented.get_mut(lang).unwrap() += 1;
 
                 keys_to_add.insert(key.clone(), fluent_key.clone());
+                *statistics.ftl_keys_updated.get_mut(lang).unwrap() += 1;
             }
         }
 
@@ -135,8 +160,8 @@ pub fn extraxt(
                 continue;
             };
 
-            keys_to_comment.insert(key.clone(), stored_fluent_keys.get(&key).unwrap().clone());
-            stored_fluent_keys.remove(&key);
+            keys_to_comment.insert(key.clone(), stored_fluent_keys.remove(&key).unwrap());
+            *statistics.ftl_keys_commented.get_mut(lang).unwrap() += 1;
         }
 
         match comment_keys_mode {
@@ -164,6 +189,7 @@ pub fn extraxt(
             for fluent_key in &mut leave_as_is {
                 if fluent_key.junk.is_some() {
                     comment_ftl_key(fluent_key);
+                    *statistics.ftl_keys_commented.get_mut(lang).unwrap() += 1;
                 }
             }
         }
@@ -213,8 +239,17 @@ pub fn extraxt(
                     keys.len()
                 );
             }
+
+            // statistics.ftl_stored_keys_count[lang] += len(
+            //     [key for key in keys if isinstance(key.translation, fl_ast.Message)],
+            // )
+
+            *statistics.ftl_stored_keys_count.get_mut(lang).unwrap() +=
+                keys.iter().filter(|key| key.message.is_some()).count();
         }
     }
+
+    Ok(statistics)
 }
 
 fn write(path: PathBuf, ftl: String) {

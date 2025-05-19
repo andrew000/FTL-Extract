@@ -12,10 +12,8 @@ jobs:
     strategy:
       fail-fast: true
       matrix:
-        # python-version: [ "3.9", "3.10", "3.11", "3.12", "3.13" ]
-        python-version: [ "3.13" ]
-        # os: [ "ubuntu-latest", "macos-latest", "windows-latest" ]
-        os: [ "windows-latest" ]
+        python-version: [ "3.9", "3.10", "3.11", "3.12", "3.13" ]
+        os: [ "ubuntu-latest", "macos-latest", "windows-latest" ]
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -40,14 +38,18 @@ jobs:
         run: make test
 
       - name: Build the package
-        run: uv build --wheel --sdist
+        if: matrix.python-version == '3.13'
+        run: uv build --wheel
 
       - name: Verify wheel installation
+        if: matrix.python-version == '3.13'
         run: |
           uv run --verbose --with ftl_extract --no-project --refresh-package ftl_extract -- python -c "import ftl_extract; print(ftl_extract.__version__)"
+          uv run --verbose --with ftl_extract --no-project --refresh-package ftl_extract -- ftl-extract --version
           uv run --verbose --with ftl_extract --no-project --refresh-package ftl_extract -- fast-ftl-extract --version
 
       - name: Store artifacts
+        if: matrix.python-version == '3.13'
         uses: actions/upload-artifact@v4
         with:
           name: ftl_extract-${{ matrix.os }}-${{ matrix.python-version }}

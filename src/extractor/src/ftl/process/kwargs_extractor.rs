@@ -1,6 +1,7 @@
 #![allow(unused_variables)]
 
 use crate::ftl::matcher::FluentKey;
+use anyhow::{Result, bail};
 use fluent_syntax::ast::{CallArguments, Identifier};
 use hashbrown::{HashMap, HashSet};
 
@@ -58,6 +59,7 @@ fn extract_kwargs_from_placeable(
                     all_fluent_keys,
                     depend_keys,
                 )
+                .unwrap()
             } else if let fluent_syntax::ast::InlineExpression::TermReference {
                 id,
                 attribute,
@@ -73,6 +75,7 @@ fn extract_kwargs_from_placeable(
                     terms,
                     all_fluent_keys,
                 )
+                .unwrap()
             }
         } else if let fluent_syntax::ast::Expression::Select { selector, variants } = expression {
             extract_kwargs_from_selector_expression(
@@ -103,17 +106,17 @@ fn extract_kwargs_from_message_reference(
     terms: &mut HashMap<String, FluentKey>,
     all_fluent_keys: &mut HashMap<String, FluentKey>,
     depend_keys: &mut HashSet<String>,
-) {
-    let mut reference_key = all_fluent_keys
-        .get(&id.name)
-        .unwrap_or_else(|| {
-            panic!(
+) -> Result<()> {
+    let mut reference_key = match all_fluent_keys.get(&id.name) {
+        Some(key) => key.clone(),
+        None => {
+            bail!(
                 "Can't find reference key {} in {}",
                 id.name,
                 key.path.display()
             )
-        })
-        .clone();
+        }
+    };
 
     kwargs.extend(extract_kwargs(
         &mut reference_key,
@@ -121,6 +124,8 @@ fn extract_kwargs_from_message_reference(
         all_fluent_keys,
         depend_keys,
     ));
+
+    Ok(())
 }
 
 fn extract_kwargs_from_term_reference(
@@ -131,24 +136,26 @@ fn extract_kwargs_from_term_reference(
     kwargs: &mut HashSet<String>,
     terms: &mut HashMap<String, FluentKey>,
     all_fluent_keys: &mut HashMap<String, FluentKey>,
-) {
-    let mut term = terms
-        .get(&id.name)
-        .unwrap_or_else(|| {
-            panic!(
+) -> Result<()> {
+    let mut term = match terms.get(&id.name) {
+        Some(term) => term.clone(),
+        None => {
+            bail!(
                 "Can't find reference key {} in {}",
                 id.name,
                 key.path.display()
             )
-        })
-        .clone();
+        }
+    };
 
     kwargs.extend(extract_kwargs(
         &mut term,
         terms,
         all_fluent_keys,
         &mut HashSet::new(),
-    ))
+    ));
+
+    Ok(())
 }
 
 fn extract_kwargs_from_selector_expression(

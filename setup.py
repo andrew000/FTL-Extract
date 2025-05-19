@@ -8,6 +8,7 @@ setup(
             "fast-ftl-extract",
             path="src/cli/Cargo.toml",
             strip=Strip.All,
+            debug=False,
         )
     ],
 )

@@ -5,33 +5,55 @@ on:
     branches: [ "master", "dev" ]
   pull_request:
     branches: [ "master", "dev" ]
-  issue_comment:
-    types: [ "created" ]
-  workflow_dispatch:
 
 jobs:
-  check_pull_request_comment:
-    # Check if comment contains "/ci" to run CI
-    runs-on: ubuntu-latest
-    steps:
-      - name: Check for /ci comment
-        id: check_comment
-        shell: bash
-        run: |
-          if [[ "${{ github.event.comment.body == '/ci' }}" ]]; then
-            echo "run-ci=true" >> $GITHUB_OUTPUT
-          else
-            echo "run-ci=false" >> $GITHUB_OUTPUT
-          fi
-
   ci:
-    needs: check_pull_request_comment
-    if: needs.check_pull_request_comment.outputs.run-ci == 'true'
     runs-on: ${{ matrix.os }}
+    env:
+      BUILD_RUST_IMPL: "0"
     strategy:
       fail-fast: true
       matrix:
-        # python-version: [ "3.9", "3.10", "3.11", "3.12", "3.13" ]
+        python-version: [ "3.9", "3.10", "3.11", "3.12", "3.13" ]
+        os: [ "ubuntu-latest", "macos-latest", "windows-latest" ]
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          version: "latest"
+          enable-cache: true
+
+      - name: Install the project
+        run: uv sync --extra dev --extra tests --verbose
+
+      - name: Minimize uv cache
+        run: uv cache prune --ci
+
+      - name: Lint
+        run: make lint
+
+      - name: Test
+        run: make test
+
+      - name: Build the package
+        run: uv build --wheel
+
+      - name: Verify wheel installation
+        run: |
+          uv run --verbose --with ftl_extract --no-project --refresh-package ftl_extract -- python -c "import ftl_extract; print(ftl_extract.__version__)"
+          uv run --verbose --with ftl_extract --no-project --refresh-package ftl_extract -- ftl-extract --version
+
+  extension:
+    runs-on: ${{ matrix.os }}
+    env:
+      BUILD_RUST_IMPL: "1"
+    strategy:
+      fail-fast: true
+      matrix:
         python-version: [ "3.13" ]
         os: [ "ubuntu-latest", "macos-latest", "windows-latest" ]
     steps:
@@ -57,29 +79,25 @@ jobs:
       - name: Minimize uv cache
         run: uv cache prune --ci
 
-      - name: Lint
-        run: make lint
-
-      - name: Test with pytest
-        run: make test
-
       - name: Build the package
-        if: matrix.python-version == '3.13'
-        run: uv build --wheel
+        run: uv run cibuildwheel --output-dir wheelhouse
+
+      - name: Fix wheel python and ABI tags
+        run: |
+          for wheel in wheelhouse/*.whl; do
+            uv run wheel tags --python-tag py3 --abi-tag none --remove wheelhouse/$wheel
+          done
 
       - name: Verify wheel installation
-        if: matrix.python-version == '3.13'
         run: |
-          uv run --verbose --with ftl_extract --no-project --refresh-package ftl_extract -- python -c "import ftl_extract; print(ftl_extract.__version__)"
-          uv run --verbose --with ftl_extract --no-project --refresh-package ftl_extract -- ftl-extract --version
-          uv run --verbose --with ftl_extract --no-project --refresh-package ftl_extract -- fast-ftl-extract --version
+          for wheel in wheelhouse/*.whl; do
+            uv run --verbose --with $wheel --no-project -- fast-ftl-extract --version
+          done
 
       - name: Store artifacts
-        if: matrix.python-version == '3.13'
         uses: actions/upload-artifact@v4
         with:
           name: ftl_extract-${{ matrix.os }}-${{ matrix.python-version }}
           if-no-files-found: error
           path: |
             dist/*.whl
-            dist/*.tar.gz

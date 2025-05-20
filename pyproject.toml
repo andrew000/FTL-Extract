@@ -67,12 +67,6 @@ package = true
 requires = ["setuptools", "setuptools-rust"]
 build-backend = "setuptools.build_meta"
 
-[tool.cibuildwheel]
-archs = ["auto64"]
-build = ["cp313-*"]
-skip = "pp*"
-build-verbosity = 1
-
 [tool.pytest.ini_options]
 testpaths = "tests"
 

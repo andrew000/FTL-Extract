@@ -1,13 +1,32 @@
-name: Python package Lint+Test
+name: Python package Lint+Test+Build
 
 on:
   push:
     branches: [ "master", "dev" ]
   pull_request:
     branches: [ "master", "dev" ]
+  issue_comment:
+    types: [ "created" ]
+  workflow_dispatch:
 
 jobs:
+  check_pull_request_comment:
+    # Check if comment contains "/ci" to run CI
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check for /ci comment
+        id: check_comment
+        shell: bash
+        run: |
+          if [[ "${{ github.event.comment.body == '/ci' }}" ]]; then
+            echo "run-ci=true" >> $GITHUB_OUTPUT
+          else
+            echo "run-ci=false" >> $GITHUB_OUTPUT
+          fi
+
   ci:
+    needs: check_pull_request_comment
+    if: needs.check_pull_request_comment.outputs.run-ci == 'true'
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: true

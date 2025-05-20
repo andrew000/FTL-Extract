@@ -25,14 +25,16 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = [
+    "cibuildwheel==2.23.3",
     "fluent-runtime==0.4.0",
     "isort==6.0.1",
+    "mypy==1.15.0",
     "pre-commit==4.2.0",
     "ruff==0.11.10",
-    "mypy==1.15.0",
-    "setuptools==80.7.1",
     "setuptools-rust==1.11.1",
+    "setuptools==80.7.1",
     "typing-extensions==4.13.2",
+    "wheel==0.45.1",
 ]
 tests = [
     "pytest==8.3.5",
@@ -64,6 +66,12 @@ package = true
 [build-system]
 requires = ["setuptools", "setuptools-rust"]
 build-backend = "setuptools.build_meta"
+
+[tool.cibuildwheel]
+archs = ["auto64"]
+build = ["cp313-*"]
+skip = "pp*"
+build-verbosity = 1
 
 [tool.pytest.ini_options]
 testpaths = "tests"

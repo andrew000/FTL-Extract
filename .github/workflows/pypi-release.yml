@@ -12,7 +12,7 @@ jobs:
       fail-fast: true
       matrix:
         # macos-13 is an intel runner, macos-14 is apple silicon
-        os: [ ubuntu-latest, windows-latest, macos-13, macos-14 ]
+        os: [ ubuntu-latest, ubuntu-24.04-arm, windows-latest, macos-13, macos-14 ]
     steps:
       - uses: actions/checkout@v4
 
@@ -22,13 +22,6 @@ jobs:
         if: runner.os == 'Windows' || runner.os == 'macOS'
         shell: bash
         run: echo "BUILD_RUST_IMPL=1" >> $GITHUB_ENV
-
-      # For Linux, we need to set up QEMU to build the extension for multiple architectures
-      - name: Set up QEMU
-        if: runner.os == 'Linux' && runner.arch == 'X64'
-        uses: docker/setup-qemu-action@v3
-        with:
-          platforms: all
 
       - name: Install uv
         uses: astral-sh/setup-uv@v5
@@ -48,9 +41,28 @@ jobs:
         run: uv cache prune --ci
 
       - name: Build and fix wheels
+        if: runner.os == 'Windows' || runner.os == 'macOS'
         shell: bash
         run: |
           uv run cibuildwheel --config-file pyproject.toml --output-dir wheelhouse
+          for wheel in wheelhouse/*.whl; do
+            uv run wheel tags --python-tag py3 --abi-tag none --remove $wheel
+          done
+
+      - name: Build and fix wheels (Linux x86_64)
+        if: matrix.os == 'ubuntu-latest'
+        shell: bash
+        run: |
+          uv run cibuildwheel --config-file pyproject.toml --archs x86_64 --output-dir wheelhouse
+          for wheel in wheelhouse/*.whl; do
+            uv run wheel tags --python-tag py3 --abi-tag none --remove $wheel
+          done
+
+      - name: Build and fix wheels (Linux aarch64)
+        if: matrix.os == 'ubuntu-24.04-arm'
+        shell: bash
+        run: |
+          uv run cibuildwheel --config-file pyproject.toml --archs aarch64 --output-dir wheelhouse
           for wheel in wheelhouse/*.whl; do
             uv run wheel tags --python-tag py3 --abi-tag none --remove $wheel
           done
@@ -60,6 +72,8 @@ jobs:
         shell: bash
         run: |
           for wheel in wheelhouse/*.whl; do
+            uv run --verbose --with $wheel --no-project --refresh-package ftl_extract -- python -c "import ftl_extract; print(ftl_extract.__version__)"
+            uv run --verbose --with $wheel --no-project --refresh-package ftl_extract -- ftl-extract --version
             uv run --verbose --with $wheel --no-project --refresh-package ftl_extract -- fast-ftl-extract --version
           done
 

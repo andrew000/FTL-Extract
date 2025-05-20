@@ -8,10 +8,16 @@ readme = "README.md"
 license = "MIT"
 requires-python = ">=3.9"
 classifiers = [
-    "Programming Language :: Rust",
     "Programming Language :: Python :: Implementation :: CPython",
-    "Programming Language :: Python :: Implementation :: PyPy",
+    "Programming Language :: Rust",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
 ]
+
 dependencies = [
     "fluent-syntax>=0.19",
     "click==8.*",
@@ -22,11 +28,11 @@ dev = [
     "fluent-runtime==0.4.0",
     "isort==6.0.1",
     "pre-commit==4.2.0",
-    "ruff==0.11.9",
+    "ruff==0.11.10",
     "mypy==1.15.0",
     "setuptools==80.7.1",
     "setuptools-rust==1.11.1",
-    "typing-extensions==4.12.2",
+    "typing-extensions==4.13.2",
 ]
 tests = [
     "pytest==8.3.5",

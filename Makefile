@@ -51,7 +51,7 @@ outdated:
 
 .PHONY: sync
 sync:
-	uv sync --reinstall-package ftl_extract --extra dev --extra tests --extra docs
+	uv sync --reinstall-package ftl_extract --extra dev --extra tests
 
 .PHONY: build
 build:

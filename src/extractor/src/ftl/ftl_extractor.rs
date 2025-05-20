@@ -240,10 +240,6 @@ pub fn extraxt(
                 );
             }
 
-            // statistics.ftl_stored_keys_count[lang] += len(
-            //     [key for key in keys if isinstance(key.translation, fl_ast.Message)],
-            // )
-
             *statistics.ftl_stored_keys_count.get_mut(lang).unwrap() +=
                 keys.iter().filter(|key| key.message.is_some()).count();
         }

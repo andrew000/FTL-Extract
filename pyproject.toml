@@ -67,6 +67,17 @@ package = true
 requires = ["setuptools", "setuptools-rust"]
 build-backend = "setuptools.build_meta"
 
+[tool.cibuildwheel]
+build = "cp313-*"
+archs = ["auto64"]
+build-frontend = "build[uv]"
+build-verbosity = 1
+
+[tool.cibuildwheel.linux]
+before-all = "curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal"
+before-build = "cargo build --release"
+environment = { PATH = "$HOME/.cargo/bin:$PATH", BUILD_RUST_IMPL = 1 }
+
 [tool.pytest.ini_options]
 testpaths = "tests"
 

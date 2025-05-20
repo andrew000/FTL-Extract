@@ -6,6 +6,7 @@ use extractor::ftl::consts::{
 use extractor::ftl::ftl_extractor::extraxt;
 use hashbrown::HashSet;
 use std::path::PathBuf;
+use std::process::exit;
 
 /// Fluent extractor CLI
 #[derive(Parser, Debug)]
@@ -85,6 +86,7 @@ fn main() {
         "Output path: {:?}",
         args.output_path.canonicalize().unwrap()
     );
+    exit(0);
     let statistics = extraxt(
         &args.code_path.canonicalize().unwrap(),
         &args.output_path.canonicalize().unwrap(),

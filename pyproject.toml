@@ -74,7 +74,6 @@ build-frontend = "build[uv]"
 build-verbosity = 1
 
 [tool.cibuildwheel.linux]
-archs = ["x86_64", "aarch64"]
 before-all = "curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal"
 before-build = "cargo build --release"
 environment = { PATH = "$HOME/.cargo/bin:$PATH", BUILD_RUST_IMPL = 1 }

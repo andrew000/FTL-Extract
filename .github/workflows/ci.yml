@@ -7,47 +7,68 @@ on:
     branches: [ "master", "dev" ]
 
 jobs:
-#  ci:
-#    runs-on: ${{ matrix.os }}
-#    env:
-#      BUILD_RUST_IMPL: "0"
-#    strategy:
-#      fail-fast: true
-#      matrix:
-#        python-version: [ "3.9", "3.10", "3.11", "3.12", "3.13" ]
-#        os: [ "ubuntu-latest", "macos-latest", "windows-latest" ]
-#    steps:
-#      - name: Checkout repository
-#        uses: actions/checkout@v4
-#
-#      - name: Install uv
-#        uses: astral-sh/setup-uv@v5
-#        with:
-#          python-version: ${{ matrix.python-version }}
-#          version: "latest"
-#          enable-cache: true
-#
-#      - name: Install the project
-#        run: uv sync --extra dev --extra tests --verbose
-#
-#      - name: Minimize uv cache
-#        run: uv cache prune --ci
-#
-#      - name: Lint
-#        run: make lint
-#
-#      - name: Test
-#        run: make test
-#
-#      - name: Build the package
-#        run: uv build --wheel
-#
-#      - name: Verify wheel installation
-#        run: |
-#          uv run --verbose --with ftl_extract --no-project --refresh-package ftl_extract -- python -c "import ftl_extract; print(ftl_extract.__version__)"
-#          uv run --verbose --with ftl_extract --no-project --refresh-package ftl_extract -- ftl-extract --version
+  ci:
+    runs-on: ${{ matrix.os }}
+    env:
+      BUILD_RUST_IMPL: "0"
+    strategy:
+      fail-fast: true
+      matrix:
+        python-version: [ "3.9", "3.10", "3.11", "3.12", "3.13" ]
+        os: [ ubuntu-latest, windows-latest, macos-13, macos-14 ]
+    steps:
+      - uses: actions/checkout@v4
 
-  extension:
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          version: "latest"
+          enable-cache: true
+
+      - name: Rust cache
+        uses: Swatinem/rust-cache@v2
+
+      - name: Prepare the project
+        run: uv sync --extra dev --extra tests --verbose
+
+      - name: Minimize uv cache
+        run: uv cache prune --ci
+
+      - name: Lint
+        run: make lint
+
+      - name: Test
+        run: make test
+
+      - name: Build the package (Windows and macOS)
+        if: runner.os == 'Windows' || runner.os == 'macOS'
+        run: uv build --wheel
+
+      - name: Build the package (Linux)
+        if: runner.os == 'Linux' && matrix.python-version == '3.13'
+        env:
+          BUILD_RUST_IMPL: "1"
+        run: uv build --wheel
+
+      - name: Verify wheel installation (Windows and macOS)
+        if: runner.os == 'Windows' || runner.os == 'macOS'
+        run: |
+          uv run --verbose --with ftl_extract --no-project --refresh-package ftl_extract -- python -c "import ftl_extract; print(ftl_extract.__version__)"
+          uv run --verbose --with ftl_extract --no-project --refresh-package ftl_extract -- ftl-extract --version
+
+      - name: Verify wheel installation (Linux)
+        if: runner.os == 'Linux' && matrix.python-version == '3.13'
+        env:
+          BUILD_RUST_IMPL: "1"
+        run: |
+          uv run --verbose --with ftl_extract --no-project --refresh-package ftl_extract -- python -c "import ftl_extract; print(ftl_extract.__version__)"
+          uv run --verbose --with ftl_extract --no-project --refresh-package ftl_extract -- ftl-extract --version
+          uv run --verbose --with ftl_extract --no-project --refresh-package ftl_extract -- fast-ftl-extract --version
+
+  extension-build:
+    # Wait for the `ci` job to finish to save resources and money if `ci` can't compile the extension 🤷‍♂️
+    needs: ci
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: true
@@ -57,11 +78,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Set up the environment for the extension build on macOS and Windows
+      # This OS doesn't compile the extension for `{many,musl}linux` distributions in containers
       - name: Set up 'BUILD_RUST_IMPL' environment variable
         if: runner.os == 'Windows' || runner.os == 'macOS'
         shell: bash
         run: echo "BUILD_RUST_IMPL=1" >> $GITHUB_ENV
 
+      # For Linux, we need to set up QEMU to build the extension for multiple architectures
       - name: Set up QEMU
         if: runner.os == 'Linux' && runner.arch == 'X64'
         uses: docker/setup-qemu-action@v3
@@ -78,7 +102,7 @@ jobs:
       - name: Rust cache
         uses: Swatinem/rust-cache@v2
 
-      - name: Install the project
+      - name: Prepare the project
         shell: bash
         run: uv sync --extra dev --extra tests --verbose
 
@@ -98,13 +122,12 @@ jobs:
         shell: bash
         run: |
           for wheel in wheelhouse/*.whl; do
-            uv run --verbose --with $wheel --no-project -- fast-ftl-extract --version
+            uv run --verbose --with $wheel --no-project --refresh-package ftl_extract -- fast-ftl-extract --version
           done
 
-      - name: Store artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: ftl_extract-${{ matrix.os }}-${{ github.run_id }}
-          if-no-files-found: error
-          path: |
-            wheelhouse/*.whl
+      # - name: Store artifacts
+      #   uses: actions/upload-artifact@v4
+      #   with:
+      #     name: ftl_extract-${{ matrix.os }}-${{ github.run_id }}
+      #     if-no-files-found: error
+      #     path: wheelhouse/*.whl

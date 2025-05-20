@@ -2,7 +2,14 @@
 
 ## Description
 
-FTL-Extract is a Python package that extracts Fluent keys from .py files and generates a .ftl file with extracted keys.
+**FTL-Extract** is a Python package that extracts Fluent keys from `.py` files and generates `.ftl` file with extracted
+keys.
+
+***
+
+🔥 Try `fast-ftl-extract` command.
+
+It's Rust version of `ftl-extract` command, that is 10-20 times faster than Python version.
 
 ***
 
@@ -57,7 +64,7 @@ i18n.some.key_1(arg1="value1", arg2="value2", _path="dir/ftl_file.ftl")
 
 ***
 
-## 💁‍♂️ Explanation of the `ftl-extractor` command
+## 💁‍♂️ Explanation of the `ftl-extract` command
 
 ```shell
 $ ftl_extract project_path/code_path project_path/locales
@@ -72,16 +79,18 @@ $ ftl_extract project_path/code_path project_path/locales
 - `-k` or `--i18n-keys` - add additional i18n keys to the extractor.
 - `-K` or `--i18n-keys-append` - add additional i18n keys to the extractor and append them to the default list.
 - `-p` or `--i18n-keys-prefix` - add a prefix to the i18n keys. For example, `self.i18n.<key>()`.
+- `-e` or `--exclude-dirs` - exclude specific directories from the extraction process.
+- `-E` or `--exclude-dirs-append` - add more directories to exclude from the extraction process.
 - `-i` or `--ignore-attributes` - ignore specific attributes of the `i18n.*` like `i18n.set_locale`.
-- `-a` or `--append-ignore-attributes` - add more attributes to ignore to the default list.
+- `-I` or `--append-ignore-attributes` - add more attributes to ignore to the default list.
 - `--ignore-kwargs` - ignore specific kwargs of the i18n_keys like `when=...` in
   `aiogram_dialog.I18nFormat(..., when=...)`.
 - `--comment-junks` - comments errored translations in the `.ftl` file.
 - `--default-ftl-file` - specify the default `.ftl` file name.
 - `--comment-keys-mode` - specify the comment keys mode. It will comment keys that are not used in the code or print
   warnings about them. Available modes: `comment`, `warn`.
-- `--dry-run` - run the command without making any changes to the files.
 - `-v` or `--verbose` - print additional information about the process.
+- `--dry-run` - run the command without making any changes to the files.
 
 ***
 
@@ -107,8 +116,8 @@ $ ftl_extract project_path/code_path project_path/locales -k i18n -k LF -k LazyP
 
 ```shell
 $ ftl_extract \
-  './app/bot' \
-  './app/bot/locales' \
+  'app/bot' \
+  'app/bot/locales' \
   -l 'en' \
   -l 'uk' \
   -K 'LF' \
@@ -120,6 +129,7 @@ $ ftl_extract \
   --verbose
 ```
 
+#### But now I move my projects to `fast-ftl-extract` command.
 ***
 
 ## Contributing

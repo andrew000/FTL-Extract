@@ -19,6 +19,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Set up the environment for the extension build on macOS and Windows
+      # This OS doesn't compile the extension for `{many,musl}linux` distributions in containers
+      - name: Set up 'BUILD_RUST_IMPL' environment variable
+        if: runner.os == 'Linux'
+        shell: bash
+        run: echo "BUILD_RUST_IMPL=1" >> $GITHUB_ENV
+
       - name: Install uv
         uses: astral-sh/setup-uv@v5
         with:
@@ -30,41 +37,49 @@ jobs:
         uses: Swatinem/rust-cache@v2
 
       - name: Prepare the project
+        shell: bash
         run: uv sync --extra dev --extra tests --verbose
 
       - name: Minimize uv cache
+        shell: bash
         run: uv cache prune --ci
 
       - name: Lint
+        shell: bash
         run: make lint
 
       - name: Test
+        shell: bash
         run: make test
 
       - name: Build the package (Windows and macOS)
         if: runner.os == 'Windows' || runner.os == 'macOS'
+        shell: bash
         run: uv build --wheel
 
       - name: Build the package (Linux)
         if: runner.os == 'Linux' && matrix.python-version == '3.13'
-        env:
-          BUILD_RUST_IMPL: "1"
+        shell: bash
         run: uv build --wheel
 
       - name: Verify wheel installation (Windows and macOS)
         if: runner.os == 'Windows' || runner.os == 'macOS'
+        shell: bash
         run: |
-          uv run --verbose --with ftl_extract --no-project --refresh-package ftl_extract -- python -c "import ftl_extract; print(ftl_extract.__version__)"
-          uv run --verbose --with ftl_extract --no-project --refresh-package ftl_extract -- ftl-extract --version
+          for wheel in dist/*.whl; do
+            uv run --verbose --with $wheel --no-project --refresh-package ftl_extract -- python -c "import ftl_extract; print(ftl_extract.__version__)"
+            uv run --verbose --with $wheel --no-project --refresh-package ftl_extract -- ftl-extract --version
+          done
 
       - name: Verify wheel installation (Linux)
         if: runner.os == 'Linux' && matrix.python-version == '3.13'
-        env:
-          BUILD_RUST_IMPL: "1"
+        shell: bash
         run: |
-          uv run --verbose --with ftl_extract --no-project --refresh-package ftl_extract -- python -c "import ftl_extract; print(ftl_extract.__version__)"
-          uv run --verbose --with ftl_extract --no-project --refresh-package ftl_extract -- ftl-extract --version
-          uv run --verbose --with ftl_extract --no-project --refresh-package ftl_extract -- fast-ftl-extract --version
+          for wheel in dist/*.whl; do
+            uv run --verbose --with $wheel --no-project --refresh-package ftl_extract -- python -c "import ftl_extract; print(ftl_extract.__version__)"
+            uv run --verbose --with $wheel --no-project --refresh-package ftl_extract -- ftl-extract --version
+            uv run --verbose --with $wheel --no-project --refresh-package ftl_extract -- fast-ftl-extract --version
+          done
 
   extension-build:
     # Wait for the `ci` job to finish to save resources and money if `ci` can't compile the extension 🤷‍♂️

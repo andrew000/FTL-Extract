@@ -15,9 +15,15 @@ from ftl_extract.const import (
     DEFAULT_IGNORE_KWARGS,
 )
 from ftl_extract.ftl_extractor import extract
+from ftl_extract.stub.generator import generate_stubs
 
 
-@click.command()
+@click.group("ftl")
+@click.version_option()
+def ftl() -> None: ...
+
+
+@ftl.command("extract")
 @click.argument("code_path", type=click.Path(exists=True, path_type=Path))
 @click.argument("output_path", type=click.Path(path_type=Path))
 @click.option(
@@ -121,7 +127,6 @@ from ftl_extract.ftl_extractor import extract
     show_default=True,
     help="Verbose output.",
 )
-@click.version_option()
 def cli_extract(
     code_path: Path,
     output_path: Path,
@@ -172,3 +177,10 @@ def cli_extract(
         click.echo(f"  - FTL keys commented: {statistics.ftl_keys_commented}")
 
     click.echo(f"[Python] Done in {(perf_counter_ns() - start_time) * 1e-9:.3f}s.")
+
+
+@ftl.command("stub")
+@click.argument("locale_path", type=click.Path(exists=True, path_type=Path))
+@click.argument("output_path", type=click.Path(path_type=Path))
+def cli_stub(locale_path: Path, output_path: Path) -> None:
+    generate_stubs(locale_path, output_path)

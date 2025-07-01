@@ -1,14 +1,4 @@
-from typing import Any
-
-
-# Stub
-class I18nContext:
-    def get(self, *_, **__) -> None: ...
-
-    def __getattr__(self, item: str) -> Any: ...
-
-    def __call__(self, *_, **__) -> None: ...
-
+from .stub import I18nContext
 
 i18n = I18nContext()
 

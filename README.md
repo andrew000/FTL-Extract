@@ -9,7 +9,7 @@ keys.
 
 🔥 Try `fast-ftl-extract` command.
 
-It's Rust version of `ftl-extract` command, that is 10-20 times faster than Python version.
+It's Rust version of `ftl extract` command, that is 10-20 times faster than Python version.
 
 ***
 
@@ -40,7 +40,7 @@ $ mkdir project_path/locales
 Then, you can use the following command to extract keys from your code.
 
 ```shell
-$ ftl_extract project_path/code_path project_path/locales
+$ ftl extract project_path/code_path project_path/locales
 ```
 
 By default, FTL-Extract will create a directory named `en` and put all keys into `_default.ftl` file.
@@ -64,10 +64,10 @@ i18n.some.key_1(arg1="value1", arg2="value2", _path="dir/ftl_file.ftl")
 
 ***
 
-## 💁‍♂️ Explanation of the `ftl-extract` command
+## 💁‍♂️ Explanation of the `ftl extract` command
 
 ```shell
-$ ftl_extract project_path/code_path project_path/locales
+$ ftl extract project_path/code_path project_path/locales
 ```
 
 - `project_path/code_path` - path to the project directory where the code is located.
@@ -94,20 +94,30 @@ $ ftl_extract project_path/code_path project_path/locales
 
 ***
 
+## 💁‍♂️ Explanation of the `ftl stub` command
+
+```shell
+$ ftl stub 'project_path/locales/<locale>' 'project_path/code_path'
+```
+
+- `project_path/locales/<locale>` - path to the locales directory where the `<locale>` directory (e.g. `en`) contains `.ftl` files located.
+- `project_path/code_path` - path to the directory where the `stub.pyi` will be located.
+
+
 ## FAQ
 
 #### ❓ - How to add more languages to the project ?
 
 ```shell
 # Here we add 3 languages: English, Ukrainian and Polish
-$ ftl_extract project_path/code_path project_path/locales -l en -l uk -l pl
+$ ftl extract project_path/code_path project_path/locales -l en -l uk -l pl
 ```
 
 #### ❓ - How to detect another i18n keys like `LazyProxy` or `L` ?
 
 ```shell
-# Here we extract ftl keys from i18n-keys like `i18n`, `LF`, `LazyProxy` and `L`
-$ ftl_extract project_path/code_path project_path/locales -k i18n -k LF -k LazyProxy -k L
+# Here we extract ftl keys from i18n-keys like `LF`, `LazyProxy` and `L`
+$ ftl extract project_path/code_path project_path/locales -K LF -K LazyProxy -K L
 ```
 
 ***
@@ -115,21 +125,20 @@ $ ftl_extract project_path/code_path project_path/locales -k i18n -k LF -k LazyP
 ## How I use FTL-Extract in most of my projects
 
 ```shell
-$ ftl_extract \
+$ fast-ftl-extract \
   'app/bot' \
   'app/bot/locales' \
   -l 'en' \
   -l 'uk' \
   -K 'LF' \
   -I 'core' \
-  -E './tests' \
+  -E './tests/*' \
   --ignore-kwargs 'when' \
   --comment-junks \
   --comment-keys-mode 'comment' \
   --verbose
 ```
 
-#### But now I move my projects to `fast-ftl-extract` command.
 ***
 
 ## Contributing

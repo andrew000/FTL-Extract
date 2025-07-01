@@ -44,11 +44,11 @@ tests = [
     "coverage==7.9.1",
 ]
 docs = [
-    # "sphinx==7.4.7",
-    # "sphinx-rtd-theme==3.0.2",
-    # "sphinx-autobuild==2024.10.3",
-    # "furo==2024.8.6",
-    # "pytz==2025.2",
+    "sphinx==7.4.7",
+    "sphinx-rtd-theme==3.0.2",
+    "sphinx-autobuild==2024.10.3",
+    "furo==2024.8.6",
+    "pytz==2025.2",
 ]
 
 [project.urls]

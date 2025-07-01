@@ -7,14 +7,19 @@ use hashbrown::{HashMap, HashSet};
 use ruff_python_ast::visitor::source_order::SourceOrderVisitor;
 use std::path::PathBuf;
 
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) enum FluentEntry {
+    Message(fluent_syntax::ast::Message<String>),
+    Term(fluent_syntax::ast::Term<String>),
+    Comment(fluent_syntax::ast::Comment<String>),
+    Junk(String),
+}
+
 #[derive(Clone, Debug)]
 pub(crate) struct FluentKey {
     pub(crate) code_path: PathBuf,
     pub(crate) key: String,
-    pub(crate) message: Option<fluent_syntax::ast::Message<String>>,
-    pub(crate) term: Option<fluent_syntax::ast::Term<String>>,
-    pub(crate) comment: Option<fluent_syntax::ast::Comment<String>>,
-    pub(crate) junk: Option<String>,
+    pub(crate) entry: FluentEntry,
     pub(crate) path: PathBuf,
     pub(crate) locale: Option<String>,
     pub(crate) position: usize,
@@ -25,10 +30,7 @@ impl FluentKey {
     pub(crate) fn new(
         code_path: PathBuf,
         key: String,
-        message: Option<fluent_syntax::ast::Message<String>>,
-        term: Option<fluent_syntax::ast::Term<String>>,
-        comment: Option<fluent_syntax::ast::Comment<String>>,
-        junk: Option<String>,
+        entry: FluentEntry,
         path: PathBuf,
         locale: Option<String>,
         position: Option<usize>,
@@ -37,10 +39,7 @@ impl FluentKey {
         Self {
             code_path,
             key,
-            message,
-            term,
-            comment,
-            junk,
+            entry,
             path,
             locale,
             position: position.unwrap_or(usize::MAX),
@@ -222,7 +221,7 @@ impl<'a> I18nMatcher<'a> {
         let mut fluent_key = FluentKey::new(
             self.code_path.clone(),
             key.clone(),
-            Some(fluent_syntax::ast::Message {
+            FluentEntry::Message(fluent_syntax::ast::Message {
                 id: fluent_syntax::ast::Identifier { name: key.clone() },
                 value: Some(fluent_syntax::ast::Pattern {
                     elements: vec![fluent_syntax::ast::PatternElement::TextElement {
@@ -232,9 +231,6 @@ impl<'a> I18nMatcher<'a> {
                 attributes: vec![],
                 comment: None,
             }),
-            None,
-            None,
-            None,
             self.default_ftl_file.clone(),
             None,
             None,
@@ -248,14 +244,13 @@ impl<'a> I18nMatcher<'a> {
             .filter_map(|keyword| keyword.arg.as_ref().map(|arg| keyword.to_owned()))
             .collect::<Vec<_>>();
 
-        let fluent_key_message_elements = &mut fluent_key
-            .message
-            .as_mut()
-            .unwrap()
-            .value
-            .as_mut()
-            .unwrap()
-            .elements;
+        let fluent_key_message_elements = match &mut fluent_key.entry {
+            FluentEntry::Message(msg) => match msg.value.as_mut() {
+                Some(pattern) => &mut pattern.elements,
+                None => panic!("Message has no value pattern"),
+            },
+            _ => panic!("Expected FluentEntry::Message"),
+        };
 
         for kw in keywords {
             if kw.arg.is_none() {
@@ -304,20 +299,22 @@ impl<'a> I18nMatcher<'a> {
                     self.fluent_keys[&new_fluent_key.key].path.display()
                 )
             }
-            if !self.fluent_keys[&new_fluent_key.key]
-                .message
-                .clone()
-                .unwrap()
-                .equals(new_fluent_key.message.as_ref().unwrap())
-            {
+            if let (FluentEntry::Message(existing_message), FluentEntry::Message(new_message)) = (
+                &self.fluent_keys[&new_fluent_key.key].entry,
+                &new_fluent_key.entry,
+            ) {
+                if !existing_message.clone().equals(new_message) {
+                    bail!(
+                        "Fluent key {} has different translations:\n{:?}\nand\n{:?}",
+                        new_fluent_key.key,
+                        new_message,
+                        existing_message
+                    );
+                }
+            } else {
                 bail!(
-                    "Fluent key {} has different translations:\n{:?}\nand\n{:?}",
-                    new_fluent_key.key,
-                    &new_fluent_key.message.as_ref().unwrap(),
-                    self.fluent_keys[&new_fluent_key.key]
-                        .message
-                        .clone()
-                        .unwrap()
+                    "Fluent key {} is not a Message in one of the entries.",
+                    new_fluent_key.key
                 );
             }
         } else {

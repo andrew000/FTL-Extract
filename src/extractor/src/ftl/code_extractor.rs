@@ -1,7 +1,6 @@
-use crate::ftl::matcher::{FluentKey, I18nMatcher};
+use crate::ftl::matcher::{FluentEntry, FluentKey, I18nMatcher};
 use crate::ftl::utils::ExtractionStatistics;
 use anyhow::{Result, bail};
-use fluent::types::AnyEq;
 use globwalk::GlobWalkerBuilder;
 use hashbrown::{HashMap, HashSet};
 use rayon::prelude::*;
@@ -103,16 +102,19 @@ fn find_conflicts(
                 new_fluent_keys[key].path.display()
             )
         }
-        if !current_fluent_keys[key]
-            .message
-            .equals(&new_fluent_keys[key].message)
-        {
-            bail!(
-                "FluentKey conflict: {} in {} and {}",
-                key,
-                current_fluent_keys[key].path.display(),
-                new_fluent_keys[key].path.display()
-            )
+        match (&current_fluent_keys[key].entry, &new_fluent_keys[key].entry) {
+            (FluentEntry::Message(a), FluentEntry::Message(b)) if a != b => {
+                bail!(
+                    "FluentKey conflict: {} in {} and {}",
+                    key,
+                    current_fluent_keys[key].path.display(),
+                    new_fluent_keys[key].path.display()
+                );
+            }
+            (a, b) if a != b => {
+                bail!("FluentKey type conflict: {} ({:?} vs {:?})", key, a, b);
+            }
+            _ => {}
         }
     }
 

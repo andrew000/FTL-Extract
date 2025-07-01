@@ -1,4 +1,4 @@
-use crate::ftl::matcher::FluentKey;
+use crate::ftl::matcher::{FluentEntry, FluentKey};
 use crate::ftl::utils::ExtractionStatistics;
 use fluent_syntax::ast::Entry;
 use globwalk::GlobWalkerBuilder;
@@ -28,10 +28,7 @@ fn import_from_ftl(
                     FluentKey::new(
                         PathBuf::new(),
                         message.id.name.clone(),
-                        Some(message.clone()),
-                        None,
-                        None,
-                        None,
+                        FluentEntry::Message(message.clone()),
                         path.to_path_buf(),
                         Some(locale.to_string()),
                         Some(position),
@@ -45,10 +42,7 @@ fn import_from_ftl(
                     FluentKey::new(
                         PathBuf::new(),
                         term.id.name.clone(),
-                        None,
-                        Some(term.clone()),
-                        None,
-                        None,
+                        FluentEntry::Term(term.clone()),
                         path.to_path_buf(),
                         Some(locale.to_string()),
                         Some(position),
@@ -59,10 +53,7 @@ fn import_from_ftl(
             Entry::Comment(comment) => leave_as_is_keys.push(FluentKey::new(
                 PathBuf::new(),
                 "".to_string(),
-                None,
-                None,
-                Some(comment.clone()),
-                None,
+                FluentEntry::Comment(comment.clone()),
                 path.to_path_buf(),
                 Some(locale.to_string()),
                 Some(position),
@@ -72,10 +63,7 @@ fn import_from_ftl(
                 leave_as_is_keys.push(FluentKey::new(
                     PathBuf::new(),
                     "".to_string(),
-                    None,
-                    None,
-                    Some(comment.clone()),
-                    None,
+                    FluentEntry::Comment(comment.clone()),
                     path.to_path_buf(),
                     Some(locale.to_string()),
                     Some(position),
@@ -86,10 +74,7 @@ fn import_from_ftl(
                 leave_as_is_keys.push(FluentKey::new(
                     PathBuf::new(),
                     "".to_string(),
-                    None,
-                    None,
-                    Some(comment.clone()),
-                    None,
+                    FluentEntry::Comment(comment.clone()),
                     path.to_path_buf(),
                     Some(locale.to_string()),
                     Some(position),
@@ -100,10 +85,7 @@ fn import_from_ftl(
                 leave_as_is_keys.push(FluentKey::new(
                     PathBuf::new(),
                     "".to_string(),
-                    None,
-                    None,
-                    None,
-                    Some(content.clone()),
+                    FluentEntry::Junk(content.clone()),
                     path.to_path_buf(),
                     Some(locale.to_string()),
                     Some(position),

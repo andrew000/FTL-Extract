@@ -1,6 +1,6 @@
 #![allow(unused_variables)]
 
-use crate::ftl::matcher::FluentKey;
+use crate::ftl::matcher::{FluentEntry, FluentKey};
 use anyhow::{Result, bail};
 use fluent_syntax::ast::{CallArguments, Identifier};
 use hashbrown::{HashMap, HashSet};
@@ -13,13 +13,13 @@ pub(crate) fn extract_kwargs(
 ) -> HashSet<String> {
     let mut kwargs: HashSet<String> = HashSet::new();
 
-    if let Some(message) = &key.message {
+    if let FluentEntry::Message(message) = &key.entry {
         if message.value.is_none() || message.value.as_ref().unwrap().elements.is_empty() {
             return kwargs;
         }
 
         extract_kwargs_from_message(key, &mut kwargs, terms, all_fluent_keys, depend_keys);
-    } else if let Some(term) = &key.term {
+    } else if let FluentEntry::Term(term) = &key.entry {
         if term.value.elements.is_empty() {
             return kwargs;
         }
@@ -194,15 +194,11 @@ fn extract_kwargs_from_message(
     all_fluent_keys: &mut HashMap<String, FluentKey>,
     depend_keys: &mut HashSet<String>,
 ) {
-    let elements = key
-        .message
-        .as_ref()
-        .unwrap()
-        .value
-        .as_ref()
-        .unwrap()
-        .elements
-        .clone();
+    let elements = if let FluentEntry::Message(message) = &key.entry {
+        message.value.as_ref().unwrap().elements.clone()
+    } else {
+        panic!("Expected a Message entry");
+    };
 
     for element in elements {
         if let fluent_syntax::ast::PatternElement::Placeable { expression } = &element {
@@ -225,7 +221,11 @@ fn extract_kwargs_from_term(
     all_fluent_keys: &mut HashMap<String, FluentKey>,
     depend_keys: &mut HashSet<String>,
 ) {
-    let elements = key.term.as_ref().unwrap().value.elements.clone();
+    let elements = if let FluentEntry::Term(term) = &key.entry {
+        term.value.elements.clone()
+    } else {
+        panic!("Expected a Term entry");
+    };
 
     for element in elements {
         if let fluent_syntax::ast::PatternElement::Placeable { expression } = &element {

@@ -1,4 +1,4 @@
-use crate::ftl::matcher::FluentKey;
+use crate::ftl::matcher::{FluentEntry, FluentKey};
 use fluent_syntax::ast::Entry;
 use fluent_syntax::serializer::{Options, Serializer};
 
@@ -13,19 +13,21 @@ pub(crate) fn generate_ftl(fluent_keys: &Vec<FluentKey>, leave_as_is: &[FluentKe
     listed_fluent_keys.sort_by(|a, b| a.position.cmp(&b.position));
 
     for fluent_key in listed_fluent_keys {
-        if let Some(message) = &fluent_key.message {
-            resource.body.push(Entry::Message(message.clone()));
-        }
-        if let Some(term) = &fluent_key.term {
-            resource.body.push(Entry::Term(term.clone()));
-        }
-        if let Some(comment) = &fluent_key.comment {
-            resource.body.push(Entry::Comment(comment.clone()));
-        }
-        if let Some(junk) = &fluent_key.junk {
-            resource.body.push(Entry::Junk {
-                content: junk.clone(),
-            });
+        match fluent_key.entry {
+            FluentEntry::Message(message) => {
+                resource.body.push(Entry::Message(message.clone()));
+            }
+            FluentEntry::Term(term) => {
+                resource.body.push(Entry::Term(term.clone()));
+            }
+            FluentEntry::Comment(comment) => {
+                resource.body.push(Entry::Comment(comment.clone()));
+            }
+            FluentEntry::Junk(junk) => {
+                resource.body.push(Entry::Junk {
+                    content: junk.clone(),
+                });
+            }
         }
     }
 

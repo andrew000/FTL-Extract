@@ -8,7 +8,7 @@ static GLOBAL: MiMalloc = MiMalloc;
 #[cfg(test)]
 mod tests {
     use super::ftl::consts;
-    use super::ftl::ftl_extractor::extraxt;
+    use super::ftl::ftl_extractor::extract;
     use crate::ftl::consts::CommentsKeyModes;
     use hashbrown::HashSet;
     use std::path::PathBuf;
@@ -16,7 +16,7 @@ mod tests {
     #[test]
     fn test_extract() {
         let start_time = std::time::Instant::now();
-        let statistics = extraxt(
+        let statistics = extract(
             &std::path::PathBuf::from(r"tests\files\py"),
             &std::path::PathBuf::from(r"tests\files\locales"),
             Vec::from(["en".to_string()]),
@@ -24,7 +24,7 @@ mod tests {
             HashSet::from(["LF".to_string(), "cls_i18n".to_string()]),
             HashSet::from(["self".to_string(), "cls".to_string()]),
             consts::DEFAULT_EXCLUDE_DIRS.clone(),
-            HashSet::from([r"tests\files\py\should_be_excluded".to_string()]),
+            HashSet::from([r".\tests\files\py\should_be_excluded\*".to_string()]),
             consts::DEFAULT_IGNORE_ATTRIBUTES.clone(),
             HashSet::from(["core".to_string()]),
             HashSet::from(["when".to_string()]),

@@ -14,11 +14,11 @@ lazy_static! {
         "LazyFilter".to_string()
     ]);
     pub static ref DEFAULT_EXCLUDE_DIRS: HashSet<String> = HashSet::from([
-        ".venv".to_string(),
-        "venv".to_string(),
-        ".git".to_string(),
-        "__pycache__".to_string(),
-        ".pytest_cache".to_string(),
+        "**/.venv/**".to_string(),
+        "**/venv/**".to_string(),
+        "**/.git/**".to_string(),
+        "**/__pycache__/**".to_string(),
+        "**/.pytest_cache/**".to_string(),
     ]);
     pub static ref DEFAULT_IGNORE_ATTRIBUTES: HashSet<String> = HashSet::from([
         "set_locale".to_string(),

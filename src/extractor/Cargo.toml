@@ -14,11 +14,12 @@ name = "extractor"
 
 [dependencies]
 anyhow = { version = "1.0.98" }
-clap = { version = "4.5.39", features = ["derive"] }
+clap = { version = "4.5.40", features = ["derive"] }
 fluent = { git = "https://github.com/andrew000/fluent-rs.git", rev = "9bc487b61173579a20cd1d3d45ba1cd7675c6cfd" }
 fluent-syntax = { git = "https://github.com/andrew000/fluent-rs.git", rev = "9bc487b61173579a20cd1d3d45ba1cd7675c6cfd" }
-globwalk = { version = "0.9.1" }
+globset = { version = "0.4.16" }
 hashbrown = { version = "0.15.4" }
+ignore = { version = "0.4.23" }
 lazy_static = { version = "1.5.0" }
 mimalloc = { version = "0.1.47" }
 rayon = { version = "1.10.0" }

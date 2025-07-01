@@ -239,8 +239,9 @@ dependencies = [
  "clap",
  "fluent",
  "fluent-syntax",
- "globwalk",
+ "globset",
  "hashbrown",
+ "ignore",
  "lazy_static",
  "mimalloc",
  "rayon",
@@ -327,17 +328,6 @@ dependencies = [
  "log",
  "regex-automata",
  "regex-syntax",
-]
-
-[[package]]
-name = "globwalk"
-version = "0.9.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0bf760ebf69878d9fd8f110c89703d90ce35095324d1f1edcb595c63945ee757"
-dependencies = [
- "bitflags",
- "ignore",
- "walkdir",
 ]
 
 [[package]]

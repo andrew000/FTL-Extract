@@ -90,7 +90,7 @@ jobs:
         run: |
           for wheel in dist/*.whl; do
             uv run --verbose --with $wheel --no-project --refresh-package ftl_extract -- python -c "import ftl_extract; print(ftl_extract.__version__)"
-            uv run --verbose --with $wheel --no-project --refresh-package ftl_extract -- ftl-extract --version
+            uv run --verbose --with $wheel --no-project --refresh-package ftl_extract -- ftl --version
           done
 
       - name: Verify wheel installation (Linux py3.13)
@@ -99,7 +99,7 @@ jobs:
         run: |
           for wheel in dist/*.whl; do
             uv run --verbose --with $wheel --no-project --refresh-package ftl_extract -- python -c "import ftl_extract; print(ftl_extract.__version__)"
-            uv run --verbose --with $wheel --no-project --refresh-package ftl_extract -- ftl-extract --version
+            uv run --verbose --with $wheel --no-project --refresh-package ftl_extract -- ftl extract --version
             uv run --verbose --with $wheel --no-project --refresh-package ftl_extract -- fast-ftl-extract --version
           done
 
@@ -109,7 +109,7 @@ jobs:
         run: |
           for wheel in dist/*.whl; do
             uv run --verbose --with $wheel --no-project --refresh-package ftl_extract -- python -c "import ftl_extract; print(ftl_extract.__version__)"
-            uv run --verbose --with $wheel --no-project --refresh-package ftl_extract -- ftl-extract --version
+            uv run --verbose --with $wheel --no-project --refresh-package ftl_extract -- ftl extract --version
           done
 
   extension-build:

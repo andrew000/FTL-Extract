@@ -11,7 +11,7 @@ use hashbrown::{HashMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 
-pub fn extraxt(
+pub fn extract(
     code_path: &Path,
     output_path: &Path,
     language: Vec<String>,
@@ -115,8 +115,8 @@ pub fn extraxt(
 
         // Second step: find keys that have different kwargs
         // Make copy of in_code_fluent_keys and stored_fluent_keys to check references
-        let mut in_code_fluent_keys_copy = in_code_fluent_keys.clone();
-        let mut stored_fluent_keys_copy = stored_fluent_keys.clone();
+        let in_code_fluent_keys_copy = &in_code_fluent_keys.clone();
+        let stored_fluent_keys_copy = &stored_fluent_keys.clone();
 
         // Keys that are not in code but stored keys are depends on them
         let mut depend_keys: HashSet<String> = HashSet::new();
@@ -129,14 +129,14 @@ pub fn extraxt(
             let fluent_key_placeable_set = extract_kwargs(
                 fluent_key,
                 &mut stored_terms,
-                &mut in_code_fluent_keys_copy,
+                in_code_fluent_keys_copy,
                 &mut depend_keys,
             );
 
             let stored_fluent_key_placeable_set = extract_kwargs(
                 stored_fluent_keys.get_mut(key).unwrap(),
                 &mut stored_terms,
-                &mut stored_fluent_keys_copy,
+                stored_fluent_keys_copy,
                 &mut depend_keys,
             );
 

@@ -1,8 +1,9 @@
 use crate::ftl::matcher::{FluentEntry, FluentKey};
 use crate::ftl::utils::ExtractionStatistics;
 use fluent_syntax::ast::Entry;
-use globwalk::GlobWalkerBuilder;
 use hashbrown::{HashMap, HashSet};
+use ignore::WalkBuilder;
+use ignore::types::TypesBuilder;
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -109,13 +110,31 @@ pub(crate) fn import_ftl_from_dir(
 ) {
     let ftl_files = {
         if path.is_dir() {
-            GlobWalkerBuilder::from_patterns(path.join(locale), &["**/*.ftl"])
+            let mut type_builder = TypesBuilder::new();
+            type_builder.add("ftl", "*.ftl").unwrap();
+            type_builder.select("ftl");
+
+            WalkBuilder::new(path.join(locale))
+                .types(type_builder.build().unwrap())
+                .parents(false)
+                .ignore(false)
+                .git_global(false)
+                .git_exclude(false)
+                .require_git(false)
                 .build()
-                .unwrap()
         } else {
-            GlobWalkerBuilder::from_patterns(path.join(locale), &[path.to_str().unwrap()])
+            let mut type_builder = TypesBuilder::new();
+            type_builder.add("ftl", &path.to_str().unwrap()).unwrap();
+            type_builder.select("ftl");
+
+            WalkBuilder::new(path.join(locale))
+                .types(type_builder.build().unwrap())
+                .parents(false)
+                .ignore(false)
+                .git_global(false)
+                .git_exclude(false)
+                .require_git(false)
                 .build()
-                .unwrap()
         }
     };
     let mut stored_ftl_keys = HashMap::<String, FluentKey>::new();
@@ -124,10 +143,18 @@ pub(crate) fn import_ftl_from_dir(
 
     for entry in ftl_files {
         let ftl_file = match entry {
-            Ok(entry) => entry,
+            Ok(entry) => {
+                let path = entry.path();
+                if entry.file_type().map_or(false, |ft| ft.is_file()) {
+                    path.to_path_buf()
+                } else {
+                    continue;
+                }
+            }
             Err(_) => continue,
         };
-        let (keys, terms, leave_as_is) = import_from_ftl(&ftl_file.into_path(), &locale);
+
+        let (keys, terms, leave_as_is) = import_from_ftl(&ftl_file, &locale);
         stored_ftl_keys.extend(keys);
         stored_terms.extend(terms);
         stored_leave_as_is_keys.extend(leave_as_is);

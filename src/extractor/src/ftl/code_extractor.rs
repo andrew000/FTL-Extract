@@ -1,8 +1,10 @@
 use crate::ftl::matcher::{FluentEntry, FluentKey, I18nMatcher};
 use crate::ftl::utils::ExtractionStatistics;
 use anyhow::{Result, bail};
-use globwalk::GlobWalkerBuilder;
+use globset::{Glob, GlobSetBuilder};
 use hashbrown::{HashMap, HashSet};
+use ignore::WalkBuilder;
+use ignore::types::TypesBuilder;
 use rayon::prelude::*;
 use ruff_python_ast::visitor::source_order::SourceOrderVisitor;
 use std::fs;
@@ -12,34 +14,37 @@ use std::sync::{Arc, RwLock};
 fn find_py_files(search_path: &Path, exclude_dir: HashSet<String>) -> Vec<PathBuf> {
     let mut result_paths: Vec<PathBuf> = Vec::new();
 
-    let mut patterns = vec!["**/*.py".to_string()];
-    patterns.extend(
-        exclude_dir
-            .iter()
-            .map(|dir| {
-                format!(
-                    "!{}",
-                    dir.strip_prefix(search_path.to_str().unwrap())
-                        .unwrap_or(dir)
-                )
-            })
-            .collect::<Vec<_>>(),
-    );
-
     if search_path.is_dir() {
-        for entry in GlobWalkerBuilder::from_patterns(search_path, &patterns)
-            .build()
-            .unwrap()
-        {
-            let py_file = match entry {
-                Ok(entry) => entry,
-                Err(_) => continue,
-            };
+        let mut ignore_builder = GlobSetBuilder::new();
+        for exclude in exclude_dir {
+            ignore_builder.add(Glob::new(exclude.as_str()).unwrap());
+        }
+        let ignore_set = ignore_builder.build().unwrap();
 
-            if py_file.file_type().is_file()
-                && py_file.path().extension().unwrap_or_default() == "py"
-            {
-                result_paths.push(py_file.clone().into_path());
+        let mut type_builder = TypesBuilder::new();
+        type_builder.add("py", "*.py").unwrap();
+        type_builder.select("py");
+
+        let walker = WalkBuilder::new(search_path)
+            .parents(false)
+            .ignore(false)
+            .git_global(false)
+            .git_exclude(false)
+            .require_git(false)
+            .types(type_builder.build().unwrap())
+            .build();
+
+        for result in walker {
+            match result {
+                Ok(entry) => {
+                    let path = entry.path();
+                    if entry.file_type().map_or(false, |ft| ft.is_file())
+                        && !ignore_set.is_match(path)
+                    {
+                        result_paths.push(path.to_path_buf());
+                    }
+                }
+                Err(err) => println!("ERROR: {}", err),
             }
         }
     } else if search_path.is_file() && search_path.extension().unwrap_or_default() == "py" {

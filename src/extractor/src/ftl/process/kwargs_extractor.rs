@@ -8,7 +8,7 @@ use hashbrown::{HashMap, HashSet};
 pub(crate) fn extract_kwargs(
     key: &mut FluentKey,
     terms: &mut HashMap<String, FluentKey>,
-    all_fluent_keys: &mut HashMap<String, FluentKey>,
+    all_fluent_keys: &HashMap<String, FluentKey>,
     depend_keys: &mut HashSet<String>,
 ) -> HashSet<String> {
     let mut kwargs: HashSet<String> = HashSet::new();
@@ -35,7 +35,7 @@ fn extract_kwargs_from_placeable(
     placeable: &fluent_syntax::ast::PatternElement<String>,
     kwargs: &mut HashSet<String>,
     terms: &mut HashMap<String, FluentKey>,
-    all_fluent_keys: &mut HashMap<String, FluentKey>,
+    all_fluent_keys: &HashMap<String, FluentKey>,
     depend_keys: &mut HashSet<String>,
 ) {
     if let fluent_syntax::ast::PatternElement::Placeable { expression } = placeable {
@@ -104,7 +104,7 @@ fn extract_kwargs_from_message_reference(
     attribute: &Option<Identifier<String>>,
     kwargs: &mut HashSet<String>,
     terms: &mut HashMap<String, FluentKey>,
-    all_fluent_keys: &mut HashMap<String, FluentKey>,
+    all_fluent_keys: &HashMap<String, FluentKey>,
     depend_keys: &mut HashSet<String>,
 ) -> Result<()> {
     let mut reference_key = match all_fluent_keys.get(&id.name) {
@@ -135,7 +135,7 @@ fn extract_kwargs_from_term_reference(
     arguments: &Option<CallArguments<String>>,
     kwargs: &mut HashSet<String>,
     terms: &mut HashMap<String, FluentKey>,
-    all_fluent_keys: &mut HashMap<String, FluentKey>,
+    all_fluent_keys: &HashMap<String, FluentKey>,
 ) -> Result<()> {
     let mut term = match terms.get(&id.name) {
         Some(term) => term.clone(),
@@ -164,7 +164,7 @@ fn extract_kwargs_from_selector_expression(
     variants: &Vec<fluent_syntax::ast::Variant<String>>,
     kwargs: &mut HashSet<String>,
     terms: &mut HashMap<String, FluentKey>,
-    all_fluent_keys: &mut HashMap<String, FluentKey>,
+    all_fluent_keys: &HashMap<String, FluentKey>,
     depend_keys: &mut HashSet<String>,
 ) {
     if let fluent_syntax::ast::InlineExpression::VariableReference { id } = selector {
@@ -191,7 +191,7 @@ fn extract_kwargs_from_message(
     key: &mut FluentKey,
     kwargs: &mut HashSet<String>,
     terms: &mut HashMap<String, FluentKey>,
-    all_fluent_keys: &mut HashMap<String, FluentKey>,
+    all_fluent_keys: &HashMap<String, FluentKey>,
     depend_keys: &mut HashSet<String>,
 ) {
     let elements = if let FluentEntry::Message(message) = &key.entry {
@@ -218,7 +218,7 @@ fn extract_kwargs_from_term(
     key: &mut FluentKey,
     kwargs: &mut HashSet<String>,
     terms: &mut HashMap<String, FluentKey>,
-    all_fluent_keys: &mut HashMap<String, FluentKey>,
+    all_fluent_keys: &HashMap<String, FluentKey>,
     depend_keys: &mut HashSet<String>,
 ) {
     let elements = if let FluentEntry::Term(term) = &key.entry {

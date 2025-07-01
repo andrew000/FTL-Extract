@@ -3,7 +3,7 @@ use extractor::ftl::consts::{
     CommentsKeyModes, DEFAULT_EXCLUDE_DIRS, DEFAULT_FTL_FILENAME, DEFAULT_I18N_KEYS,
     DEFAULT_IGNORE_ATTRIBUTES, DEFAULT_IGNORE_KWARGS,
 };
-use extractor::ftl::ftl_extractor::extraxt;
+use extractor::ftl::ftl_extractor::extract;
 use hashbrown::HashSet;
 use std::path::PathBuf;
 
@@ -80,14 +80,11 @@ fn main() {
     let args = Args::parse();
 
     let start_time = std::time::Instant::now();
-    println!("Code path: {:?}", args.code_path.canonicalize().unwrap());
-    println!(
-        "Output path: {:?}",
-        args.output_path.canonicalize().unwrap()
-    );
-    let statistics = extraxt(
-        &args.code_path.canonicalize().unwrap(),
-        &args.output_path.canonicalize().unwrap(),
+    println!("Code path: {}", args.code_path.display());
+    println!("Output path: {}", args.output_path.display());
+    let statistics = extract(
+        &args.code_path,
+        &args.output_path,
         args.language,
         HashSet::from_iter(args.i18n_keys),
         HashSet::from_iter(args.i18n_keys_append),

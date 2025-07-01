@@ -4,7 +4,7 @@ use crate::ftl::consts;
 use anyhow::{Result, bail};
 use fluent::types::AnyEq;
 use hashbrown::{HashMap, HashSet};
-use rustpython_ast::{self as py_ast, Keyword, MatchCase};
+use ruff_python_ast::visitor::source_order::SourceOrderVisitor;
 use std::path::PathBuf;
 
 #[derive(Clone, Debug)]
@@ -59,42 +59,30 @@ pub(crate) struct I18nMatcher<'a> {
     pub(crate) fluent_keys: HashMap<String, FluentKey>,
 }
 
-impl<'a> py_ast::Visitor for I18nMatcher<'a> {
-    fn visit_expr_call(&mut self, node: py_ast::ExprCall<py_ast::text_size::TextRange>) {
-        if node.func.is_attribute_expr() {
-            self.process_attribute_call(&node);
-        } else if node.func.is_name_expr()
-            && self
-                .i18n_keys
-                .contains(&node.func.as_name_expr().unwrap().id.to_string())
-        {
-            self.process_name_call(&node);
-        } else {
-            // println!(
-            //     "Ignoring {:#?}, {}, {}",
-            //     node.func,
-            //     node.func.is_name_expr(),
-            //     &node.func.as_name_expr().unwrap().id.as_str()
-            // );
+impl<'a> SourceOrderVisitor<'a> for I18nMatcher<'a> {
+    #[inline]
+    fn visit_expr(&mut self, expr: &'a ruff_python_ast::Expr) {
+        if expr.is_call_expr() {
+            let expr = expr.as_call_expr().unwrap();
+            if expr.func.is_attribute_expr() {
+                self.process_attribute_call(&expr);
+            } else if expr.func.is_name_expr()
+                && self
+                    .i18n_keys
+                    .contains(&expr.func.as_name_expr().unwrap().id.to_string())
+            {
+                self.process_name_call(&expr);
+            } else {
+                // println!(
+                //     "Ignoring {:#?}, {}, {}",
+                //     expr.func,
+                //     expr.func.is_name_expr(),
+                //     &expr.func.as_name_expr().unwrap().id.as_str()
+                // );
+            }
         }
 
-        self.generic_visit_expr_call(node)
-    }
-
-    fn visit_keyword(&mut self, node: Keyword<py_ast::text_size::TextRange>) {
-        self.generic_visit_keyword(node)
-    }
-    fn generic_visit_keyword(&mut self, node: Keyword<py_ast::text_size::TextRange>) {
-        self.visit_expr(node.value)
-    }
-
-    fn visit_match_case(&mut self, node: MatchCase<py_ast::text_size::TextRange>) {
-        self.generic_visit_match_case(node)
-    }
-    fn generic_visit_match_case(&mut self, node: MatchCase<py_ast::text_size::TextRange>) {
-        for value in node.body {
-            self.visit_stmt(value);
-        }
+        ruff_python_ast::visitor::source_order::walk_expr(self, expr);
     }
 }
 
@@ -117,8 +105,9 @@ impl<'a> I18nMatcher<'a> {
             fluent_keys: HashMap::<String, FluentKey>::new(),
         }
     }
-    fn process_attribute_call(&mut self, node: &py_ast::ExprCall<py_ast::text_size::TextRange>) {
-        let mut attr = node.func.clone();
+    #[inline]
+    fn process_attribute_call(&mut self, expr: &ruff_python_ast::ExprCall) {
+        let mut attr = expr.func.clone();
         let mut attrs: Vec<String> = vec![];
         while attr.is_attribute_expr() {
             let attribute_expr = attr.as_attribute_expr().unwrap();
@@ -127,37 +116,42 @@ impl<'a> I18nMatcher<'a> {
         }
 
         if attr.is_name_expr() {
-            self.process_attribute_name_call(node, attr.as_mut_name_expr().unwrap(), attrs);
+            self.process_attribute_name_call(expr, attr.as_name_expr_mut().unwrap(), attrs);
         }
     }
-
-    fn process_name_call(&mut self, node: &py_ast::ExprCall<py_ast::text_size::TextRange>) {
-        if node.args.is_empty() || !node.args.first().unwrap().is_constant_expr() {
+    #[inline]
+    fn process_name_call(&mut self, expr: &ruff_python_ast::ExprCall) {
+        if expr.arguments.is_empty()
+            || !expr
+                .arguments
+                .find_positional(0)
+                .unwrap()
+                .is_string_literal_expr()
+        {
             return;
         }
 
-        let key = node
-            .args
-            .first()
+        let key = expr
+            .arguments
+            .find_positional(0)
             .unwrap()
-            .as_constant_expr()
+            .as_string_literal_expr()
             .unwrap()
             .value
             .clone()
-            .str()
-            .unwrap();
+            .to_string();
 
-        self.add_fluent_key(node, key).unwrap();
+        self.add_fluent_key(expr, key).unwrap();
     }
-
+    #[inline]
     fn process_attribute_name_call(
         &mut self,
-        node: &py_ast::ExprCall<py_ast::text_size::TextRange>,
-        attr: &mut py_ast::ExprName,
+        expr: &ruff_python_ast::ExprCall,
+        attr: &mut ruff_python_ast::ExprName,
         mut attrs: Vec<String>,
     ) {
         if self.i18n_keys.contains(attr.id.as_str()) {
-            self.process_i18n_key_call(node, attrs);
+            self.process_i18n_key_call(expr, attrs);
         } else if self.i18n_keys_prefix.contains(&attr.id.to_string())
             && !attrs.is_empty()
             && self.i18n_keys.contains(&attrs.last().unwrap().to_string())
@@ -165,48 +159,44 @@ impl<'a> I18nMatcher<'a> {
             // Remove the last attribute to handle cases where the prefix key is followed by a
             // valid i18n key.
             attrs.pop();
-            self.process_i18n_key_call(node, attrs);
+            self.process_i18n_key_call(expr, attrs);
         }
     }
-
-    fn process_i18n_key_call(
-        &mut self,
-        node: &py_ast::ExprCall<py_ast::text_size::TextRange>,
-        attrs: Vec<String>,
-    ) {
+    #[inline]
+    fn process_i18n_key_call(&mut self, expr: &ruff_python_ast::ExprCall, attrs: Vec<String>) {
         if attrs.len() == 1 && attrs.first().unwrap() == consts::GET_LITERAL {
-            self.process_i18n_key_call_get_literal(node, attrs);
+            self.process_i18n_key_call_get_literal(expr, attrs);
         } else {
-            self.process_i18n_key_call_attrs(node, attrs);
+            self.process_i18n_key_call_attrs(expr, attrs);
         }
     }
+    #[inline]
     fn process_i18n_key_call_get_literal(
         &mut self,
-        node: &py_ast::ExprCall<py_ast::text_size::TextRange>,
+        expr: &ruff_python_ast::ExprCall,
         mut attrs: Vec<String>,
     ) {
-        if node.args.is_empty() {
+        if expr.arguments.is_empty() {
             return;
         }
 
         attrs.clear();
-        let arg = node.args.first().unwrap();
-        if arg.is_constant_expr() {
+        let arg = expr.arguments.find_positional(0).unwrap();
+        if arg.is_string_literal_expr() {
             let key = arg
-                .as_constant_expr()
+                .as_string_literal_expr()
                 .unwrap()
                 .value
-                .as_str()
-                .unwrap()
+                .to_string()
                 .clone();
 
-            self.add_fluent_key(node, key).unwrap();
+            self.add_fluent_key(expr, key).unwrap();
         }
     }
-
+    #[inline]
     fn process_i18n_key_call_attrs(
         &mut self,
-        node: &py_ast::ExprCall<py_ast::text_size::TextRange>,
+        expr: &ruff_python_ast::ExprCall,
         attrs: Vec<String>,
     ) {
         if self
@@ -217,7 +207,7 @@ impl<'a> I18nMatcher<'a> {
         }
 
         self.add_fluent_key(
-            node,
+            expr,
             attrs
                 .iter()
                 .rev()
@@ -227,12 +217,8 @@ impl<'a> I18nMatcher<'a> {
         )
         .unwrap();
     }
-
-    fn create_fluent_key(
-        &self,
-        node: &py_ast::ExprCall<py_ast::text_size::TextRange>,
-        key: String,
-    ) -> FluentKey {
+    #[inline]
+    fn create_fluent_key(&self, expr: &ruff_python_ast::ExprCall, key: String) -> FluentKey {
         let mut fluent_key = FluentKey::new(
             self.code_path.clone(),
             key.clone(),
@@ -255,7 +241,8 @@ impl<'a> I18nMatcher<'a> {
             HashSet::new(),
         );
 
-        let keywords = node
+        let keywords = expr
+            .arguments
             .keywords
             .iter()
             .filter_map(|keyword| keyword.arg.as_ref().map(|arg| keyword.to_owned()))
@@ -278,11 +265,11 @@ impl<'a> I18nMatcher<'a> {
             let arg = kw.arg.clone().unwrap();
 
             if arg.as_str() == consts::PATH_LITERAL {
-                if kw.value.is_constant_expr() {
-                    let path = &kw.value.as_constant_expr().as_ref().unwrap().value;
+                if kw.value.is_string_literal_expr() {
+                    let path = &kw.value.as_string_literal_expr().as_ref().unwrap().value;
 
-                    if path.is_str() {
-                        fluent_key.path = PathBuf::from(path.clone().expect_str());
+                    if !path.is_empty() {
+                        fluent_key.path = PathBuf::from(path.clone().to_str());
                     }
                 }
             } else {
@@ -304,13 +291,9 @@ impl<'a> I18nMatcher<'a> {
 
         fluent_key
     }
-
-    fn add_fluent_key(
-        &mut self,
-        node: &py_ast::ExprCall<py_ast::text_size::TextRange>,
-        key: String,
-    ) -> Result<()> {
-        let new_fluent_key = self.create_fluent_key(node, key);
+    #[inline]
+    fn add_fluent_key(&mut self, expr: &ruff_python_ast::ExprCall, key: String) -> Result<()> {
+        let new_fluent_key = self.create_fluent_key(expr, key);
 
         if self.fluent_keys.contains_key(&new_fluent_key.key) {
             if self.fluent_keys[&new_fluent_key.key].path != new_fluent_key.path {

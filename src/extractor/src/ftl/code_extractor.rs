@@ -5,8 +5,7 @@ use fluent::types::AnyEq;
 use globwalk::GlobWalkerBuilder;
 use hashbrown::{HashMap, HashSet};
 use rayon::prelude::*;
-use rustpython_ast::Visitor;
-use rustpython_parser::Mode;
+use ruff_python_ast::visitor::source_order::SourceOrderVisitor;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, RwLock};
@@ -58,12 +57,9 @@ fn parse_file<'a>(
     ignore_kwargs: &HashSet<String>,
     default_ftl_file: &Path,
 ) -> HashMap<String, FluentKey> {
-    let module = rustpython_parser::parse(
-        fs::read_to_string(file).unwrap().as_str(),
-        Mode::Module,
-        "<embedded>",
-    )
-    .unwrap();
+    let module =
+        ruff_python_parser::parse_module(fs::read_to_string(file).unwrap().as_str()).unwrap();
+
     let mut matcher = I18nMatcher::new(
         file.to_path_buf(),
         default_ftl_file.to_path_buf(),
@@ -72,9 +68,8 @@ fn parse_file<'a>(
         &ignore_attributes,
         &ignore_kwargs,
     );
-    for node in module.module().unwrap().body {
-        matcher.visit_stmt(node);
-    }
+
+    matcher.visit_body(module.suite());
 
     matcher.fluent_keys
 }

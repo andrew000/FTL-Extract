@@ -28,27 +28,27 @@ dev = [
     "cibuildwheel==2.23.3",
     "fluent-runtime==0.4.0",
     "isort==6.0.1",
-    "mypy==1.15.0",
+    "mypy==1.16.1",
     "pre-commit==4.2.0",
-    "ruff==0.11.10",
+    "ruff==0.11.13",
     "setuptools-rust==1.11.1",
-    "setuptools==80.7.1",
-    "typing-extensions==4.13.2",
+    "setuptools==80.9.0",
+    "typing-extensions==4.14.0",
     "wheel==0.45.1",
 ]
 tests = [
-    "pytest==8.3.5",
-    "pytest-cov==6.1.1",
+    "pytest==8.4.0",
+    "pytest-cov==6.2.1",
     "pytest-html==4.1.1",
-    "pytest-mock==3.14.0",
-    "coverage==7.8.0",
+    "pytest-mock==3.14.1",
+    "coverage==7.9.1",
 ]
 docs = [
-    "sphinx==7.4.7",
-    "sphinx-rtd-theme==3.0.2",
-    "sphinx-autobuild==2024.10.3",
-    "furo==2024.8.6",
-    "pytz==2025.1",
+    # "sphinx==7.4.7",
+    # "sphinx-rtd-theme==3.0.2",
+    # "sphinx-autobuild==2024.10.3",
+    # "furo==2024.8.6",
+    # "pytz==2025.2",
 ]
 
 [project.urls]

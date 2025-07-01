@@ -4,7 +4,6 @@ use lazy_static::lazy_static;
 pub const I18N_LITERAL: &str = "i18n";
 pub const GET_LITERAL: &str = "get";
 pub const PATH_LITERAL: &str = "_path";
-
 pub const DEFAULT_FTL_FILENAME: &str = "_default.ftl";
 
 lazy_static! {

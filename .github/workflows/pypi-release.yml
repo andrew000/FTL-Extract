@@ -73,7 +73,7 @@ jobs:
         run: |
           for wheel in wheelhouse/*.whl; do
             uv run --verbose --with $wheel --no-project --refresh-package ftl_extract -- python -c "import ftl_extract; print(ftl_extract.__version__)"
-            uv run --verbose --with $wheel --no-project --refresh-package ftl_extract -- ftl-extract --version
+            uv run --verbose --with $wheel --no-project --refresh-package ftl_extract -- ftl --version
             uv run --verbose --with $wheel --no-project --refresh-package ftl_extract -- fast-ftl-extract --version
           done
 

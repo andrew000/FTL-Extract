@@ -19,6 +19,7 @@ from ftl_extract.stub.generator import generate_stubs
 
 
 @click.group("ftl")
+@click.version_option()
 def ftl() -> None: ...
 
 
@@ -126,7 +127,6 @@ def ftl() -> None: ...
     show_default=True,
     help="Verbose output.",
 )
-@click.version_option()
 def cli_extract(
     code_path: Path,
     output_path: Path,

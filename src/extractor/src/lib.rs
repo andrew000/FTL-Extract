@@ -31,7 +31,7 @@ mod tests {
             true,
             &PathBuf::from(consts::DEFAULT_FTL_FILENAME),
             CommentsKeyModes::Comment,
-            false,
+            true,
         )
         .unwrap();
 

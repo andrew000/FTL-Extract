@@ -109,11 +109,10 @@ pub(crate) fn import_ftl_from_dir(
     Vec<FluentKey>,
 ) {
     let ftl_files = {
+        let mut type_builder = TypesBuilder::new();
+        type_builder.add("ftl", "*.ftl").unwrap();
+        type_builder.select("ftl");
         if path.is_dir() {
-            let mut type_builder = TypesBuilder::new();
-            type_builder.add("ftl", "*.ftl").unwrap();
-            type_builder.select("ftl");
-
             WalkBuilder::new(path.join(locale))
                 .types(type_builder.build().unwrap())
                 .parents(false)
@@ -123,10 +122,6 @@ pub(crate) fn import_ftl_from_dir(
                 .require_git(false)
                 .build()
         } else {
-            let mut type_builder = TypesBuilder::new();
-            type_builder.add("ftl", &path.to_str().unwrap()).unwrap();
-            type_builder.select("ftl");
-
             WalkBuilder::new(path.join(locale))
                 .types(type_builder.build().unwrap())
                 .parents(false)

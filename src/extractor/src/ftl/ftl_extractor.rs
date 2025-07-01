@@ -115,8 +115,8 @@ pub fn extract(
 
         // Second step: find keys that have different kwargs
         // Make copy of in_code_fluent_keys and stored_fluent_keys to check references
-        let in_code_fluent_keys_copy = &in_code_fluent_keys.clone();
-        let stored_fluent_keys_copy = &stored_fluent_keys.clone();
+        let in_code_fluent_keys_copy = in_code_fluent_keys.clone();
+        let stored_fluent_keys_copy = stored_fluent_keys.clone();
 
         // Keys that are not in code but stored keys are depends on them
         let mut depend_keys: HashSet<String> = HashSet::new();
@@ -129,14 +129,14 @@ pub fn extract(
             let fluent_key_placeable_set = extract_kwargs(
                 fluent_key,
                 &mut stored_terms,
-                in_code_fluent_keys_copy,
+                &in_code_fluent_keys_copy,
                 &mut depend_keys,
             );
 
             let stored_fluent_key_placeable_set = extract_kwargs(
                 stored_fluent_keys.get_mut(key).unwrap(),
                 &mut stored_terms,
-                stored_fluent_keys_copy,
+                &stored_fluent_keys_copy,
                 &mut depend_keys,
             );
 

@@ -23,8 +23,8 @@ ignore = { version = "0.4.23" }
 lazy_static = { version = "1.5.0" }
 mimalloc = { version = "0.1.47" }
 rayon = { version = "1.10.0" }
-ruff_python_ast = { git = "https://github.com/astral-sh/ruff.git", rev = "c5b58187da1809c778d886595ec50f7db68fd3b9" }
-ruff_python_parser = { git = "https://github.com/astral-sh/ruff.git", rev = "c5b58187da1809c778d886595ec50f7db68fd3b9" }
+ruff_python_ast = { git = "https://github.com/astral-sh/ruff.git", tag = "0.12.1" }
+ruff_python_parser = { git = "https://github.com/astral-sh/ruff.git", tag = "0.12.1" }
 
 [lints.rust]
 dead_code = "allow"

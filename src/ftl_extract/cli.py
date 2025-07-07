@@ -182,10 +182,17 @@ def cli_extract(
 @ftl.command("stub")
 @click.argument("locale_path", type=click.Path(exists=True, path_type=Path))
 @click.argument("output_path", type=click.Path(path_type=Path))
-def cli_stub(locale_path: Path, output_path: Path) -> None:
+@click.option(
+    "--export-tree",
+    is_flag=True,
+    default=False,
+    show_default=True,
+    help="Export tree structure of FTL messages.",
+)
+def cli_stub(locale_path: Path, output_path: Path, export_tree: bool) -> None:
     click.echo(f"Generating stubs from {locale_path}")
     start_time = perf_counter_ns()
 
-    generate_stubs(locale_path, output_path)
+    generate_stubs(locale_path, output_path, export_tree)
 
     click.echo(f"[Python] Done in {(perf_counter_ns() - start_time) * 1e-9:.3f}s.")

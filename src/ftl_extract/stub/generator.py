@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import ast
+import json
 from typing import TYPE_CHECKING, cast
 
 import click
@@ -277,11 +278,7 @@ def process_tree(
                 ast.stmt,
                 ast.Assign(
                     targets=[ast.Name(id=name, ctx=ast.Store())],
-                    value=ast.Call(
-                        func=ast.Name(id=f"__{to_camel_case(name)}", ctx=ast.Load()),
-                        args=[],
-                        keywords=[],
-                    ),
+                    value=ast.Name(id=f"__{to_camel_case(name)}", ctx=ast.Load()),
                 ),
             ),
         )
@@ -321,7 +318,7 @@ def generate_ast(module: ast.Module, tree: dict[str, dict[str, Any]]) -> None:
     module.body.append(top_class)
 
 
-def generate_stubs(ftl_path: Path, output_path: Path) -> None:
+def generate_stubs(ftl_path: Path, output_path: Path, export_tree: bool = False) -> None:
     if output_path.is_dir():
         output_path /= "stub.pyi"
 
@@ -337,6 +334,12 @@ def generate_stubs(ftl_path: Path, output_path: Path) -> None:
 
     tree = generate_tree(visitor.messages)
     tree: dict[str, dict[str, Any]] = {"i18n_stub": {**tree}}
+    if export_tree:
+        (output_path.parent / "stub.json").write_text(
+            json.dumps(tree, indent=2, ensure_ascii=False),
+            encoding="utf-8",
+        )
+        click.echo(f"Tree structure exported to {output_path.parent / 'stub.json'}")
 
     module = build_base_ast()
     generate_ast(module, tree)
@@ -344,4 +347,5 @@ def generate_stubs(ftl_path: Path, output_path: Path) -> None:
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(ast.unparse(module), encoding="utf-8")
+
     click.echo(f"Stub file generated at {output_path}")

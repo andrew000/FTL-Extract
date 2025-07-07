@@ -32,13 +32,13 @@ class LazyFactory(I18nStub):
 L: LazyFactory
 
 class I18nStub:
-    message_reference = __MessageReference()
-    text = __Text()
-    cls = __Cls()
-    self = __Self()
+    message_reference = __MessageReference
+    text = __Text
+    cls = __Cls
+    self = __Self
 
     class __Self:
-        get = __Get()
+        get = __Get
 
         @staticmethod
         def key(*, some_kwarg: Any, **kwargs: Any) -> Literal['self-key{ $some_kwarg }']:
@@ -51,7 +51,7 @@ class I18nStub:
                 ...
 
     class __Cls:
-        get = __Get()
+        get = __Get
 
         @staticmethod
         def key(*, some_kwarg: Any, **kwargs: Any) -> Literal['cls-key{ $some_kwarg }']:
@@ -69,16 +69,16 @@ class I18nStub:
         ...
 
     class __Text:
-        selector = __Selector()
-        message_reference = __MessageReference()
-        args = __Args()
+        selector = __Selector
+        message_reference = __MessageReference
+        args = __Args
 
         @staticmethod
         def kwargs(*, kwarg1: Any, kwarg2: Any, **kwargs: Any) -> Literal['This is text with args { $kwarg1 } { $kwarg2 }']:
             ...
 
         class __Args:
-            term = __Term()
+            term = __Term
 
             @staticmethod
             @overload
@@ -108,7 +108,7 @@ class I18nStub:
             ...
 
         class __Selector:
-            reference = __Reference()
+            reference = __Reference
 
             @staticmethod
             def selectors(*, selector: Any, **kwargs: Any) -> Literal['This is text with selectors { $selector ->']:
@@ -119,13 +119,18 @@ class I18nStub:
                 ...
 
             class __Reference:
-                selector = __Selector()
+                selector = __Selector
 
                 class __Selector:
-                    kwargs = __Kwargs()
+                    kwargs = __Kwargs
 
                     class __Kwargs:
-                        terms = __Terms()
+                        terms = __Terms
+
+                        @staticmethod
+                        @overload
+                        def terms(*, selector: Any, kwarg1: Any, kwarg2: Any, **kwargs: Any) -> Literal['This is text with selector args { $selector ->']:
+                            ...
 
                         class __Terms:
 

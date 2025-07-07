@@ -1,0 +1,158 @@
+{
+  "i18n_stub": {
+    "self": {
+      "key": {
+        "$_meta$": {
+          "args": [
+            "some_kwarg"
+          ],
+          "translation": "self-key{ $some_kwarg }"
+        }
+      },
+      "get": {
+        "key": {
+          "$_meta$": {
+            "args": [
+              "some_kwarg"
+            ],
+            "translation": "self-get-key{ $some_kwarg }"
+          }
+        }
+      }
+    },
+    "cls": {
+      "key": {
+        "$_meta$": {
+          "args": [
+            "some_kwarg"
+          ],
+          "translation": "cls-key{ $some_kwarg }"
+        }
+      },
+      "get": {
+        "key": {
+          "$_meta$": {
+            "args": [
+              "some_kwarg"
+            ],
+            "translation": "cls-get-key{ $some_kwarg }"
+          }
+        }
+      }
+    },
+    "text": {
+      "$_meta$": {
+        "args": [],
+        "translation": "This is text"
+      },
+      "kwargs": {
+        "$_meta$": {
+          "args": [
+            "kwarg1",
+            "kwarg2"
+          ],
+          "translation": "This is text with args { $kwarg1 } { $kwarg2 }"
+        }
+      },
+      "args": {
+        "term": {
+          "$_meta$": {
+            "args": [],
+            "translation": "This is text with args as term { -term1 } { -term2 }"
+          },
+          "args": {
+            "$_meta$": {
+              "args": [
+                "kwarg1",
+                "kwarg2"
+              ],
+              "translation": "This is text with args as term { -term1-with-args } { -term2-with-args }"
+            }
+          }
+        }
+      },
+      "message_reference": {
+        "$_meta$": {
+          "args": [],
+          "translation": "This is text with another text { message_reference }"
+        },
+        "args": {
+          "$_meta$": {
+            "args": [
+              "kwarg1",
+              "kwarg2"
+            ],
+            "translation": "This is text with another text { message_reference-args }"
+          }
+        }
+      },
+      "selector": {
+        "$_meta$": {
+          "args": [
+            "selector"
+          ],
+          "translation": "This is text with selector { $selector ->\n        [1] Ok\n        [2] Ok\n       *[other] { $selector }, 🤔\n    }"
+        },
+        "selectors": {
+          "$_meta$": {
+            "args": [
+              "selector"
+            ],
+            "translation": "This is text with selectors { $selector ->\n        [1] Ok, { $selector }\n        [2] Ok, { $selector }\n       *[other] { $selector }, 🤔\n    }"
+          }
+        },
+        "kwargs": {
+          "$_meta$": {
+            "args": [
+              "selector",
+              "kwarg1",
+              "kwarg2"
+            ],
+            "translation": "This is text with selector args { $selector ->\n        [1] Ok, { $kwarg1 }\n        [2] Ok, { $kwarg2 }\n       *[other] 🤔\n    }"
+          }
+        },
+        "reference": {
+          "selector": {
+            "kwargs": {
+              "terms": {
+                "reference": {
+                  "$_meta$": {
+                    "args": [
+                      "selector",
+                      "kwarg1",
+                      "kwarg2"
+                    ],
+                    "translation": "This is text with selector args { $selector ->\n        [1] Ok, { -text-selector-reference-selector-kwargs-terms-term1 }\n        [2] Ok, { $kwarg2 }\n       *[other] 🤔\n    }"
+                  }
+                },
+                "$_meta$": {
+                  "args": [
+                    "selector",
+                    "kwarg1",
+                    "kwarg2"
+                  ],
+                  "translation": "This is text with selector args { $selector ->\n        [1] Ok, { text-selector-reference-selector-kwargs-terms-reference }\n        [2] Ok, { $kwarg1 }\n       *[other] 🤔\n    }"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "message_reference": {
+      "$_meta$": {
+        "args": [],
+        "translation": "This is message_reference, uses as variable for `text-message_reference`"
+      },
+      "args": {
+        "$_meta$": {
+          "args": [
+            "kwarg1",
+            "kwarg2"
+          ],
+          "translation": "This is message_reference with args { $kwarg1 } { $kwarg2 }, uses as variable for `text-message_reference-args`"
+        }
+      }
+    }
+  }
+}

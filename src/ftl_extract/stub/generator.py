@@ -290,7 +290,11 @@ def process_tree(
                 ast.stmt,
                 ast.Assign(
                     targets=[ast.Name(id=name, ctx=ast.Store())],
-                    value=ast.Name(id=f"__{to_camel_case(name)}", ctx=ast.Load()),
+                    value=ast.Call(
+                        func=ast.Name(id=f"__{to_camel_case(name)}", ctx=ast.Load()),
+                        args=[],
+                        keywords=[],
+                    ),
                 ),
             ),
         )

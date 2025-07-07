@@ -5,6 +5,8 @@ from dataclasses import dataclass, field
 from fluent.syntax import ast
 from fluent.syntax.visitor import Visitor
 
+from ftl_extract.stub.utils import remove_duplicates
+
 
 class FTLStubCantFindMessageReferenceError(Exception): ...
 
@@ -27,7 +29,7 @@ class Term:
 class FluentVisitor(Visitor):
     def __init__(self) -> None:
         self.messages: dict[str, Message] = {}  # { key: Message }
-        self.terms: dict[str, Term] = {}
+        self.terms: dict[str, Term] = {}  # { key: Term }
 
     @staticmethod
     def _extract_kwargs_from_variable_reference(
@@ -126,6 +128,7 @@ class FluentVisitor(Visitor):
                     placeable=element,
                 )
 
+        message.kwargs = remove_duplicates(message.kwargs)
         return message.kwargs
 
     def _extract_kwargs_from_term(self, term: Term) -> list[str]:
@@ -139,6 +142,7 @@ class FluentVisitor(Visitor):
                     placeable=element,
                 )
 
+        term.kwargs = remove_duplicates(term.kwargs)
         return term.kwargs
 
     def visit_Message(self, fluent_message: ast.Message) -> None:  # noqa: N802

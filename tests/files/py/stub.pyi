@@ -1,5 +1,5 @@
 from contextlib import contextmanager
-from typing import Any, Generator, overload
+from typing import Any, Generator, Literal, overload
 
 from aiogram_i18n import LazyProxy
 
@@ -32,108 +32,115 @@ class LazyFactory(I18nStub):
         ...
 L: LazyFactory
 
-class Terms:
-
-    @overload
-    def reference(self, *, selector: Any, kwarg1: Any, kwarg2: Any) -> str:
-        ...
-
-class Kwargs:
-    terms = Terms()
-
-    @overload
-    def terms(self, *, selector: Any, kwarg1: Any, kwarg2: Any) -> str:
-        ...
-
-class Reference:
-    selector = Selector()
-
-class Selector:
-    reference = Reference()
-    kwargs = Kwargs()
-
-    @overload
-    def selectors(self, *, selector: Any) -> str:
-        ...
-
-    @overload
-    def kwargs(self, *, selector: Any, kwarg1: Any, kwarg2: Any) -> str:
-        ...
-
-class Term:
-
-    @overload
-    def args(self, *, kwarg1: Any, kwarg2: Any) -> str:
-        ...
-
-class MessageReference:
-
-    @overload
-    def args(self, *, kwarg1: Any, kwarg2: Any) -> str:
-        ...
-
-class Args:
-    term = Term()
-
-    @overload
-    def term(self) -> str:
-        ...
-
-class Text:
-    args = Args()
-    message_reference = MessageReference()
-    selector = Selector()
-
-    @overload
-    def message_reference(self) -> str:
-        ...
-
-    @overload
-    def selector(self, *, selector: Any) -> str:
-        ...
-
-    @overload
-    def kwargs(self, *, kwarg1: Any, kwarg2: Any) -> str:
-        ...
-
-class Get:
-
-    @overload
-    def key(self, *, some_kwarg: Any) -> str:
-        ...
-
-class Cls:
-    get = Get()
-
-    @overload
-    def key(self, *, some_kwarg: Any) -> str:
-        ...
-
-class Self:
-    get = Get()
-
-    @overload
-    def key(self, *, some_kwarg: Any) -> str:
-        ...
-
 class I18nStub:
-    self = Self()
-    cls = Cls()
-    text = Text()
-    message_reference = MessageReference()
+    message_reference = __MessageReference()
+    text = __Text()
+    cls = __Cls()
+    self = __Self()
 
+    class __Self:
+        get = __Get()
+
+        class __Get:
+
+            @staticmethod
+            def key(*, some_kwarg: Any, **kwargs) -> Literal['self-get-key{ $some_kwarg }']:
+                ...
+
+        @staticmethod
+        def key(*, some_kwarg: Any, **kwargs) -> Literal['self-key{ $some_kwarg }']:
+            ...
+
+    class __Cls:
+        get = __Get()
+
+        class __Get:
+
+            @staticmethod
+            def key(*, some_kwarg: Any, **kwargs) -> Literal['cls-get-key{ $some_kwarg }']:
+                ...
+
+        @staticmethod
+        def key(*, some_kwarg: Any, **kwargs) -> Literal['cls-key{ $some_kwarg }']:
+            ...
+
+    @staticmethod
     @overload
-    def cls(self) -> str:
+    def text(**kwargs) -> Literal['This is text']:
         ...
 
+    class __Text:
+        selector = __Selector()
+        message_reference = __MessageReference()
+        args = __Args()
+
+        @staticmethod
+        def kwargs(*, kwarg1: Any, kwarg2: Any, **kwargs) -> Literal['This is text with args { $kwarg1 } { $kwarg2 }']:
+            ...
+
+        class __Args:
+            term = __Term()
+
+            @staticmethod
+            @overload
+            def term(**kwargs) -> Literal['This is text with args as term { -term1 } { -term2 }']:
+                ...
+
+            class __Term:
+
+                @staticmethod
+                def args(*, kwarg1: Any, kwarg2: Any, **kwargs) -> Literal['This is text with args as term { -term1-with-args } { -term2-with-args }']:
+                    ...
+
+        @staticmethod
+        @overload
+        def message_reference(**kwargs) -> Literal['This is text with another text { message_reference }']:
+            ...
+
+        class __MessageReference:
+
+            @staticmethod
+            def args(*, kwarg1: Any, kwarg2: Any, **kwargs) -> Literal['This is text with another text { message_reference-args }']:
+                ...
+
+        @staticmethod
+        @overload
+        def selector(*, selector: Any, **kwargs) -> Literal['This is text with selector { $selector ->']:
+            ...
+
+        class __Selector:
+            reference = __Reference()
+
+            @staticmethod
+            def selectors(*, selector: Any, **kwargs) -> Literal['This is text with selectors { $selector ->']:
+                ...
+
+            @staticmethod
+            def kwargs(*, selector: Any, kwarg1: Any, kwarg2: Any, **kwargs) -> Literal['This is text with selector args { $selector ->']:
+                ...
+
+            class __Reference:
+                selector = __Selector()
+
+                class __Selector:
+                    kwargs = __Kwargs()
+
+                    class __Kwargs:
+                        terms = __Terms()
+
+                        class __Terms:
+
+                            @staticmethod
+                            def reference(*, selector: Any, kwarg1: Any, kwarg2: Any, **kwargs) -> Literal['This is text with selector args { $selector ->']:
+                                ...
+
+    @staticmethod
     @overload
-    def self(self) -> str:
+    def message_reference(**kwargs) -> Literal['This is message_reference, uses as variable for `text-message_reference`']:
         ...
 
-    @overload
-    def message_reference(self) -> str:
-        ...
+    class __MessageReference:
 
-    @overload
-    def text(self) -> str:
-        ...
+        @staticmethod
+        def args(*, kwarg1: Any, kwarg2: Any, **kwargs) -> Literal['This is message_reference with args { $kwarg1 } { $kwarg2 }, uses as variable for `text-message_reference-args`']:
+            ...

@@ -241,7 +241,7 @@ def create_static_method(name: str, metadata: Metadata) -> ast.FunctionDef:
             for arg_name in metadata["args"]
         ],
         kw_defaults=[None for _ in metadata["args"]],
-        kwarg=ast.arg(arg="kwargs"),
+        kwarg=ast.arg(arg="kwargs", annotation=ast.Name(id="Any", ctx=ast.Load())),
         defaults=[],
     )
     return ast.FunctionDef(

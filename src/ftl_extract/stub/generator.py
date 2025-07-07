@@ -272,17 +272,6 @@ def process_tree(
             static_method.decorator_list.append(ast.Name(id="overload", ctx=ast.Load()))
 
     if tree:
-        parent_body.insert(
-            0,
-            cast(
-                ast.stmt,
-                ast.Assign(
-                    targets=[ast.Name(id=name, ctx=ast.Store())],
-                    value=ast.Name(id=f"__{to_camel_case(name)}", ctx=ast.Load()),
-                ),
-            ),
-        )
-
         class_def = ast.ClassDef(
             name=f"__{to_camel_case(name)}",
             bases=[],
@@ -295,6 +284,16 @@ def process_tree(
             process_tree(key, value, class_def.body)
 
         parent_body.append(cast(ast.stmt, class_def))
+        
+        parent_body.append(
+            cast(
+                ast.stmt,
+                ast.Assign(
+                    targets=[ast.Name(id=name, ctx=ast.Store())],
+                    value=ast.Name(id=f"__{to_camel_case(name)}", ctx=ast.Load()),
+                ),
+            ),
+        )
 
 
 def generate_ast(module: ast.Module, tree: dict[str, dict[str, Any]]) -> None:

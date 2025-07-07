@@ -1,7 +1,7 @@
 [project]
 name = "FTL-Extract"
 description = "Extract fluent keys from python code and organize them in .ftl files"
-version = "0.9.0a4"
+version = "0.9.0a5"
 authors = [{ name = "andrew000", email = "help@kusbot.com" }]
 keywords = ["i18n", "ftl", "ftl-extract"]
 readme = "README.md"
@@ -19,9 +19,9 @@ classifiers = [
 ]
 
 dependencies = [
-    "fluent-syntax>=0.19",
     "click==8.*",
-    "typing-extensions==4.*"
+    "fluent-syntax>=0.19",
+    "typing-extensions==4.*",
 ]
 
 [project.optional-dependencies]
@@ -31,25 +31,24 @@ dev = [
     "isort==6.0.1",
     "mypy==1.16.1",
     "pre-commit==4.2.0",
-    "ruff==0.12.1",
+    "ruff==0.12.2",
     "setuptools-rust==1.11.1",
     "setuptools==80.9.0",
-    "typing-extensions==4.14.0",
     "wheel==0.45.1",
 ]
 tests = [
-    "pytest==8.4.1",
+    "coverage==7.9.2",
     "pytest-cov==6.2.1",
     "pytest-html==4.1.1",
     "pytest-mock==3.14.1",
-    "coverage==7.9.1",
+    "pytest==8.4.1",
 ]
 docs = [
-    "sphinx==7.4.7",
-    "sphinx-rtd-theme==3.0.2",
-    "sphinx-autobuild==2024.10.3",
     "furo==2024.8.6",
     "pytz==2025.2",
+    "sphinx-autobuild==2024.10.3",
+    "sphinx-rtd-theme==3.0.2",
+    "sphinx==7.4.7",
 ]
 
 [project.urls]

@@ -1,14 +1,12 @@
 from __future__ import annotations
 
 import ast
-from _ast import stmt
-from collections.abc import Iterable
-from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, cast
 
+import click
 from fluent.syntax import FluentParser
 
-from ftl_extract.stub.node import create_node
+from ftl_extract.stub.tree import METADATA_DICT_KEY, Metadata, generate_tree
 from ftl_extract.stub.utils import to_camel_case
 from ftl_extract.stub.visitor import FluentVisitor, Message
 
@@ -17,33 +15,16 @@ if TYPE_CHECKING:
     from pathlib import Path
     from typing import Any
 
-    from ftl_extract.stub.node import Node
-
 
 class NoBodyError(Exception): ...
 
 
-class BuildASTUndefinedBehaviorError(Exception): ...
-
-
-@dataclass(unsafe_hash=True)
-class FunctionDefWrapper:
-    name: str
-    function_def: ast.FunctionDef = field(hash=False, compare=False)
-    args: tuple[str, ...] = field(default_factory=tuple)
-
-
-@dataclass
-class ClassDefWrapper:
-    name: str
-    class_def: ast.ClassDef
-    attributes: list[str] = field(default_factory=list)
-    methods: set[FunctionDefWrapper] = field(default_factory=set)
+class RootKeyIsMissingError(Exception): ...
 
 
 def read_ftl_messages(visitor: FluentVisitor, path: Path) -> dict[str, Message]:
     resource = FluentParser().parse(path.read_text())
-    if not resource.body:
+    if resource.body is None:
         msg = "no body"
         raise NoBodyError(msg)
 
@@ -68,6 +49,7 @@ def build_base_ast() -> ast.Module:
                 names=[
                     ast.alias(name="Any"),
                     ast.alias(name="Generator"),
+                    ast.alias(name="Literal"),
                     ast.alias(name="overload"),
                 ],
                 level=0,
@@ -249,186 +231,103 @@ def build_base_ast() -> ast.Module:
     )
 
 
-def build_ast(node: Node) -> list[ast.ClassDef]:
-    body: list[ast.ClassDef] = []
-    cls_dict: dict[str, ClassDefWrapper] = {
-        to_camel_case(node.name): ClassDefWrapper(
-            name=to_camel_case(node.name),
-            class_def=ast.ClassDef(
-                name=to_camel_case(node.name),
-                bases=[],
-                keywords=[],
-                body=[],
-                decorator_list=[],
-            ),
-            attributes=[inner_node.name for inner_node in node.attributes if inner_node.attributes],
-            methods={
-                FunctionDefWrapper(
-                    name=inner_node.name,
-                    function_def=ast.FunctionDef(
-                        name=inner_node.name,
-                        args=ast.arguments(
-                            posonlyargs=[],
-                            args=[],
-                            vararg=None,
-                            kwonlyargs=[],
-                            kw_defaults=[],
-                            kwarg=None,
-                            defaults=[],
-                        ),
-                        body=[],
-                        decorator_list=[],
-                    ),
-                    args=tuple(inner_node.args),
-                )
-                for inner_node in node.attributes
-            },
+def create_static_method(name: str, metadata: Metadata) -> ast.FunctionDef:
+    args = ast.arguments(
+        posonlyargs=[],
+        args=[],
+        vararg=None,
+        kwonlyargs=[
+            ast.arg(arg=arg_name, annotation=ast.Name(id="Any", ctx=ast.Load()))
+            for arg_name in metadata["args"]
+        ],
+        kw_defaults=[None for _ in metadata["args"]],
+        kwarg=ast.arg(arg="kwargs"),
+        defaults=[],
+    )
+    return ast.FunctionDef(
+        name=name,
+        args=args,
+        decorator_list=[ast.Name(id="staticmethod", ctx=ast.Load())],
+        returns=ast.Subscript(
+            value=ast.Name(id="Literal", ctx=ast.Load()),
+            slice=ast.Constant(value=metadata["translation"].split("\n", maxsplit=1)[0]),
+            ctx=ast.Load(),
         ),
-    }
-
-    for inner_node in node.attributes:
-        fill_ast(inner_node, cls_dict)
-
-    for class_wrapper in cls_dict.values():
-        if class_wrapper.attributes:
-            seen = set()
-
-            for attribute in class_wrapper.attributes:
-                if attribute not in seen:
-                    class_wrapper.class_def.body.append(
-                        ast.Assign(
-                            targets=[ast.Name(id=attribute)],
-                            value=ast.Call(
-                                func=ast.Name(id=to_camel_case(attribute)),
-                                args=[],
-                                keywords=[],
-                            ),
-                        ),
-                    )
-                    seen.add(attribute)
-
-        if class_wrapper.methods:
-            class_wrapper.class_def.body.extend(
-                [
-                    ast.FunctionDef(
-                        name=method.name,
-                        args=ast.arguments(
-                            posonlyargs=[],
-                            args=[ast.arg(arg="self")],
-                            vararg=None,
-                            kwonlyargs=[
-                                ast.arg(arg=arg, annotation=ast.Name(id="Any"))
-                                for arg in method.args
-                            ],
-                            kw_defaults=[None] * len(method.args),
-                            kwarg=None,
-                            defaults=[],
-                        ),
-                        body=[ast.Expr(value=ast.Constant(value=Ellipsis))],
-                        decorator_list=[ast.Name(id="overload")],
-                        returns=ast.Name(id="str"),
-                    )
-                    if method.args
-                    else ast.FunctionDef(
-                        name=method.name,
-                        args=ast.arguments(
-                            posonlyargs=[],
-                            args=[ast.arg(arg="self")],
-                            vararg=None,
-                            kwonlyargs=[],
-                            kw_defaults=[],
-                            kwarg=None,
-                            defaults=[],
-                        ),
-                        body=[ast.Expr(value=ast.Constant(value=Ellipsis))],
-                        decorator_list=[ast.Name(id="overload")],
-                        returns=ast.Name(id="str"),
-                    )
-                    for method in class_wrapper.methods
-                ],
-            )
-
-        body.insert(0, class_wrapper.class_def)
-
-    return body
+        body=[ast.Expr(value=ast.Constant(value=Ellipsis))],
+        type_comment=None,
+    )
 
 
-def fill_ast(node: Node, cls_dict: dict[str, ClassDefWrapper]) -> None:
-    if to_camel_case(node.name) not in cls_dict:
-        if node.attributes:
-            class_wrapper = ClassDefWrapper(
-                name=to_camel_case(node.name),
-                class_def=ast.ClassDef(
-                    name=to_camel_case(node.name),
-                    bases=[],
-                    keywords=[],
-                    body=[],
-                    decorator_list=[],
-                ),
-                attributes=[
-                    inner_node.name for inner_node in node.attributes if inner_node.attributes
-                ],
-                methods={
-                    FunctionDefWrapper(
-                        name=inner_node.name,
-                        function_def=ast.FunctionDef(
-                            name=inner_node.name,
-                            args=ast.arguments(
-                                posonlyargs=[],
-                                args=[],
-                                vararg=None,
-                                kwonlyargs=[],
-                                kw_defaults=[],
-                                kwarg=None,
-                                defaults=[],
-                            ),
-                            body=[],
-                            decorator_list=[],
-                        ),
-                        args=tuple(inner_node.args),
-                    )
-                    for inner_node in node.attributes
-                    if not inner_node.attributes
-                },
-            )
-            cls_dict[class_wrapper.name] = class_wrapper
+def process_tree(
+    name: str,
+    tree: dict[str, Any],
+    parent_body: list[ast.stmt],
+) -> None:
+    if METADATA_DICT_KEY in tree:
+        static_method = create_static_method(name, cast(Metadata, tree.pop(METADATA_DICT_KEY)))
+        parent_body.append(static_method)
 
-    else:
-        cls_dict[to_camel_case(node.name)].methods |= {
-            FunctionDefWrapper(
-                name=inner_node.name,
-                function_def=ast.FunctionDef(
-                    name=inner_node.name,
-                    args=ast.arguments(
-                        posonlyargs=[],
+        if tree:
+            static_method.decorator_list.append(ast.Name(id="overload", ctx=ast.Load()))
+
+    if tree:
+        parent_body.insert(
+            0,
+            cast(
+                ast.stmt,
+                ast.Assign(
+                    targets=[ast.Name(id=name, ctx=ast.Store())],
+                    value=ast.Call(
+                        func=ast.Name(id=f"__{to_camel_case(name)}", ctx=ast.Load()),
                         args=[],
-                        vararg=None,
-                        kwonlyargs=[],
-                        kw_defaults=[],
-                        kwarg=None,
-                        defaults=[],
+                        keywords=[],
                     ),
-                    body=[],
-                    decorator_list=[],
                 ),
-                args=tuple(inner_node.args),
-            )
-            for inner_node in node.attributes
-            if not inner_node.attributes
-        }
-
-        cls_dict[to_camel_case(node.name)].attributes.extend(
-            [inner_node.name for inner_node in node.attributes if inner_node.attributes],
+            ),
         )
 
-    for inner_node in node.attributes:
-        fill_ast(inner_node, cls_dict)
+        class_def = ast.ClassDef(
+            name=f"__{to_camel_case(name)}",
+            bases=[],
+            keywords=[],
+            body=[],
+            decorator_list=[],
+        )
+
+        for key, value in tree.items():
+            process_tree(key, value, class_def.body)
+
+        parent_body.append(cast(ast.stmt, class_def))
+
+
+def generate_ast(module: ast.Module, tree: dict[str, dict[str, Any]]) -> None:
+    if "i18n_stub" not in tree:
+        msg = "i18n_stub key is missing in the tree"
+        raise RootKeyIsMissingError(msg)
+
+    top_class = ast.ClassDef(
+        name="I18nStub",
+        bases=[],
+        keywords=[],
+        body=[],
+        decorator_list=[],
+    )
+    for key, value in tree["i18n_stub"].items():
+        if key == METADATA_DICT_KEY:
+            continue
+
+        process_tree(key, value, top_class.body)
+
+    module.body.append(top_class)
 
 
 def generate_stubs(ftl_path: Path, output_path: Path) -> None:
-    if not ftl_path.exists():
-        msg = f"{ftl_path} does not exists"
-        raise FileExistsError(msg)
+    if output_path.is_dir():
+        output_path /= "stub.pyi"
+
+    if output_path.suffix != ".pyi":
+        msg = f"Output file `{output_path.name}` must have `.pyi` extension"
+        raise ValueError(msg)
 
     ftl_files = locate_ftl_files(ftl_path)
     visitor = FluentVisitor()
@@ -436,15 +335,13 @@ def generate_stubs(ftl_path: Path, output_path: Path) -> None:
     for ftl_file in ftl_files:
         read_ftl_messages(visitor, ftl_file)
 
-    node = create_node(visitor.messages)
+    tree = generate_tree(visitor.messages)
+    tree: dict[str, dict[str, Any]] = {"i18n_stub": {**tree}}
 
-    tree = build_base_ast()
-    body = build_ast(node)
-    tree.body.extend(cast(Iterable[stmt], body))
-    ast.fix_missing_locations(tree)
-
-    if output_path.is_dir():
-        output_path /= "stub.pyi"
+    module = build_base_ast()
+    generate_ast(module, tree)
+    ast.fix_missing_locations(module)
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    output_path.write_text(ast.unparse(tree))
+    output_path.write_text(ast.unparse(module))
+    click.echo(f"Stub file generated at {output_path}")

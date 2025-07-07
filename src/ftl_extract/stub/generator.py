@@ -23,7 +23,7 @@ class RootKeyIsMissingError(Exception): ...
 
 
 def read_ftl_messages(visitor: FluentVisitor, path: Path) -> dict[str, Message]:
-    resource = FluentParser().parse(path.read_text())
+    resource = FluentParser().parse(path.read_text(encoding="utf-8"))
     if resource.body is None:
         msg = "no body"
         raise NoBodyError(msg)
@@ -343,5 +343,5 @@ def generate_stubs(ftl_path: Path, output_path: Path) -> None:
     ast.fix_missing_locations(module)
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    output_path.write_text(ast.unparse(module))
+    output_path.write_text(ast.unparse(module), encoding="utf-8")
     click.echo(f"Stub file generated at {output_path}")

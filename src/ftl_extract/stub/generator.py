@@ -284,7 +284,7 @@ def process_tree(
             process_tree(key, value, class_def.body)
 
         parent_body.append(cast(ast.stmt, class_def))
-        
+
         parent_body.append(
             cast(
                 ast.stmt,

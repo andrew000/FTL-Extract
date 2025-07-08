@@ -1,5 +1,6 @@
 from contextlib import contextmanager
 from typing import Any, Generator, Literal, overload
+
 from aiogram_i18n import LazyProxy
 
 class I18nContext(I18nStub):
@@ -32,13 +33,8 @@ class LazyFactory(I18nStub):
 L: LazyFactory
 
 class I18nStub:
-    message_reference = __MessageReference
-    text = __Text
-    cls = __Cls
-    self = __Self
 
     class __Self:
-        get = __Get
 
         @staticmethod
         def key(*, some_kwarg: Any, **kwargs: Any) -> Literal['self-key{ $some_kwarg }']:
@@ -49,9 +45,10 @@ class I18nStub:
             @staticmethod
             def key(*, some_kwarg: Any, **kwargs: Any) -> Literal['self-get-key{ $some_kwarg }']:
                 ...
+        get = __Get()
+    self = __Self()
 
     class __Cls:
-        get = __Get
 
         @staticmethod
         def key(*, some_kwarg: Any, **kwargs: Any) -> Literal['cls-key{ $some_kwarg }']:
@@ -62,6 +59,8 @@ class I18nStub:
             @staticmethod
             def key(*, some_kwarg: Any, **kwargs: Any) -> Literal['cls-get-key{ $some_kwarg }']:
                 ...
+        get = __Get()
+    cls = __Cls()
 
     @staticmethod
     @overload
@@ -69,16 +68,12 @@ class I18nStub:
         ...
 
     class __Text:
-        selector = __Selector
-        message_reference = __MessageReference
-        args = __Args
 
         @staticmethod
         def kwargs(*, kwarg1: Any, kwarg2: Any, **kwargs: Any) -> Literal['This is text with args { $kwarg1 } { $kwarg2 }']:
             ...
 
         class __Args:
-            term = __Term
 
             @staticmethod
             @overload
@@ -90,6 +85,8 @@ class I18nStub:
                 @staticmethod
                 def args(*, kwarg1: Any, kwarg2: Any, **kwargs: Any) -> Literal['This is text with args as term { -term1-with-args } { -term2-with-args }']:
                     ...
+            term = __Term()
+        args = __Args()
 
         @staticmethod
         @overload
@@ -101,6 +98,7 @@ class I18nStub:
             @staticmethod
             def args(*, kwarg1: Any, kwarg2: Any, **kwargs: Any) -> Literal['This is text with another text { message_reference-args }']:
                 ...
+        message_reference = __MessageReference()
 
         @staticmethod
         @overload
@@ -108,7 +106,6 @@ class I18nStub:
             ...
 
         class __Selector:
-            reference = __Reference
 
             @staticmethod
             def selectors(*, selector: Any, **kwargs: Any) -> Literal['This is text with selectors { $selector ->']:
@@ -119,13 +116,10 @@ class I18nStub:
                 ...
 
             class __Reference:
-                selector = __Selector
 
                 class __Selector:
-                    kwargs = __Kwargs
 
                     class __Kwargs:
-                        terms = __Terms
 
                         @staticmethod
                         @overload
@@ -137,6 +131,12 @@ class I18nStub:
                             @staticmethod
                             def reference(*, selector: Any, kwarg1: Any, kwarg2: Any, **kwargs: Any) -> Literal['This is text with selector args { $selector ->']:
                                 ...
+                        terms = __Terms()
+                    kwargs = __Kwargs()
+                selector = __Selector()
+            reference = __Reference()
+        selector = __Selector()
+    text = __Text()
 
     @staticmethod
     @overload
@@ -148,3 +148,4 @@ class I18nStub:
         @staticmethod
         def args(*, kwarg1: Any, kwarg2: Any, **kwargs: Any) -> Literal['This is message_reference with args { $kwarg1 } { $kwarg2 }, uses as variable for `text-message_reference-args`']:
             ...
+    message_reference = __MessageReference()

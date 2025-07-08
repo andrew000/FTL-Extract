@@ -1,7 +1,7 @@
 [project]
 name = "FTL-Extract"
 description = "Extract fluent keys from python code and organize them in .ftl files"
-version = "0.9.0a8"
+version = "0.9.0a9"
 authors = [{ name = "andrew000", email = "help@kusbot.com" }]
 keywords = ["i18n", "ftl", "ftl-extract"]
 readme = "README.md"

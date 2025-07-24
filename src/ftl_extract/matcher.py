@@ -109,7 +109,7 @@ class I18nMatcher(ast.NodeVisitor):
         self.default_ftl_file = default_ftl_file
         self.fluent_keys: dict[str, FluentKey] = {}
 
-    def visit_Call(self, node: ast.Call) -> None:  # noqa: N802
+    def visit_Call(self, node: ast.Call) -> None:
         if isinstance(node.func, ast.Attribute):
             self._process_attribute_call(node)
 
@@ -132,7 +132,9 @@ class I18nMatcher(ast.NodeVisitor):
         if not node.args or not isinstance(node.args[0], ast.Constant):
             return
 
-        fluent_key = self._create_fluent_key(node=node, key=cast(ast.Constant, node.args[0]).value)
+        fluent_key = self._create_fluent_key(
+            node=node, key=cast(str, cast(ast.Constant, node.args[0]).value)
+        )
         self._add_fluent_key(new_fluent_key=fluent_key)
 
     def _process_attribute_name_call(
@@ -164,7 +166,7 @@ class I18nMatcher(ast.NodeVisitor):
         # Add the first arg as the translation key
         attrs.clear()
         if isinstance(arg := node.args[0], ast.Constant):
-            key = cast(ast.Constant, arg).value
+            key = cast(str, cast(ast.Constant, arg).value)
 
             fluent_key = self._create_fluent_key(node=node, key=key)
             self._add_fluent_key(new_fluent_key=fluent_key)
@@ -192,7 +194,7 @@ class I18nMatcher(ast.NodeVisitor):
         for kw in keywords:
             if kw.arg == PATH_LITERAL:
                 if kw.value is not None and isinstance(kw.value, ast.Constant):
-                    fluent_key.path = Path(cast(ast.Constant, kw.value).value)
+                    fluent_key.path = Path(cast(str, cast(ast.Constant, kw.value).value))
             elif isinstance(kw.arg, str):
                 if kw.arg in self.ignore_kwargs:
                     continue

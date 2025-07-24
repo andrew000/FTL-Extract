@@ -74,6 +74,36 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e16d2d3311acee920a9eb8d33b8cbc1787ce4a264e85f964c2404b969bdcd487"
 
 [[package]]
+name = "attribute-derive"
+version = "0.10.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0053e96dd3bec5b4879c23a138d6ef26f2cb936c9cdc96274ac2b9ed44b5bb54"
+dependencies = [
+ "attribute-derive-macro",
+ "derive-where",
+ "manyhow",
+ "proc-macro2",
+ "quote",
+ "syn",
+]
+
+[[package]]
+name = "attribute-derive-macro"
+version = "0.10.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "463b53ad0fd5b460af4b1915fe045ff4d946d025fb6c4dc3337752eaa980f71b"
+dependencies = [
+ "collection_literals",
+ "interpolator",
+ "manyhow",
+ "proc-macro-utils",
+ "proc-macro2",
+ "quote",
+ "quote-use",
+ "syn",
+]
+
+[[package]]
 name = "bitflags"
 version = "2.9.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -164,6 +194,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "collection_literals"
+version = "1.0.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "26b3f65b8fb8e88ba339f7d23a390fe1b0896217da05e2a66c584c9b29a91df8"
+
+[[package]]
 name = "colorchoice"
 version = "1.0.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -209,6 +245,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d0a5c400df2834b80a4c3327b3aad3a4c4cd4de0629063962b03235697506a28"
 
 [[package]]
+name = "derive-where"
+version = "1.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "510c292c8cf384b1a340b816a9a6cf2599eb8f566a44949024af88418000c50b"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
+]
+
+[[package]]
 name = "displaydoc"
 version = "0.2.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -251,8 +298,8 @@ dependencies = [
 
 [[package]]
 name = "fluent"
-version = "0.16.1"
-source = "git+https://github.com/andrew000/fluent-rs.git?rev=9bc487b61173579a20cd1d3d45ba1cd7675c6cfd#9bc487b61173579a20cd1d3d45ba1cd7675c6cfd"
+version = "0.17.0"
+source = "git+https://github.com/andrew000/fluent-rs.git?rev=8fa43c3aac383e62419120c86ffc7df4beda69e7#8fa43c3aac383e62419120c86ffc7df4beda69e7"
 dependencies = [
  "fluent-bundle",
  "unic-langid",
@@ -260,8 +307,8 @@ dependencies = [
 
 [[package]]
 name = "fluent-bundle"
-version = "0.15.3"
-source = "git+https://github.com/andrew000/fluent-rs.git?rev=9bc487b61173579a20cd1d3d45ba1cd7675c6cfd#9bc487b61173579a20cd1d3d45ba1cd7675c6cfd"
+version = "0.16.0"
+source = "git+https://github.com/andrew000/fluent-rs.git?rev=8fa43c3aac383e62419120c86ffc7df4beda69e7#8fa43c3aac383e62419120c86ffc7df4beda69e7"
 dependencies = [
  "fluent-langneg",
  "fluent-syntax",
@@ -284,8 +331,8 @@ dependencies = [
 
 [[package]]
 name = "fluent-syntax"
-version = "0.11.1"
-source = "git+https://github.com/andrew000/fluent-rs.git?rev=9bc487b61173579a20cd1d3d45ba1cd7675c6cfd#9bc487b61173579a20cd1d3d45ba1cd7675c6cfd"
+version = "0.12.0"
+source = "git+https://github.com/andrew000/fluent-rs.git?rev=8fa43c3aac383e62419120c86ffc7df4beda69e7#8fa43c3aac383e62419120c86ffc7df4beda69e7"
 dependencies = [
  "memchr",
  "thiserror",
@@ -296,6 +343,29 @@ name = "foldhash"
 version = "0.1.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d9c4f5dac5e15c24eb999c26181a6ca40b39fe946cbe4c263c7209467bc83af2"
+
+[[package]]
+name = "get-size-derive2"
+version = "0.5.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "028f3cfad7c3e3b1d8d04ef0a1c03576f2d62800803fe1301a4cd262849f2dea"
+dependencies = [
+ "attribute-derive",
+ "quote",
+ "syn",
+]
+
+[[package]]
+name = "get-size2"
+version = "0.5.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3a09c2043819a3def7bfbb4927e7df96aab0da4cfd8824484b22d0c94e84458e"
+dependencies = [
+ "compact_str",
+ "get-size-derive2",
+ "hashbrown",
+ "smallvec",
+]
 
 [[package]]
 name = "getopts"
@@ -364,9 +434,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "interpolator"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "71dd52191aae121e8611f1e8dc3e324dd0dd1dee1e6dd91d10ee07a3cfb4d9d8"
+
+[[package]]
 name = "intl-memoizer"
-version = "0.5.2"
-source = "git+https://github.com/andrew000/fluent-rs.git?rev=9bc487b61173579a20cd1d3d45ba1cd7675c6cfd#9bc487b61173579a20cd1d3d45ba1cd7675c6cfd"
+version = "0.5.3"
+source = "git+https://github.com/andrew000/fluent-rs.git?rev=8fa43c3aac383e62419120c86ffc7df4beda69e7#8fa43c3aac383e62419120c86ffc7df4beda69e7"
 dependencies = [
  "type-map",
  "unic-langid",
@@ -443,6 +519,29 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "13dc2df351e3202783a1fe0d44375f7295ffb4049267b0f3018346dc122a1d94"
 
 [[package]]
+name = "manyhow"
+version = "0.11.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b33efb3ca6d3b07393750d4030418d594ab1139cee518f0dc88db70fec873587"
+dependencies = [
+ "manyhow-macros",
+ "proc-macro2",
+ "quote",
+ "syn",
+]
+
+[[package]]
+name = "manyhow-macros"
+version = "0.11.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "46fce34d199b78b6e6073abf984c9cf5fd3e9330145a93ee0738a7443e371495"
+dependencies = [
+ "proc-macro-utils",
+ "proc-macro2",
+ "quote",
+]
+
+[[package]]
 name = "memchr"
 version = "2.7.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -511,6 +610,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "proc-macro-utils"
+version = "0.10.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "eeaf08a13de400bc215877b5bdc088f241b12eb42f0a548d3390dc1c56bb7071"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "smallvec",
+]
+
+[[package]]
 name = "proc-macro2"
 version = "1.0.95"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -526,6 +636,28 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1885c039570dc00dcb4ff087a89e185fd56bae234ddc7f056a945bf36467248d"
 dependencies = [
  "proc-macro2",
+]
+
+[[package]]
+name = "quote-use"
+version = "0.8.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9619db1197b497a36178cfc736dc96b271fe918875fbf1344c436a7e93d0321e"
+dependencies = [
+ "quote",
+ "quote-use-macros",
+]
+
+[[package]]
+name = "quote-use-macros"
+version = "0.8.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "82ebfb7faafadc06a7ab141a6f67bcfb24cb8beb158c6fe933f2f035afa99f35"
+dependencies = [
+ "proc-macro-utils",
+ "proc-macro2",
+ "quote",
+ "syn",
 ]
 
 [[package]]
@@ -598,11 +730,12 @@ checksum = "2b15c43186be67a4fd63bee50d0303afffcef381492ebe2c5d87f324e1b8815c"
 [[package]]
 name = "ruff_python_ast"
 version = "0.0.0"
-source = "git+https://github.com/astral-sh/ruff.git?tag=0.12.1#32c54189cb45a9d0409a1140265ce6d5fcec214d"
+source = "git+https://github.com/astral-sh/ruff.git?tag=0.12.4#ee2759b365448e58503b63636c1cedaa65360bd1"
 dependencies = [
  "aho-corasick",
  "bitflags",
  "compact_str",
+ "get-size2",
  "is-macro",
  "itertools",
  "memchr",
@@ -616,11 +749,12 @@ dependencies = [
 [[package]]
 name = "ruff_python_parser"
 version = "0.0.0"
-source = "git+https://github.com/astral-sh/ruff.git?tag=0.12.1#32c54189cb45a9d0409a1140265ce6d5fcec214d"
+source = "git+https://github.com/astral-sh/ruff.git?tag=0.12.4#ee2759b365448e58503b63636c1cedaa65360bd1"
 dependencies = [
  "bitflags",
  "bstr",
  "compact_str",
+ "get-size2",
  "memchr",
  "ruff_python_ast",
  "ruff_python_trivia",
@@ -635,7 +769,7 @@ dependencies = [
 [[package]]
 name = "ruff_python_trivia"
 version = "0.0.0"
-source = "git+https://github.com/astral-sh/ruff.git?tag=0.12.1#32c54189cb45a9d0409a1140265ce6d5fcec214d"
+source = "git+https://github.com/astral-sh/ruff.git?tag=0.12.4#ee2759b365448e58503b63636c1cedaa65360bd1"
 dependencies = [
  "itertools",
  "ruff_source_file",
@@ -646,7 +780,7 @@ dependencies = [
 [[package]]
 name = "ruff_source_file"
 version = "0.0.0"
-source = "git+https://github.com/astral-sh/ruff.git?tag=0.12.1#32c54189cb45a9d0409a1140265ce6d5fcec214d"
+source = "git+https://github.com/astral-sh/ruff.git?tag=0.12.4#ee2759b365448e58503b63636c1cedaa65360bd1"
 dependencies = [
  "memchr",
  "ruff_text_size",
@@ -655,7 +789,10 @@ dependencies = [
 [[package]]
 name = "ruff_text_size"
 version = "0.0.0"
-source = "git+https://github.com/astral-sh/ruff.git?tag=0.12.1#32c54189cb45a9d0409a1140265ce6d5fcec214d"
+source = "git+https://github.com/astral-sh/ruff.git?tag=0.12.4#ee2759b365448e58503b63636c1cedaa65360bd1"
+dependencies = [
+ "get-size2",
+]
 
 [[package]]
 name = "rustc-hash"

@@ -16,5 +16,5 @@ path = "src/main.rs"
 [dependencies]
 extractor = { path = "../extractor" }
 
-clap = { version = "4.5.40" }
-hashbrown = { version = "0.15.4" }
+clap = { version = "4.5.45" }
+hashbrown = { version = "0.15.5" }

@@ -44,12 +44,12 @@ def locate_ftl_files(path: Path) -> Generator[Path, Any, Any]:
 def build_base_ast() -> ast.Module:
     return ast.Module(
         body=[
+            ast.ImportFrom(module="collections.abc", names=[ast.alias(name="Generator")], level=0),
             ast.ImportFrom(module="contextlib", names=[ast.alias(name="contextmanager")], level=0),
             ast.ImportFrom(
                 module="typing",
                 names=[
                     ast.alias(name="Any"),
-                    ast.alias(name="Generator"),
                     ast.alias(name="Literal"),
                     ast.alias(name="overload"),
                 ],
@@ -349,6 +349,6 @@ def generate_stubs(ftl_path: Path, output_path: Path, export_tree: bool = False)
     ast.fix_missing_locations(module)
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    output_path.write_text(ast.unparse(module), encoding="utf-8")
+    output_path.write_text("# mypy: ignore-errors\n" + ast.unparse(module), encoding="utf-8")
 
     click.echo(f"Stub file generated at {output_path}")

@@ -12,11 +12,11 @@ jobs:
     strategy:
       fail-fast: true
       matrix:
-        python-version: [ "3.9", "3.10", "3.11", "3.12", "3.13" ]
+        python-version: [ "3.10", "3.11", "3.12", "3.13" ]
         # os: [ ubuntu-latest, windows-latest, macos-14 ]
         os: [ ubuntu-latest, windows-latest ]  # Ahh... Why macOS is so expensive for CI builds...
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       # Set up the environment for the extension build on macOS and Windows
       # This OS doesn't compile the extension for `{many,musl}linux` distributions in containers
@@ -123,7 +123,7 @@ jobs:
         # os: [ ubuntu-latest, ubuntu-24.04-arm, windows-latest, macos-14 ]
         os: [ ubuntu-latest, ubuntu-24.04-arm, windows-latest ]  # Ahh... Why macOS is so expensive for CI builds...
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       # Set up the environment for the extension build on macOS and Windows
       # This OS doesn't compile the extension for `{many,musl}linux` distributions in containers

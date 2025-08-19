@@ -1,17 +1,16 @@
 [project]
 name = "FTL-Extract"
 description = "Extract fluent keys from python code and organize them in .ftl files"
-version = "0.9.0a9"
+version = "0.9.0a10"
 authors = [{ name = "andrew000", email = "help@kusbot.com" }]
 keywords = ["i18n", "ftl", "ftl-extract"]
 readme = "README.md"
 license = "MIT"
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 classifiers = [
     "Programming Language :: Python :: Implementation :: CPython",
     "Programming Language :: Rust",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
@@ -29,15 +28,15 @@ dev = [
     "cibuildwheel==2.23.3",
     "fluent-runtime==0.4.0",
     "isort==6.0.1",
-    "mypy==1.17.0",
-    "pre-commit==4.2.0",
-    "ruff==0.12.4",
+    "mypy==1.17.1",
+    "pre-commit==4.3.0",
+    "ruff==0.12.9",
     "setuptools-rust==1.11.1",
     "setuptools==80.9.0",
     "wheel==0.45.1",
 ]
 tests = [
-    "coverage==7.9.2",
+    "coverage==7.10.4",
     "pytest-cov==6.2.1",
     "pytest-html==4.1.1",
     "pytest-mock==3.14.1",
@@ -90,7 +89,7 @@ exclude_lines = [
 ]
 
 [tool.isort]
-py_version = 39
+py_version = 310
 src_paths = ["src", "tests"]
 line_length = 100
 multi_line_output = 3
@@ -145,7 +144,7 @@ skip-magic-trailing-comma = false
 line-ending = "auto"
 
 [tool.mypy]
-python_version = "3.9"
+python_version = "3.10"
 mypy_path = "src"
 packages = ["ftl_extract"]
 plugins = []

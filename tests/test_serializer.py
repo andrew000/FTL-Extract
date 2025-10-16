@@ -90,7 +90,7 @@ def test_custom_serializer_handles_empty_fluent_keys_list_properly(
 
 
 def test_generate_ftl_includes_leave_as_is_elements() -> None:
-    ftl_string, resource = generate_ftl(
+    ftl_string, _resource = generate_ftl(
         fluent_keys=[
             FluentKey(
                 code_path=Path("test.py"),

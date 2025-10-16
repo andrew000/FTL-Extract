@@ -19,7 +19,7 @@ repos:
       - id: "check-json"
 
   - repo: https://github.com/charliermarsh/ruff-pre-commit
-    rev: v0.12.9
+    rev: v0.14.0
     hooks:
       - id: ruff
         args: [ "--fix" ]
@@ -29,7 +29,7 @@ repos:
         files: "ftl_extract"
 
   - repo: https://github.com/pycqa/isort
-    rev: 6.0.1
+    rev: 7.0.0
     hooks:
       - id: isort
         name: isort (python)

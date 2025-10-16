@@ -12,9 +12,8 @@ jobs:
     strategy:
       fail-fast: true
       matrix:
-        python-version: [ "3.10", "3.11", "3.12", "3.13" ]
-        # os: [ ubuntu-latest, windows-latest, macos-14 ]
         os: [ ubuntu-latest, windows-latest ]  # Ahh... Why macOS is so expensive for CI builds...
+        python-version: [ "3.10", "3.11", "3.12", "3.13" ]
     steps:
       - uses: actions/checkout@v5
 
@@ -26,7 +25,7 @@ jobs:
         run: echo "BUILD_RUST_IMPL=1" >> $GITHUB_ENV
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v6
+        uses: astral-sh/setup-uv@v7
         with:
           python-version: ${{ matrix.python-version }}
           version: "latest"
@@ -38,21 +37,21 @@ jobs:
       - name: Prepare the project (Windows and macOS)
         if: runner.os == 'Windows' || runner.os == 'macOS'
         shell: bash
-        run: uv sync --extra dev --extra tests --verbose
+        run: uv sync --all-extras
 
       - name: Prepare the project (Linux py3.13)
         if: runner.os == 'Linux' && matrix.python-version == '3.13'
         env:
           BUILD_RUST_IMPL: "1"
         shell: bash
-        run: uv sync --extra dev --extra tests --verbose
+        run: uv sync --all-extras
 
       - name: Prepare the project (Linux !py3.13)
         if: runner.os == 'Linux' && matrix.python-version != '3.13'
         env:
           BUILD_RUST_IMPL: "0"
         shell: bash
-        run: uv sync --extra dev --extra tests --verbose
+        run: uv sync --all-extras
 
       - name: Minimize uv cache
         shell: bash
@@ -120,8 +119,26 @@ jobs:
     strategy:
       fail-fast: true
       matrix:
-        # os: [ ubuntu-latest, ubuntu-24.04-arm, windows-latest, macos-14 ]
-        os: [ ubuntu-latest, ubuntu-24.04-arm, windows-latest ]  # Ahh... Why macOS is so expensive for CI builds...
+        include:
+          - os: ubuntu-latest
+            arch: x86_64
+            libc: manylinux
+          - os: ubuntu-latest
+            arch: x86_64
+            libc: musllinux
+          - os: ubuntu-24.04-arm
+            arch: aarch64
+            libc: manylinux
+          - os: ubuntu-24.04-arm
+            arch: aarch64
+            libc: musllinux
+          - os: windows-latest
+            arch: AMD64
+          # Ahh... Why macOS is so expensive for CI builds...
+          # - os: macos-13
+          #   arch: x86_64
+          # - os: macos-14
+          #   arch: arm64
     steps:
       - uses: actions/checkout@v5
 
@@ -133,60 +150,100 @@ jobs:
         run: echo "BUILD_RUST_IMPL=1" >> $GITHUB_ENV
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v6
+        uses: astral-sh/setup-uv@v7
         with:
           python-version: "3.13"
           version: "latest"
-          enable-cache: true
+          activate-environment: "true"
 
       - name: Rust cache
         uses: Swatinem/rust-cache@v2
 
       - name: Prepare the project
         shell: bash
-        run: uv sync --extra dev --extra tests --verbose
+        run: uv sync --all-extras --verbose
 
-      - name: Minimize uv cache
-        run: uv cache prune --ci
-
-      - name: Build and fix wheels
-        if: runner.os == 'Windows' || runner.os == 'macOS'
+      - name: Build and fix wheels (Windows)
+        if: runner.os == 'Windows' && matrix.arch == 'AMD64'
         shell: bash
+        env:
+          CIBW_BUILD: "cp313-win_amd64"
         run: |
-          uv run cibuildwheel --config-file pyproject.toml --output-dir wheelhouse
+          uv run cibuildwheel --config-file pyproject.toml --output-dir wheelhouse --platform windows
           for wheel in wheelhouse/*.whl; do
             uv run wheel tags --python-tag py3 --abi-tag none --remove $wheel
           done
+          for wheel in wheelhouse/*.whl; do
+            uv run --verbose --with $wheel --no-project --refresh-package ftl_extract -- ftl --version
+            uv run --verbose --with $wheel --no-project --refresh-package ftl_extract -- fast-ftl-extract --version
+          done
 
-      - name: Build and fix wheels (Linux x86_64)
-        if: matrix.os == 'ubuntu-latest'
+      - name: Build, fix and test wheels (macOS x86_64)
+        if: runner.os == 'macOS' && matrix.arch == 'x86_64'
         shell: bash
+        env:
+          CIBW_BUILD: "cp313-macosx_x86_64"
         run: |
-          uv run cibuildwheel --config-file pyproject.toml --archs x86_64 --output-dir wheelhouse
+          uv run cibuildwheel --config-file pyproject.toml --output-dir wheelhouse --platform macos
           for wheel in wheelhouse/*.whl; do
             uv run wheel tags --python-tag py3 --abi-tag none --remove $wheel
           done
+          for wheel in wheelhouse/*.whl; do
+            uv run --verbose --with $wheel --no-project --refresh-package ftl_extract -- ftl --version
+            uv run --verbose --with $wheel --no-project --refresh-package ftl_extract -- fast-ftl-extract --version
+          done
 
-      - name: Build and fix wheels (Linux aarch64)
-        if: matrix.os == 'ubuntu-24.04-arm'
+      - name: Build, fix and test wheels (macOS arm64)
+        if: runner.os == 'macOS' && matrix.arch == 'arm64'
         shell: bash
+        env:
+          CIBW_BUILD: "cp313-macosx_arm64"
         run: |
-          uv run cibuildwheel --config-file pyproject.toml --archs aarch64 --output-dir wheelhouse
+          uv run cibuildwheel --config-file pyproject.toml --output-dir wheelhouse --platform macos
           for wheel in wheelhouse/*.whl; do
             uv run wheel tags --python-tag py3 --abi-tag none --remove $wheel
           done
+          for wheel in wheelhouse/*.whl; do
+            uv run --verbose --with $wheel --no-project --refresh-package ftl_extract -- ftl --version
+            uv run --verbose --with $wheel --no-project --refresh-package ftl_extract -- fast-ftl-extract --version
+          done
 
-      - name: Verify wheel installation
-        if: runner.os == 'Windows' || runner.os == 'macOS'
+      - name: Build, fix and test wheels (Linux manylinux)
+        if: runner.os == 'Linux' && matrix.libc == 'manylinux'
         shell: bash
         run: |
+          export CIBW_MANYLINUX_$(echo ${{ matrix.arch }} | tr '[:lower:]' '[:upper:]')_IMAGE="quay.io/pypa/manylinux_2_28_${{ matrix.arch }}"
+          export CIBW_BUILD="cp313-manylinux_${{ matrix.arch }}"
+          uv run cibuildwheel --config-file pyproject.toml --archs ${{ matrix.arch }} --output-dir wheelhouse --platform linux
+          for wheel in wheelhouse/*.whl; do
+            uv run wheel tags --python-tag py3 --abi-tag none --remove $wheel
+          done
           for wheel in wheelhouse/*.whl; do
             uv run --verbose --with $wheel --no-project --refresh-package ftl_extract -- fast-ftl-extract --version
           done
 
-      # - name: Store artifacts
-      #   uses: actions/upload-artifact@v4
-      #   with:
-      #     name: ftl_extract-${{ matrix.os }}-${{ github.run_id }}
-      #     if-no-files-found: error
-      #     path: wheelhouse/*.whl
+      - name: Build, fix and test wheels (Linux musllinux)
+        if: runner.os == 'Linux' && matrix.libc == 'musllinux'
+        shell: bash
+        run: |
+          export CIBW_MUSLLINUX_$(echo ${{ matrix.arch }} | tr '[:lower:]' '[:upper:]')_IMAGE="quay.io/pypa/musllinux_1_2_${{ matrix.arch }}"
+          export CIBW_BUILD="cp313-musllinux_${{ matrix.arch }}"
+          uv run cibuildwheel --config-file pyproject.toml --archs ${{ matrix.arch }} --output-dir wheelhouse --platform linux
+          for wheel in wheelhouse/*.whl; do
+            uv run wheel tags --python-tag py3 --abi-tag none --remove $wheel
+          done
+          for wheel in wheelhouse/*.whl; do
+            uv run --verbose --with $wheel --no-project --refresh-package ftl_extract -- fast-ftl-extract --version
+          done
+
+      - name: Build sdist
+        if: runner.os == 'Linux' && matrix.arch == 'x86_64' && matrix.libc == 'manylinux'
+        shell: bash
+        run: uv build --sdist --out-dir wheelhouse
+
+      - name: Store artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ftl_extract-${{ matrix.os }}-${{ matrix.arch }}-${{ matrix.libc }}-${{ github.run_id }}
+          if-no-files-found: error
+          path: wheelhouse/*

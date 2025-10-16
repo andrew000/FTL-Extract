@@ -1,12 +1,12 @@
 [project]
 name = "FTL-Extract"
 description = "Extract fluent keys from python code and organize them in .ftl files"
-version = "0.9.0a10"
+version = "0.9.0a11"
 authors = [{ name = "andrew000", email = "help@kusbot.com" }]
 keywords = ["i18n", "ftl", "ftl-extract"]
 readme = "README.md"
 license = "MIT"
-requires-python = ">=3.10"
+requires-python = ">=3.10, <3.14"
 classifiers = [
     "Programming Language :: Python :: Implementation :: CPython",
     "Programming Language :: Rust",
@@ -20,34 +20,33 @@ classifiers = [
 dependencies = [
     "click==8.*",
     "fluent-syntax>=0.19",
-    "typing-extensions==4.*",
 ]
 
 [project.optional-dependencies]
 dev = [
     "cibuildwheel==2.23.3",
     "fluent-runtime==0.4.0",
-    "isort==6.0.1",
-    "mypy==1.17.1",
+    "isort==7.0.0",
+    "mypy==1.18.2",
     "pre-commit==4.3.0",
-    "ruff==0.12.9",
-    "setuptools-rust==1.11.1",
+    "ruff==0.14.0",
+    "setuptools-rust==1.12.0",
     "setuptools==80.9.0",
     "wheel==0.45.1",
 ]
 tests = [
-    "coverage==7.10.4",
-    "pytest-cov==6.2.1",
+    "coverage==7.11.0",
+    "pytest-cov==7.0.0",
     "pytest-html==4.1.1",
-    "pytest-mock==3.14.1",
-    "pytest==8.4.1",
+    "pytest-mock==3.15.1",
+    "pytest==8.4.2",
 ]
 docs = [
-    "furo==2025.7.19",
-    "pytz==2025.2",
-    "sphinx-autobuild==2024.10.3",
-    "sphinx-rtd-theme==3.0.2",
-    "sphinx==7.4.7",
+#    "furo==2025.7.19",
+#    "pytz==2025.2",
+#    "sphinx-autobuild==2024.10.3",
+#    "sphinx-rtd-theme==3.0.2",
+#    "sphinx==7.4.7",
 ]
 
 [project.urls]

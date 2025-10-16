@@ -4,16 +4,10 @@ docs_source_dir = $(docs_dir)/source
 reports_dir = reports
 tests_dir = tests
 
-ifeq ($(OS),Windows_NT)
-	mkdir_cmd := $(shell if not exist $(reports_dir) mkdir $(reports_dir))
-else
-	mkdir_cmd := $(shell mkdir -p $(reports_dir))
-endif
-
 .PHONY: lint
 lint:
 	echo "Running ruff..."
-	uv run ruff check --config pyproject.toml --diff $(py_code_dir) $(tests_dir)
+	uv run ruff check --config pyproject.toml --diff --unsafe-fixes $(py_code_dir) $(tests_dir)
 
 	echo "Running MyPy..."
 	uv run mypy --config-file pyproject.toml
@@ -47,11 +41,11 @@ test-coverage:
 
 .PHONY: outdated
 outdated:
-	uv tree --universal --outdated
+	uv tree --universal --outdated --no-cache
 
 .PHONY: sync
 sync:
-	uv sync --reinstall-package ftl_extract --extra dev --extra tests
+	uv sync --reinstall-package ftl_extract --all-extras
 
 .PHONY: build
 build:

@@ -13,18 +13,18 @@ license.workspace = true
 name = "extractor"
 
 [dependencies]
-anyhow = { version = "1.0.99" }
-clap = { version = "4.5.45", features = ["derive"] }
+anyhow = { version = "1.0.100" }
+clap = { version = "4.5.49", features = ["derive"] }
 fluent = { git = "https://github.com/andrew000/fluent-rs.git", rev = "8fa43c3aac383e62419120c86ffc7df4beda69e7" }
 fluent-syntax = { git = "https://github.com/andrew000/fluent-rs.git", rev = "8fa43c3aac383e62419120c86ffc7df4beda69e7" }
-globset = { version = "0.4.16" }
-hashbrown = { version = "0.15.5" }
-ignore = { version = "0.4.23" }
+globset = { version = "0.4.17" }
+hashbrown = { version = "0.16.0" }
+ignore = { version = "0.4.24" }
 lazy_static = { version = "1.5.0" }
-mimalloc = { version = "0.1.47" }
+mimalloc = { version = "0.1.48" }
 rayon = { version = "1.11.0" }
-ruff_python_ast = { git = "https://github.com/astral-sh/ruff.git", tag = "0.12.9" }
-ruff_python_parser = { git = "https://github.com/astral-sh/ruff.git", tag = "0.12.9" }
+ruff_python_ast = { git = "https://github.com/astral-sh/ruff.git", tag = "0.14.0" }
+ruff_python_parser = { git = "https://github.com/astral-sh/ruff.git", tag = "0.14.0" }
 
 [lints.rust]
 dead_code = "allow"

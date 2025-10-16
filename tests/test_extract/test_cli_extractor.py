@@ -361,7 +361,7 @@ def test_keys_to_comment_and_add_on_different_kwargs(setup_environment: tuple[Pa
 
 
 def test_i18n_matcher_skips_call_with_no_args(setup_environment: tuple[Path, Path]) -> None:
-    code_path, output_path = setup_environment
+    code_path, _output_path = setup_environment
     matcher = I18nMatcher(code_path, default_ftl_file=DEFAULT_FTL_FILE)
 
     node = ast.Call(func=ast.Attribute(value=ast.Name(id="i18n"), attr="get"), args=[], keywords=[])
@@ -371,7 +371,7 @@ def test_i18n_matcher_skips_call_with_no_args(setup_environment: tuple[Path, Pat
 
 
 def test_generic_visit_called_on_else_block(setup_environment: tuple[Path, Path]) -> None:
-    code_path, output_path = setup_environment
+    code_path, _output_path = setup_environment
     matcher = I18nMatcher(code_path, default_ftl_file=DEFAULT_FTL_FILE)
 
     node = ast.Call(
@@ -388,7 +388,7 @@ def test_generic_visit_called_on_else_block(setup_environment: tuple[Path, Path]
 def test_generic_visit_called_when_attr_in_ignore_attributes(
     setup_environment: tuple[Path, Path],
 ) -> None:
-    code_path, output_path = setup_environment
+    code_path, _output_path = setup_environment
     matcher = I18nMatcher(
         code_path,
         default_ftl_file=DEFAULT_FTL_FILE,
@@ -414,7 +414,7 @@ def test_generic_visit_called_when_attr_in_ignore_attributes(
 
 
 def test_i18n_matcher_skips_call_with_no_args_in_elif(setup_environment: tuple[Path, Path]) -> None:
-    code_path, output_path = setup_environment
+    code_path, _output_path = setup_environment
     matcher = I18nMatcher(code_path, default_ftl_file=DEFAULT_FTL_FILE)
 
     node = ast.Call(func=ast.Name(id="i18n", ctx=ast.Load()), args=[], keywords=[])
@@ -424,7 +424,7 @@ def test_i18n_matcher_skips_call_with_no_args_in_elif(setup_environment: tuple[P
 
 
 def test_i18n_matcher_ignore_kwargs(setup_environment: tuple[Path, Path]) -> None:
-    code_path, output_path = setup_environment
+    code_path, _output_path = setup_environment
     matcher = I18nMatcher(
         code_path,
         default_ftl_file=DEFAULT_FTL_FILE,

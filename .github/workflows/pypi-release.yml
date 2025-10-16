@@ -111,7 +111,7 @@ jobs:
           done
 
       - name: Build sdist
-        if: matrix.os == 'Linux' && matrix.arch == 'x86_64' && matrix.libc == 'manylinux'
+        if: runner.os == 'Linux' && matrix.arch == 'x86_64' && matrix.libc == 'manylinux'
         shell: bash
         run: uv build --sdist --out-dir wheelhouse
 

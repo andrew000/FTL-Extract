@@ -1,5 +1,5 @@
 use crate::ftl::code_extractor::{extract_fluent_keys, sort_fluent_keys_by_path};
-use crate::ftl::consts::CommentsKeyModes;
+use crate::ftl::consts::{CommentsKeyModes, LineEndings};
 use crate::ftl::ftl_importer::import_ftl_from_dir;
 use crate::ftl::matcher::{FluentEntry, FluentKey};
 use crate::ftl::process::commentator::comment_ftl_key;
@@ -26,7 +26,9 @@ pub fn extract(
     comment_junks: bool,            // = true,
     default_ftl_file: &Path,        // = consts::DEFAULT_FTL_FILENAME
     comment_keys_mode: CommentsKeyModes, // = consts::CommentsKeyModes::Comment,
-    dry_run: bool,                  // = false,
+    line_endings: LineEndings,
+    dry_run: bool, // = false,
+    silent: bool,  // = false,
 ) -> Result<ExtractionStatistics> {
     let mut statistics = ExtractionStatistics::new();
     statistics
@@ -226,18 +228,22 @@ pub fn extract(
             );
 
             if dry_run {
-                println!(
-                    "[DRY-RUN] File {} has been saved. {} keys found.",
-                    output_path.join(lang).join(path).display(),
-                    keys.len()
-                );
+                if !silent {
+                    println!(
+                        "[DRY-RUN] File {} has been saved. {} keys found.",
+                        output_path.join(lang).join(path).display(),
+                        keys.len()
+                    );
+                }
             } else {
-                write(output_path.join(lang).join(path), ftl);
-                println!(
-                    "File {} has been saved. {} keys found.",
-                    output_path.join(lang).join(path).display(),
-                    keys.len()
-                );
+                write(output_path.join(lang).join(path), ftl, &line_endings);
+                if !silent {
+                    println!(
+                        "File {} has been saved. {} keys found.",
+                        output_path.join(lang).join(path).display(),
+                        keys.len()
+                    );
+                }
             }
 
             *statistics.ftl_stored_keys_count.get_mut(lang).unwrap() += keys
@@ -250,9 +256,70 @@ pub fn extract(
     Ok(statistics)
 }
 
-fn write(path: PathBuf, ftl: String) {
+fn normalize_line_endings(s: String, line_endings: &LineEndings) -> String {
+    match line_endings {
+        LineEndings::Default => s,
+        LineEndings::LF => {
+            // Convert all CRLF and CR to LF in a single pass
+            let mut result = String::with_capacity(s.len());
+            let mut chars = s.chars().peekable();
+            while let Some(c) = chars.next() {
+                if c == '\r' {
+                    if chars.peek() == Some(&'\n') {
+                        chars.next(); // skip '\n'
+                    }
+                    result.push('\n');
+                } else {
+                    result.push(c);
+                }
+            }
+            result
+        }
+        LineEndings::CR => {
+            // Convert all CRLF and LF to CR in a single pass
+            let mut result = String::with_capacity(s.len());
+            let mut chars = s.chars().peekable();
+            while let Some(c) = chars.next() {
+                if c == '\r' {
+                    if chars.peek() == Some(&'\n') {
+                        chars.next(); // skip '\n'
+                    }
+                    result.push('\r');
+                } else if c == '\n' {
+                    result.push('\r');
+                } else {
+                    result.push(c);
+                }
+            }
+            result
+        }
+        LineEndings::CRLF => {
+            // Convert all CR and LF to CRLF in a single pass
+            let mut result = String::with_capacity(s.len());
+            let mut chars = s.chars().peekable();
+            while let Some(c) = chars.next() {
+                if c == '\r' {
+                    if chars.peek() == Some(&'\n') {
+                        chars.next(); // skip '\n'
+                        result.push_str("\r\n");
+                    } else {
+                        result.push_str("\r\n");
+                    }
+                } else if c == '\n' {
+                    result.push_str("\r\n");
+                } else {
+                    result.push(c);
+                }
+            }
+            result
+        }
+    }
+}
+
+fn write(path: PathBuf, ftl: String, line_endings: &LineEndings) {
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent).unwrap();
     }
-    fs::write(path, ftl).unwrap();
+    let ftl_with_line_endings = normalize_line_endings(ftl, line_endings);
+    fs::write(path, ftl_with_line_endings).expect("Unable to write file");
 }

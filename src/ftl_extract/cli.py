@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import subprocess
+import sys
 from pathlib import Path
 from time import perf_counter_ns
 from typing import Literal
@@ -13,6 +15,7 @@ from ftl_extract.const import (
     DEFAULT_I18N_KEYS,
     DEFAULT_IGNORE_ATTRIBUTES,
     DEFAULT_IGNORE_KWARGS,
+    LINE_ENDINGS,
 )
 from ftl_extract.ftl_extractor import extract
 from ftl_extract.stub.generator import generate_stubs
@@ -113,11 +116,32 @@ def ftl() -> None: ...
     type=click.Choice(COMMENT_KEYS_MODE, case_sensitive=False),
 )
 @click.option(
+    "--line-endings",
+    default=LINE_ENDINGS[0],
+    show_default=True,
+    type=click.Choice(LINE_ENDINGS, case_sensitive=False),
+    help="Line endings for generated FTL files.",
+)
+@click.option(
+    "--fast",
+    is_flag=True,
+    default=False,
+    show_default=True,
+    help="Run the fast Rust implementation.",
+)
+@click.option(
     "--dry-run",
     is_flag=True,
     default=False,
     show_default=True,
     help="Do not write to output files.",
+)
+@click.option(
+    "--silent",
+    is_flag=True,
+    default=False,
+    show_default=True,
+    help="Silence output files.",
 )
 @click.option(
     "--verbose",
@@ -142,9 +166,70 @@ def cli_extract(
     comment_junks: bool,
     default_ftl_file: Path,
     comment_keys_mode: Literal["comment", "warn"],
+    line_endings: Literal["default", "lf", "cr", "crlf"],
+    fast: bool,
     dry_run: bool,
+    silent: bool,
     verbose: bool,
 ) -> None:
+    if fast:
+        cmd = ["fast-ftl-extract", str(code_path), str(output_path)]
+
+        # Add multi-value options to the command
+        multi_value_options = {
+            "--language": language,
+            "--i18n-keys": i18n_keys,
+            "--i18n-keys-append": i18n_keys_append,
+            "--i18n-keys-prefix": i18n_keys_prefix,
+            "--exclude-dirs": exclude_dirs,
+            "--exclude-dirs-append": exclude_dirs_append,
+            "--ignore-attributes": ignore_attributes,
+            "--append-ignore-attributes": append_ignore_attributes,
+            "--ignore-kwargs": ignore_kwargs,
+        }
+        for option, values in multi_value_options.items():
+            for value in values:
+                cmd.extend([option, value])
+
+        # Add single-value options to the command
+        cmd.extend(
+            [
+                "--default-ftl-file",
+                str(default_ftl_file),
+                "--comment-keys-mode",
+                comment_keys_mode,
+                "--line-endings",
+                line_endings,
+            ]
+        )
+
+        # Boolean flags
+        for flag, condition in {
+            "--comment-junks": comment_junks,
+            "--dry-run": dry_run,
+            "--silent": silent,
+            "--verbose": verbose,
+        }.items():
+            if condition:
+                cmd.append(flag)
+
+        if not silent:
+            click.echo(f"Running fast implementation: {' '.join(cmd)}")
+        try:
+            result = subprocess.run(cmd, check=True)  # noqa: S603
+        except FileNotFoundError:
+            click.secho("Error: 'fast-ftl-extract' executable not found.", fg="red")
+            click.secho(
+                "Please ensure the Rust implementation is built and in your PATH.", fg="red"
+            )
+            sys.exit(1)
+        except subprocess.CalledProcessError as e:
+            # The Rust process failed. Its error message was already printed.
+            # We exit with the same error code.
+            sys.exit(e.returncode)
+        else:
+            sys.exit(result.returncode)
+
     click.echo(f"Extracting from {code_path}")
     start_time = perf_counter_ns()
 
@@ -163,7 +248,9 @@ def cli_extract(
         comment_junks=comment_junks,
         default_ftl_file=default_ftl_file,
         comment_keys_mode=comment_keys_mode,
+        line_endings=line_endings,
         dry_run=dry_run,
+        silent=silent,
     )
 
     if verbose:

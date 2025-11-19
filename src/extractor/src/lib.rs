@@ -9,7 +9,7 @@ static GLOBAL: MiMalloc = MiMalloc;
 mod tests {
     use super::ftl::consts;
     use super::ftl::ftl_extractor::extract;
-    use crate::ftl::consts::CommentsKeyModes;
+    use crate::ftl::consts::{CommentsKeyModes, LineEndings};
     use hashbrown::HashSet;
     use std::path::PathBuf;
 
@@ -31,7 +31,9 @@ mod tests {
             true,
             &PathBuf::from(consts::DEFAULT_FTL_FILENAME),
             CommentsKeyModes::Comment,
+            LineEndings::Default,
             true,
+            false,
         )
         .unwrap();
 
@@ -53,6 +55,6 @@ mod tests {
             statistics.ftl_keys_commented
         );
 
-        println!("Extracted fluent keys in {:?}", start_time.elapsed());
+        println!("Extracted fluent keys in {:?}s.", start_time.elapsed().as_secs_f32());
     }
 }

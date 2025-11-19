@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from os import linesep
 from typing import TYPE_CHECKING
 
 from click import echo
@@ -15,6 +16,7 @@ from ftl_extract.const import (
     DEFAULT_I18N_KEYS,
     DEFAULT_IGNORE_ATTRIBUTES,
     DEFAULT_IGNORE_KWARGS,
+    LINE_ENDINGS,
 )
 from ftl_extract.ftl_importer import import_ftl_from_dir
 from ftl_extract.process.commentator import comment_ftl_key
@@ -45,8 +47,10 @@ def extract(
     comment_junks: bool = True,
     default_ftl_file: Path = DEFAULT_FTL_FILE,
     comment_keys_mode: str = COMMENT_KEYS_MODE[0],
+    line_endings: str = LINE_ENDINGS[0],
     serializer: FluentSerializer | None = None,
     dry_run: bool = False,
+    silent: bool = False,
 ) -> ExtractionStatistics:
     statistics = ExtractionStatistics()
     statistics.ftl_files_count = dict.fromkeys(language, 0)
@@ -68,6 +72,18 @@ def extract(
 
     if serializer is None:
         serializer = FluentSerializer(with_junk=True)
+
+    if line_endings == "default":
+        line_endings = linesep
+    elif line_endings == "lf":
+        line_endings = "\n"
+    elif line_endings == "cr":
+        line_endings = "\r"
+    elif line_endings == "crlf":
+        line_endings = "\r\n"
+    else:
+        msg = f"Invalid line endings: {line_endings!r}"
+        raise ValueError(msg)
 
     # Extract fluent keys from code
     in_code_fluent_keys = extract_fluent_keys(
@@ -197,14 +213,18 @@ def extract(
                 serializer=serializer,
                 leave_as_is=leave_as_is_with_path.get(path, []),
             )
-            if dry_run is True:
-                echo(
-                    f"[DRY-RUN] File {output_path / lang / path} has been saved. {len(keys)} "
-                    f"keys found.",
-                )
+            if dry_run:
+                if not silent:
+                    echo(
+                        f"[DRY-RUN] File {output_path / lang / path} has been saved. {len(keys)} "
+                        f"keys found.",
+                    )
             else:
-                _write(path=output_path / lang / path, ftl=ftl)
-                echo(f"File {output_path / lang / path} has been saved. {len(keys)} keys found.")
+                _write(path=output_path / lang / path, ftl=ftl, line_endings=line_endings)
+                if not silent:
+                    echo(
+                        f"File {output_path / lang / path} has been saved. {len(keys)} keys found."
+                    )
 
             statistics.ftl_stored_keys_count[lang] += len(
                 [key for key in keys if isinstance(key.translation, fl_ast.Message)],
@@ -213,7 +233,7 @@ def extract(
     return statistics
 
 
-def _write(*, path: Path, ftl: str) -> None:
+def _write(*, path: Path, ftl: str, line_endings: str) -> None:
     """Write FTL to file."""
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(ftl, encoding="utf-8")
+    path.write_text(ftl, encoding="utf-8", newline=line_endings)

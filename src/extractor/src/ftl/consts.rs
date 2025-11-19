@@ -34,3 +34,11 @@ pub enum CommentsKeyModes {
     Comment,
     Warn,
 }
+
+#[derive(PartialEq, Clone, Debug, clap::ValueEnum)]
+pub enum LineEndings {
+    Default,
+    LF,
+    CR,
+    CRLF,
+}

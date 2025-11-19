@@ -27,3 +27,4 @@ DEFAULT_EXCLUDE_DIRS: Final[tuple[str, ...]] = (
     "__pycache__",
     ".pytest_cache",
 )
+LINE_ENDINGS: Final[tuple[str, ...]] = ("default", "lf", "cr", "crlf")

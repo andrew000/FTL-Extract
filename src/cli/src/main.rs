@@ -1,7 +1,7 @@
 use clap::Parser;
 use extractor::ftl::consts::{
     CommentsKeyModes, DEFAULT_EXCLUDE_DIRS, DEFAULT_FTL_FILENAME, DEFAULT_I18N_KEYS,
-    DEFAULT_IGNORE_ATTRIBUTES, DEFAULT_IGNORE_KWARGS,
+    DEFAULT_IGNORE_ATTRIBUTES, DEFAULT_IGNORE_KWARGS, LineEndings,
 };
 use extractor::ftl::ftl_extractor::extract;
 use hashbrown::HashSet;
@@ -56,7 +56,7 @@ struct Args {
     ignore_kwargs: Vec<String>,
 
     /// Comment Junk elements
-    #[arg(long, default_value_t = true)]
+    #[arg(long, default_value_t = false)]
     comment_junks: bool,
 
     /// Default FTL filename
@@ -67,6 +67,10 @@ struct Args {
     #[arg(long, value_enum, default_value_t = CommentsKeyModes::Comment)]
     comment_keys_mode: CommentsKeyModes,
 
+    /// Line endings in output FTL files
+    #[arg(long, value_enum, default_value_t = LineEndings::Default)]
+    line_endings: LineEndings,
+
     /// Verbose output
     #[arg(short = 'v', long, default_value_t = false)]
     verbose: bool,
@@ -74,6 +78,10 @@ struct Args {
     /// Dry run, do not write to files
     #[arg(long, default_value_t = false)]
     dry_run: bool,
+
+    /// Silent mode, only output errors
+    #[arg(long, default_value_t = false)]
+    silent: bool,
 }
 
 fn main() {
@@ -97,7 +105,9 @@ fn main() {
         args.comment_junks,
         &args.default_ftl_file,
         args.comment_keys_mode,
+        args.line_endings,
         args.dry_run,
+        args.silent,
     )
     .unwrap();
 
@@ -121,5 +131,5 @@ fn main() {
         );
     }
 
-    println!("[Rust] Done in {:?}", start_time.elapsed());
+    println!("[Rust] Done in {:.3?}s.", start_time.elapsed().as_secs_f64());
 }

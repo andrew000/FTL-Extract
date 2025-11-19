@@ -41,7 +41,7 @@ jobs:
       - name: Install uv
         uses: astral-sh/setup-uv@v7
         with:
-          python-version: "3.13"
+          python-version: "3.14"
           version: "latest"
           activate-environment: "true"
 
@@ -56,7 +56,7 @@ jobs:
         if: runner.os == 'Windows' && matrix.arch == 'AMD64'
         shell: bash
         env:
-          CIBW_BUILD: "cp313-win_amd64"
+          CIBW_BUILD: "cp314-win_amd64"
         run: |
           uv run cibuildwheel --config-file pyproject.toml --output-dir wheelhouse --platform windows
           for wheel in wheelhouse/*.whl; do
@@ -71,7 +71,7 @@ jobs:
         if: runner.os == 'macOS' && matrix.arch == 'arm64'
         shell: bash
         env:
-          CIBW_BUILD: "cp313-macosx_arm64"
+          CIBW_BUILD: "cp314-macosx_arm64"
         run: |
           uv run cibuildwheel --config-file pyproject.toml --output-dir wheelhouse --platform macos
           for wheel in wheelhouse/*.whl; do
@@ -87,7 +87,7 @@ jobs:
         shell: bash
         run: |
           export CIBW_MANYLINUX_$(echo ${{ matrix.arch }} | tr '[:lower:]' '[:upper:]')_IMAGE="quay.io/pypa/manylinux_2_28_${{ matrix.arch }}"
-          export CIBW_BUILD="cp313-manylinux_${{ matrix.arch }}"
+          export CIBW_BUILD="cp314-manylinux_${{ matrix.arch }}"
           uv run cibuildwheel --config-file pyproject.toml --archs ${{ matrix.arch }} --output-dir wheelhouse --platform linux
           for wheel in wheelhouse/*.whl; do
             uv run wheel tags --python-tag py3 --abi-tag none --remove $wheel
@@ -101,7 +101,7 @@ jobs:
         shell: bash
         run: |
           export CIBW_MUSLLINUX_$(echo ${{ matrix.arch }} | tr '[:lower:]' '[:upper:]')_IMAGE="quay.io/pypa/musllinux_1_2_${{ matrix.arch }}"
-          export CIBW_BUILD="cp313-musllinux_${{ matrix.arch }}"
+          export CIBW_BUILD="cp314-musllinux_${{ matrix.arch }}"
           uv run cibuildwheel --config-file pyproject.toml --archs ${{ matrix.arch }} --output-dir wheelhouse --platform linux
           for wheel in wheelhouse/*.whl; do
             uv run wheel tags --python-tag py3 --abi-tag none --remove $wheel

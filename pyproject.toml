@@ -6,15 +6,15 @@ authors = [{ name = "andrew000", email = "help@kusbot.com" }]
 keywords = ["i18n", "ftl", "ftl-extract"]
 readme = "README.md"
 license = "MIT"
-requires-python = ">=3.10, <3.14"
+requires-python = ">=3.11, <3.15"
 classifiers = [
     "Programming Language :: Python :: Implementation :: CPython",
     "Programming Language :: Rust",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
 ]
 
 dependencies = [
@@ -24,7 +24,7 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = [
-    "cibuildwheel==2.23.3",
+    "cibuildwheel==3.3.0",
     "fluent-runtime==0.4.0",
     "isort==7.0.0",
     "mypy==1.18.2",
@@ -65,7 +65,7 @@ requires = ["setuptools", "setuptools-rust"]
 build-backend = "setuptools.build_meta"
 
 [tool.cibuildwheel]
-build = "cp313-*"
+build = "cp314-*"
 archs = ["auto64"]
 build-frontend = "build[uv]"
 build-verbosity = 1
@@ -88,7 +88,7 @@ exclude_lines = [
 ]
 
 [tool.isort]
-py_version = 310
+py_version = 311
 src_paths = ["src", "tests"]
 line_length = 100
 multi_line_output = 3
@@ -143,7 +143,7 @@ skip-magic-trailing-comma = false
 line-ending = "auto"
 
 [tool.mypy]
-python_version = "3.10"
+python_version = "3.11"
 mypy_path = "src"
 packages = ["ftl_extract"]
 plugins = []

@@ -62,16 +62,21 @@ jobs:
 
       - name: Lint
         shell: bash
-        run: just lint
+        run: just lint-py
+
+      - name: Install cargo-llvm-cov (Linux py3.14)
+        if: runner.os == 'Linux' && matrix.python-version == '3.14'
+        uses: taiki-e/install-action@cargo-llvm-cov
 
       - name: Test with Rust extension (Linux py3.14)
         if: runner.os == 'Linux' && matrix.python-version == '3.14'
         shell: bash
         env:
           BUILD_RUST_IMPL: "1"
+          CARGO_TERM_COLOR: "always"
         run: |
-          just test-py
-          just test-rust
+          just test-py-cov
+          just test-rust-cov
 
       - name: Test without Rust extension (Other OS and Python versions)
         if: runner.os != 'Linux' && matrix.python-version != '3.14'
@@ -79,6 +84,14 @@ jobs:
         env:
           BUILD_RUST_IMPL: "0"
         run: just test-py
+
+      - name: Upload coverage to Codecov
+        if: runner.os == 'Linux' && matrix.python-version == '3.14'
+        uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }} # required for private repos or protected branches
+          files: lcov.info,coverage.xml
+          fail_ci_if_error: true
 
       - name: Build the package without Rust extension (Windows and macOS)
         if: runner.os == 'Windows' || runner.os == 'macOS'

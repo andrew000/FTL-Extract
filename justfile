@@ -42,12 +42,25 @@ test-py:
         --cov={{ py_code_dir }} \
         --cov-report=html \
         --cov-report=term \
-        --cov-config=.coveragerc \
+        {{ tests_dir }}
+
+test-py-cov:
+    @echo "Running pytest for coverage report..."
+    uv run pytest \
+        -vv \
+        --cov={{ py_code_dir }} \
+        --cov-branch \
+        --cov-report=xml \
+        --cov-report=term \
         {{ tests_dir }}
 
 test-rust:
-    @echo "Running cargo test..."
+    @echo "Running cargo llvm-cov..."
     cargo llvm-cov --html
+
+test-rust-cov:
+    @echo "Running cargo llvm-cov for lcov report..."
+    cargo llvm-cov --all-features --workspace --lcov --output-path lcov.info
 
 outdated:
     uv tree --universal --outdated --no-cache

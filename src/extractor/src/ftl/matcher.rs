@@ -14,6 +14,8 @@ pub(crate) enum FluentEntry {
     Message(fluent_syntax::ast::Message<String>),
     Term(fluent_syntax::ast::Term<String>),
     Comment(fluent_syntax::ast::Comment<String>),
+    GroupComment(fluent_syntax::ast::Comment<String>),
+    ResourceComment(fluent_syntax::ast::Comment<String>),
     Junk(String),
 }
 

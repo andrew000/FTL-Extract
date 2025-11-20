@@ -99,15 +99,6 @@ fn parse_file(
 
     matcher.fluent_keys
 }
-fn post_process_fluent_keys(fluent_keys: &mut HashMap<String, FluentKey>, default_ftl_file: &Path) {
-    for fluent_key in fluent_keys.values_mut() {
-        if fluent_key.path.is_dir() {
-            let mut new_path = fluent_key.path.as_ref().clone();
-            new_path.push(default_ftl_file);
-            fluent_key.path = Arc::new(new_path);
-        }
-    }
-}
 pub(crate) fn extract_fluent_keys<'a>(
     path: &'a Path,
     i18n_keys: HashSet<String>,

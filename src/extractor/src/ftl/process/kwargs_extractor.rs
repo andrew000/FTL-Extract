@@ -240,3 +240,837 @@ fn extract_kwargs_from_term(
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::ftl::matcher::{FluentEntry, FluentKey};
+    use hashbrown::{HashMap, HashSet};
+    use std::path::PathBuf;
+    use std::sync::Arc;
+
+    #[test]
+    fn test_extract_kwargs_message() {
+        let mut key = FluentKey::new(
+            Arc::new(PathBuf::from("tmp.py")), // code_path
+            String::from("msg"),               // key
+            FluentEntry::Message(fluent_syntax::ast::Message {
+                id: fluent_syntax::ast::Identifier {
+                    name: "msg".to_string(),
+                },
+                value: Some(fluent_syntax::ast::Pattern {
+                    elements: vec![fluent_syntax::ast::PatternElement::Placeable {
+                        expression: fluent_syntax::ast::Expression::Inline(
+                            fluent_syntax::ast::InlineExpression::VariableReference {
+                                id: fluent_syntax::ast::Identifier {
+                                    name: "username".to_string(),
+                                },
+                            },
+                        ),
+                    }],
+                }),
+                attributes: vec![],
+                comment: None,
+            }), // entry
+            Arc::new(PathBuf::from("tmp.ftl")), // path
+            Some("en".to_string()),            // locale
+            Some(0),
+            HashSet::new(),
+        );
+        let mut kwargs: HashSet<String> = HashSet::new();
+
+        super::extract_kwargs_from_message(
+            &mut key,
+            &mut kwargs,
+            &mut HashMap::<String, FluentKey>::new(),
+            &HashMap::<String, FluentKey>::new(),
+            &mut HashSet::<String>::new(),
+        );
+
+        assert!(kwargs.contains("username"));
+    }
+
+    #[test]
+    fn test_extract_kwargs_term() {
+        let mut key = FluentKey::new(
+            Arc::new(PathBuf::from("tmp.py")), // code_path
+            String::from("term"),              // key
+            FluentEntry::Term(fluent_syntax::ast::Term {
+                id: fluent_syntax::ast::Identifier {
+                    name: "term".to_string(),
+                },
+                value: fluent_syntax::ast::Pattern {
+                    elements: vec![fluent_syntax::ast::PatternElement::Placeable {
+                        expression: fluent_syntax::ast::Expression::Inline(
+                            fluent_syntax::ast::InlineExpression::VariableReference {
+                                id: fluent_syntax::ast::Identifier {
+                                    name: "username".to_string(),
+                                },
+                            },
+                        ),
+                    }],
+                },
+                attributes: vec![],
+                comment: None,
+            }), // entry
+            Arc::new(PathBuf::from("tmp.ftl")), // path
+            Some("en".to_string()),            // locale
+            Some(0),
+            HashSet::new(),
+        );
+        let mut kwargs: HashSet<String> = HashSet::new();
+
+        super::extract_kwargs_from_term(
+            &mut key,
+            &mut kwargs,
+            &mut HashMap::<String, FluentKey>::new(),
+            &HashMap::<String, FluentKey>::new(),
+            &mut HashSet::<String>::new(),
+        );
+
+        assert!(kwargs.contains("username"));
+    }
+
+    #[test]
+    fn test_extract_kwargs_from_placeable_variable_reference() {
+        let mut key = FluentKey::new(
+            Arc::new(PathBuf::from("tmp.py")), // code_path
+            String::from("msg"),               // key
+            FluentEntry::Message(fluent_syntax::ast::Message {
+                id: fluent_syntax::ast::Identifier {
+                    name: "msg".to_string(),
+                },
+                value: Some(fluent_syntax::ast::Pattern {
+                    elements: vec![fluent_syntax::ast::PatternElement::Placeable {
+                        expression: fluent_syntax::ast::Expression::Inline(
+                            fluent_syntax::ast::InlineExpression::VariableReference {
+                                id: fluent_syntax::ast::Identifier {
+                                    name: "username".to_string(),
+                                },
+                            },
+                        ),
+                    }],
+                }),
+                attributes: vec![],
+                comment: None,
+            }), // entry
+            Arc::new(PathBuf::from("tmp.ftl")), // path
+            Some("en".to_string()),            // locale
+            Some(0),
+            HashSet::new(),
+        );
+        let placeable = fluent_syntax::ast::PatternElement::Placeable {
+            expression: fluent_syntax::ast::Expression::Inline(
+                fluent_syntax::ast::InlineExpression::VariableReference {
+                    id: fluent_syntax::ast::Identifier {
+                        name: "username".to_string(),
+                    },
+                },
+            ),
+        };
+        let mut kwargs: HashSet<String> = HashSet::new();
+
+        super::extract_kwargs_from_placeable(
+            &mut key,
+            &placeable,
+            &mut kwargs,
+            &mut HashMap::<String, FluentKey>::new(),
+            &HashMap::<String, FluentKey>::new(),
+            &mut HashSet::<String>::new(),
+        );
+
+        assert!(kwargs.contains("username"));
+    }
+
+    #[test]
+    fn test_extract_kwargs_from_placeable_message_reference() {
+        let mut key = FluentKey::new(
+            Arc::new(PathBuf::from("tmp.py")), // code_path
+            String::from("msg"),               // key
+            FluentEntry::Message(fluent_syntax::ast::Message {
+                id: fluent_syntax::ast::Identifier {
+                    name: "msg".to_string(),
+                },
+                value: Some(fluent_syntax::ast::Pattern {
+                    elements: vec![fluent_syntax::ast::PatternElement::Placeable {
+                        expression: fluent_syntax::ast::Expression::Inline(
+                            fluent_syntax::ast::InlineExpression::MessageReference {
+                                id: fluent_syntax::ast::Identifier {
+                                    name: "ref_msg".to_string(),
+                                },
+                                attribute: None,
+                            },
+                        ),
+                    }],
+                }),
+                attributes: vec![],
+                comment: None,
+            }), // entry
+            Arc::new(PathBuf::from("tmp.ftl")), // path
+            Some("en".to_string()),            // locale
+            Some(0),
+            HashSet::new(),
+        );
+        let placeable = fluent_syntax::ast::PatternElement::Placeable {
+            expression: fluent_syntax::ast::Expression::Inline(
+                fluent_syntax::ast::InlineExpression::MessageReference {
+                    id: fluent_syntax::ast::Identifier {
+                        name: "ref_msg".to_string(),
+                    },
+                    attribute: None,
+                },
+            ),
+        };
+        let mut kwargs: HashSet<String> = HashSet::new();
+        let mut all_fluent_keys: HashMap<String, FluentKey> = HashMap::new();
+        all_fluent_keys.insert(
+            "ref_msg".to_string(),
+            FluentKey::new(
+                Arc::new(PathBuf::from("tmp.py")), // code_path
+                String::from("ref_msg"),           // key
+                FluentEntry::Message(fluent_syntax::ast::Message {
+                    id: fluent_syntax::ast::Identifier {
+                        name: "ref_msg".to_string(),
+                    },
+                    value: Some(fluent_syntax::ast::Pattern { elements: vec![] }),
+                    attributes: vec![],
+                    comment: None,
+                }), // entry
+                Arc::new(PathBuf::from("tmp.ftl")), // path
+                Some("en".to_string()),            // locale
+                Some(0),
+                HashSet::new(),
+            ),
+        );
+
+        super::extract_kwargs_from_placeable(
+            &mut key,
+            &placeable,
+            &mut kwargs,
+            &mut HashMap::<String, FluentKey>::new(),
+            &all_fluent_keys,
+            &mut HashSet::<String>::new(),
+        );
+
+        // Since all_fluent_keys is empty, no kwargs should be extracted
+        assert!(!kwargs.contains("ref_msg"));
+    }
+
+    #[test]
+    fn test_extract_kwargs_from_placeable_term_reference() {
+        let mut key = FluentKey::new(
+            Arc::new(PathBuf::from("tmp.py")), // code_path
+            String::from("msg"),               // key
+            FluentEntry::Message(fluent_syntax::ast::Message {
+                id: fluent_syntax::ast::Identifier {
+                    name: "msg".to_string(),
+                },
+                value: Some(fluent_syntax::ast::Pattern {
+                    elements: vec![fluent_syntax::ast::PatternElement::Placeable {
+                        expression: fluent_syntax::ast::Expression::Inline(
+                            fluent_syntax::ast::InlineExpression::TermReference {
+                                id: fluent_syntax::ast::Identifier {
+                                    name: "term".to_string(),
+                                },
+                                attribute: None,
+                                arguments: None,
+                            },
+                        ),
+                    }],
+                }),
+                attributes: vec![],
+                comment: None,
+            }), // entry
+            Arc::new(PathBuf::from("tmp.ftl")), // path
+            Some("en".to_string()),            // locale
+            Some(0),
+            HashSet::new(),
+        );
+        let placeable = fluent_syntax::ast::PatternElement::Placeable {
+            expression: fluent_syntax::ast::Expression::Inline(
+                fluent_syntax::ast::InlineExpression::TermReference {
+                    id: fluent_syntax::ast::Identifier {
+                        name: "term".to_string(),
+                    },
+                    attribute: None,
+                    arguments: None,
+                },
+            ),
+        };
+        let mut kwargs: HashSet<String> = HashSet::new();
+        let mut terms: HashMap<String, FluentKey> = HashMap::new();
+        terms.insert(
+            "term".to_string(),
+            FluentKey::new(
+                Arc::new(PathBuf::from("tmp.py")), // code_path
+                String::from("term"),              // key
+                FluentEntry::Term(fluent_syntax::ast::Term {
+                    id: fluent_syntax::ast::Identifier {
+                        name: "term".to_string(),
+                    },
+                    value: fluent_syntax::ast::Pattern { elements: vec![] },
+                    attributes: vec![],
+                    comment: None,
+                }), // entry
+                Arc::new(PathBuf::from("tmp.ftl")), // path
+                Some("en".to_string()),            // locale
+                Some(0),
+                HashSet::new(),
+            ),
+        );
+
+        super::extract_kwargs_from_placeable(
+            &mut key,
+            &placeable,
+            &mut kwargs,
+            &mut terms,
+            &HashMap::<String, FluentKey>::new(),
+            &mut HashSet::<String>::new(),
+        );
+
+        assert!(!kwargs.contains("term"));
+    }
+
+    #[test]
+    fn test_extract_kwargs_from_variable_reference() {
+        let mut kwargs: HashSet<String> = HashSet::new();
+
+        super::extract_kwargs_from_variable_reference(
+            &fluent_syntax::ast::Identifier {
+                name: "username".to_string(),
+            },
+            &mut kwargs,
+        );
+
+        assert!(kwargs.contains("username"));
+    }
+
+    #[test]
+    fn test_extract_kwargs_from_placeable_select() {
+        let mut key = FluentKey::new(
+            Arc::new(PathBuf::from("tmp.py")), // code_path
+            String::from("msg"),               // key
+            FluentEntry::Message(fluent_syntax::ast::Message {
+                id: fluent_syntax::ast::Identifier {
+                    name: "msg".to_string(),
+                },
+                value: Some(fluent_syntax::ast::Pattern {
+                    elements: vec![fluent_syntax::ast::PatternElement::Placeable {
+                        expression: fluent_syntax::ast::Expression::Select {
+                            selector: fluent_syntax::ast::InlineExpression::VariableReference {
+                                id: fluent_syntax::ast::Identifier {
+                                    name: "user_role".to_string(),
+                                },
+                            },
+                            variants: vec![],
+                        },
+                    }],
+                }),
+                attributes: vec![],
+                comment: None,
+            }), // entry
+            Arc::new(PathBuf::from("tmp.ftl")), // path
+            Some("en".to_string()),            // locale
+            Some(0),
+            HashSet::new(),
+        );
+        let placeable = fluent_syntax::ast::PatternElement::Placeable {
+            expression: fluent_syntax::ast::Expression::Select {
+                selector: fluent_syntax::ast::InlineExpression::VariableReference {
+                    id: fluent_syntax::ast::Identifier {
+                        name: "user_role".to_string(),
+                    },
+                },
+                variants: vec![],
+            },
+        };
+        let mut kwargs: HashSet<String> = HashSet::new();
+
+        super::extract_kwargs_from_placeable(
+            &mut key,
+            &placeable,
+            &mut kwargs,
+            &mut HashMap::<String, FluentKey>::new(),
+            &HashMap::<String, FluentKey>::new(),
+            &mut HashSet::<String>::new(),
+        );
+
+        assert!(kwargs.contains("user_role"));
+    }
+
+    #[test]
+    fn test_extract_kwargs_from_message_reference() {
+        let mut key = FluentKey::new(
+            Arc::new(PathBuf::from("tmp.py")), // code_path
+            String::from("msg"),               // key
+            FluentEntry::Message(fluent_syntax::ast::Message {
+                id: fluent_syntax::ast::Identifier {
+                    name: "msg".to_string(),
+                },
+                value: Some(fluent_syntax::ast::Pattern {
+                    elements: vec![fluent_syntax::ast::PatternElement::Placeable {
+                        expression: fluent_syntax::ast::Expression::Inline(
+                            fluent_syntax::ast::InlineExpression::MessageReference {
+                                id: fluent_syntax::ast::Identifier {
+                                    name: "ref_msg".to_string(),
+                                },
+                                attribute: None,
+                            },
+                        ),
+                    }],
+                }),
+                attributes: vec![],
+                comment: None,
+            }), // entry
+            Arc::new(PathBuf::from("tmp.ftl")), // path
+            Some("en".to_string()),            // locale
+            Some(0),
+            HashSet::new(),
+        );
+        let mut kwargs: HashSet<String> = HashSet::new();
+        let mut all_fluent_keys: HashMap<String, FluentKey> = HashMap::new();
+        all_fluent_keys.insert(
+            "ref_msg".to_string(),
+            FluentKey::new(
+                Arc::new(PathBuf::from("tmp.py")), // code_path
+                String::from("ref_msg"),           // key
+                FluentEntry::Message(fluent_syntax::ast::Message {
+                    id: fluent_syntax::ast::Identifier {
+                        name: "ref_msg".to_string(),
+                    },
+                    value: Some(fluent_syntax::ast::Pattern {
+                        elements: vec![fluent_syntax::ast::PatternElement::Placeable {
+                            expression: fluent_syntax::ast::Expression::Inline(
+                                fluent_syntax::ast::InlineExpression::VariableReference {
+                                    id: fluent_syntax::ast::Identifier {
+                                        name: "username".to_string(),
+                                    },
+                                },
+                            ),
+                        }],
+                    }),
+                    attributes: vec![],
+                    comment: None,
+                }), // entry
+                Arc::new(PathBuf::from("tmp.ftl")), // path
+                Some("en".to_string()),            // locale
+                Some(0),
+                HashSet::new(),
+            ),
+        );
+
+        super::extract_kwargs_from_message_reference(
+            &mut key,
+            &fluent_syntax::ast::Identifier {
+                name: "ref_msg".to_string(),
+            },
+            &None,
+            &mut kwargs,
+            &mut HashMap::<String, FluentKey>::new(),
+            &all_fluent_keys,
+            &mut HashSet::new(),
+        )
+        .unwrap();
+
+        assert!(kwargs.contains("username"));
+    }
+
+    #[test]
+    #[should_panic(expected = "Can't find reference key ref_msg in tmp.ftl")]
+    fn test_extract_kwargs_from_message_reference_panic_when_no_message() {
+        let mut key = FluentKey::new(
+            Arc::new(PathBuf::from("tmp.py")), // code_path
+            String::from("msg"),               // key
+            FluentEntry::Message(fluent_syntax::ast::Message {
+                id: fluent_syntax::ast::Identifier {
+                    name: "msg".to_string(),
+                },
+                value: Some(fluent_syntax::ast::Pattern {
+                    elements: vec![fluent_syntax::ast::PatternElement::Placeable {
+                        expression: fluent_syntax::ast::Expression::Inline(
+                            fluent_syntax::ast::InlineExpression::MessageReference {
+                                id: fluent_syntax::ast::Identifier {
+                                    name: "ref_msg".to_string(),
+                                },
+                                attribute: None,
+                            },
+                        ),
+                    }],
+                }),
+                attributes: vec![],
+                comment: None,
+            }), // entry
+            Arc::new(PathBuf::from("tmp.ftl")), // path
+            Some("en".to_string()),            // locale
+            Some(0),
+            HashSet::new(),
+        );
+        let id = fluent_syntax::ast::Identifier {
+            name: "ref_msg".to_string(),
+        };
+
+        super::extract_kwargs_from_message_reference(
+            &mut key,
+            &id,
+            &None,
+            &mut HashSet::<String>::new(),
+            &mut HashMap::<String, FluentKey>::new(),
+            &HashMap::<String, FluentKey>::new(),
+            &mut HashSet::new(),
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn test_extract_kwargs_from_term_reference() {
+        let mut key = FluentKey::new(
+            Arc::new(PathBuf::from("tmp.py")), // code_path
+            String::from("msg"),               // key
+            FluentEntry::Message(fluent_syntax::ast::Message {
+                id: fluent_syntax::ast::Identifier {
+                    name: "msg".to_string(),
+                },
+                value: Some(fluent_syntax::ast::Pattern {
+                    elements: vec![fluent_syntax::ast::PatternElement::Placeable {
+                        expression: fluent_syntax::ast::Expression::Inline(
+                            fluent_syntax::ast::InlineExpression::TermReference {
+                                id: fluent_syntax::ast::Identifier {
+                                    name: "term".to_string(),
+                                },
+                                attribute: None,
+                                arguments: None,
+                            },
+                        ),
+                    }],
+                }),
+                attributes: vec![],
+                comment: None,
+            }), // entry
+            Arc::new(PathBuf::from("tmp.ftl")), // path
+            Some("en".to_string()),            // locale
+            Some(0),
+            HashSet::new(),
+        );
+        let mut kwargs: HashSet<String> = HashSet::new();
+        let mut terms: HashMap<String, FluentKey> = HashMap::new();
+        terms.insert(
+            "term".to_string(),
+            FluentKey::new(
+                Arc::new(PathBuf::from("tmp.py")), // code_path
+                String::from("term"),              // key
+                FluentEntry::Term(fluent_syntax::ast::Term {
+                    id: fluent_syntax::ast::Identifier {
+                        name: "term".to_string(),
+                    },
+                    value: fluent_syntax::ast::Pattern {
+                        elements: vec![fluent_syntax::ast::PatternElement::Placeable {
+                            expression: fluent_syntax::ast::Expression::Inline(
+                                fluent_syntax::ast::InlineExpression::VariableReference {
+                                    id: fluent_syntax::ast::Identifier {
+                                        name: "username".to_string(),
+                                    },
+                                },
+                            ),
+                        }],
+                    },
+                    attributes: vec![],
+                    comment: None,
+                }), // entry
+                Arc::new(PathBuf::from("tmp.ftl")), // path
+                Some("en".to_string()),            // locale
+                Some(0),
+                HashSet::new(),
+            ),
+        );
+
+        super::extract_kwargs_from_term_reference(
+            &mut key,
+            &fluent_syntax::ast::Identifier {
+                name: "term".to_string(),
+            },
+            &None,
+            &None,
+            &mut kwargs,
+            &mut terms,
+            &HashMap::<String, FluentKey>::new(),
+        )
+        .unwrap();
+
+        assert!(kwargs.contains("username"));
+    }
+
+    #[test]
+    #[should_panic(expected = "Can't find reference key term in tmp.ftl")]
+    fn test_extract_kwargs_from_term_reference_panic_when_no_term() {
+        let mut key = FluentKey::new(
+            Arc::new(PathBuf::from("tmp.py")), // code_path
+            String::from("msg"),               // key
+            FluentEntry::Message(fluent_syntax::ast::Message {
+                id: fluent_syntax::ast::Identifier {
+                    name: "msg".to_string(),
+                },
+                value: Some(fluent_syntax::ast::Pattern {
+                    elements: vec![fluent_syntax::ast::PatternElement::Placeable {
+                        expression: fluent_syntax::ast::Expression::Inline(
+                            fluent_syntax::ast::InlineExpression::TermReference {
+                                id: fluent_syntax::ast::Identifier {
+                                    name: "term".to_string(),
+                                },
+                                attribute: None,
+                                arguments: None,
+                            },
+                        ),
+                    }],
+                }),
+                attributes: vec![],
+                comment: None,
+            }), // entry
+            Arc::new(PathBuf::from("tmp.ftl")), // path
+            Some("en".to_string()),            // locale
+            Some(0),
+            HashSet::new(),
+        );
+
+        super::extract_kwargs_from_term_reference(
+            &mut key,
+            &fluent_syntax::ast::Identifier {
+                name: "term".to_string(),
+            },
+            &None,
+            &None,
+            &mut HashSet::<String>::new(),
+            &mut HashMap::<String, FluentKey>::new(),
+            &HashMap::<String, FluentKey>::new(),
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn test_extract_kwargs_from_selector_expression() {
+        let mut key = FluentKey::new(
+            Arc::new(PathBuf::from("tmp.py")), // code_path
+            String::from("msg"),               // key
+            FluentEntry::Message(fluent_syntax::ast::Message {
+                id: fluent_syntax::ast::Identifier {
+                    name: "msg".to_string(),
+                },
+                value: Some(fluent_syntax::ast::Pattern {
+                    elements: vec![fluent_syntax::ast::PatternElement::Placeable {
+                        expression: fluent_syntax::ast::Expression::Select {
+                            selector: fluent_syntax::ast::InlineExpression::VariableReference {
+                                id: fluent_syntax::ast::Identifier {
+                                    name: "user_role".to_string(),
+                                },
+                            },
+                            variants: vec![
+                                fluent_syntax::ast::Variant {
+                                    key: fluent_syntax::ast::VariantKey::Identifier {
+                                        name: "admin".to_string(),
+                                    },
+                                    value: fluent_syntax::ast::Pattern { elements: vec![] },
+                                    default: false,
+                                },
+                                fluent_syntax::ast::Variant {
+                                    key: fluent_syntax::ast::VariantKey::Identifier {
+                                        name: "user".to_string(),
+                                    },
+                                    value: fluent_syntax::ast::Pattern { elements: vec![] },
+                                    default: true,
+                                },
+                            ],
+                        },
+                    }],
+                }),
+                attributes: vec![],
+                comment: None,
+            }), // entry
+            Arc::new(PathBuf::from("tmp.ftl")), // path
+            Some("en".to_string()),            // locale
+            Some(0),
+            HashSet::new(),
+        );
+        let selector = fluent_syntax::ast::InlineExpression::VariableReference {
+            id: fluent_syntax::ast::Identifier {
+                name: "user_role".to_string(),
+            },
+        };
+        let variants: Vec<fluent_syntax::ast::Variant<String>> = vec![
+            fluent_syntax::ast::Variant {
+                key: fluent_syntax::ast::VariantKey::Identifier {
+                    name: "admin".to_string(),
+                },
+                value: fluent_syntax::ast::Pattern {
+                    elements: vec![fluent_syntax::ast::PatternElement::Placeable {
+                        expression: fluent_syntax::ast::Expression::Inline(
+                            fluent_syntax::ast::InlineExpression::VariableReference {
+                                id: fluent_syntax::ast::Identifier {
+                                    name: "user_role".to_string(),
+                                },
+                            },
+                        ),
+                    }],
+                },
+                default: false,
+            },
+            fluent_syntax::ast::Variant {
+                key: fluent_syntax::ast::VariantKey::Identifier {
+                    name: "user".to_string(),
+                },
+                value: fluent_syntax::ast::Pattern { elements: vec![] },
+                default: true,
+            },
+        ];
+        let mut kwargs: HashSet<String> = HashSet::new();
+
+        super::extract_kwargs_from_selector_expression(
+            &mut key,
+            &selector,
+            &variants,
+            &mut kwargs,
+            &mut HashMap::<String, FluentKey>::new(),
+            &HashMap::<String, FluentKey>::new(),
+            &mut HashSet::<String>::new(),
+        );
+
+        assert!(kwargs.contains("user_role"));
+    }
+
+    #[test]
+    fn test_extract_kwargs_from_message() {
+        let mut key = FluentKey::new(
+            Arc::new(PathBuf::from("tmp.py")), // code_path
+            String::from("msg"),               // key
+            FluentEntry::Message(fluent_syntax::ast::Message {
+                id: fluent_syntax::ast::Identifier {
+                    name: "msg".to_string(),
+                },
+                value: Some(fluent_syntax::ast::Pattern {
+                    elements: vec![fluent_syntax::ast::PatternElement::Placeable {
+                        expression: fluent_syntax::ast::Expression::Inline(
+                            fluent_syntax::ast::InlineExpression::VariableReference {
+                                id: fluent_syntax::ast::Identifier {
+                                    name: "username".to_string(),
+                                },
+                            },
+                        ),
+                    }],
+                }),
+                attributes: vec![],
+                comment: None,
+            }), // entry
+            Arc::new(PathBuf::from("tmp.ftl")), // path
+            Some("en".to_string()),            // locale
+            Some(0),
+            HashSet::new(),
+        );
+        let mut kwargs: HashSet<String> = HashSet::new();
+
+        super::extract_kwargs_from_message(
+            &mut key,
+            &mut kwargs,
+            &mut HashMap::<String, FluentKey>::new(),
+            &HashMap::<String, FluentKey>::new(),
+            &mut HashSet::<String>::new(),
+        );
+
+        assert!(kwargs.contains("username"));
+    }
+
+    #[test]
+    #[should_panic(expected = "Expected a Message entry")]
+    fn test_extract_kwargs_from_message_panics_on_term() {
+        let mut key = FluentKey::new(
+            Arc::new(PathBuf::from("tmp.py")), // code_path
+            String::from("term"),              // key
+            FluentEntry::Term(fluent_syntax::ast::Term {
+                id: fluent_syntax::ast::Identifier {
+                    name: "term".to_string(),
+                },
+                value: fluent_syntax::ast::Pattern { elements: vec![] },
+                attributes: vec![],
+                comment: None,
+            }), // entry
+            Arc::new(PathBuf::from("tmp.ftl")), // path
+            Some("en".to_string()),            // locale
+            Some(0),
+            HashSet::new(),
+        );
+
+        super::extract_kwargs_from_message(
+            &mut key,
+            &mut HashSet::<String>::new(),
+            &mut HashMap::<String, FluentKey>::new(),
+            &HashMap::<String, FluentKey>::new(),
+            &mut HashSet::<String>::new(),
+        );
+    }
+
+    #[test]
+    fn test_extract_kwargs_from_term() {
+        let mut key = FluentKey::new(
+            Arc::new(PathBuf::from("tmp.py")), // code_path
+            String::from("term"),              // key
+            FluentEntry::Term(fluent_syntax::ast::Term {
+                id: fluent_syntax::ast::Identifier {
+                    name: "term".to_string(),
+                },
+                value: fluent_syntax::ast::Pattern {
+                    elements: vec![fluent_syntax::ast::PatternElement::Placeable {
+                        expression: fluent_syntax::ast::Expression::Inline(
+                            fluent_syntax::ast::InlineExpression::VariableReference {
+                                id: fluent_syntax::ast::Identifier {
+                                    name: "username".to_string(),
+                                },
+                            },
+                        ),
+                    }],
+                },
+                attributes: vec![],
+                comment: None,
+            }), // entry
+            Arc::new(PathBuf::from("tmp.ftl")), // path
+            Some("en".to_string()),            // locale
+            Some(0),
+            HashSet::new(),
+        );
+        let mut kwargs: HashSet<String> = HashSet::new();
+
+        super::extract_kwargs_from_term(
+            &mut key,
+            &mut kwargs,
+            &mut HashMap::<String, FluentKey>::new(),
+            &HashMap::<String, FluentKey>::new(),
+            &mut HashSet::<String>::new(),
+        );
+
+        assert!(kwargs.contains("username"));
+    }
+
+    #[test]
+    #[should_panic(expected = "Expected a Term entry")]
+    fn test_extract_kwargs_from_term_panics_on_message() {
+        let mut key = FluentKey::new(
+            Arc::new(PathBuf::from("tmp.py")), // code_path
+            String::from("msg"),               // key
+            FluentEntry::Message(fluent_syntax::ast::Message {
+                id: fluent_syntax::ast::Identifier {
+                    name: "msg".to_string(),
+                },
+                value: Some(fluent_syntax::ast::Pattern { elements: vec![] }),
+                attributes: vec![],
+                comment: None,
+            }), // entry
+            Arc::new(PathBuf::from("tmp.ftl")), // path
+            Some("en".to_string()),            // locale
+            Some(0),
+            HashSet::new(),
+        );
+
+        super::extract_kwargs_from_term(
+            &mut key,
+            &mut HashSet::<String>::new(),
+            &mut HashMap::<String, FluentKey>::new(),
+            &HashMap::<String, FluentKey>::new(),
+            &mut HashSet::<String>::new(),
+        );
+    }
+}

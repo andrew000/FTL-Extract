@@ -31,6 +31,9 @@ jobs:
           version: "latest"
           enable-cache: true
 
+      - name: Install Just
+        uses: extractions/setup-just@v3
+
       - name: Rust cache
         uses: Swatinem/rust-cache@v2
 
@@ -59,25 +62,39 @@ jobs:
 
       - name: Lint
         shell: bash
-        run: make lint
+        run: just lint
 
-      - name: Test
+      - name: Test with Rust extension (Linux py3.14)
+        if: runner.os == 'Linux' && matrix.python-version == '3.14'
         shell: bash
-        run: make test
+        env:
+          BUILD_RUST_IMPL: "1"
+        run: |
+          just test-py
+          just test-rust
 
-      - name: Build the package (Windows and macOS)
+      - name: Test without Rust extension (Other OS and Python versions)
+        if: runner.os != 'Linux' && matrix.python-version != '3.14'
+        shell: bash
+        env:
+          BUILD_RUST_IMPL: "0"
+        run: just test-py
+
+      - name: Build the package without Rust extension (Windows and macOS)
         if: runner.os == 'Windows' || runner.os == 'macOS'
         shell: bash
         env:
           BUILD_RUST_IMPL: "0"
         run: uv build --wheel
 
-      - name: Build the package (Linux py3.14)
+      - name: Build the package with Rust extension (Linux py3.14)
         if: runner.os == 'Linux' && matrix.python-version == '3.14'
         shell: bash
+        env:
+          BUILD_RUST_IMPL: "1"
         run: uv build --wheel
 
-      - name: Build the package (Linux !py3.14)
+      - name: Build the package without Rust extension (Linux !py3.14)
         if: runner.os == 'Linux' && matrix.python-version != '3.14'
         shell: bash
         env:

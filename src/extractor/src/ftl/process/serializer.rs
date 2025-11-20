@@ -23,6 +23,12 @@ pub(crate) fn generate_ftl(fluent_keys: &Vec<FluentKey>, leave_as_is: &[FluentKe
             FluentEntry::Comment(comment) => {
                 resource.body.push(Entry::Comment(comment.clone()));
             }
+            FluentEntry::GroupComment(comment) => {
+                resource.body.push(Entry::GroupComment(comment.clone()));
+            }
+            FluentEntry::ResourceComment(comment) => {
+                resource.body.push(Entry::ResourceComment(comment.clone()));
+            }
             FluentEntry::Junk(junk) => {
                 resource.body.push(Entry::Junk {
                     content: junk.clone(),
@@ -31,7 +37,88 @@ pub(crate) fn generate_ftl(fluent_keys: &Vec<FluentKey>, leave_as_is: &[FluentKe
         }
     }
 
-    let mut ser = Serializer::new(Options::default());
+    let mut ser = Serializer::new(Options { with_junk: false });
     ser.serialize_resource(&resource);
     ser.into_serialized_text()
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::ftl::matcher::{FluentEntry, FluentKey};
+    use hashbrown::HashSet;
+    use pretty_assertions::assert_eq;
+    use std::path::PathBuf;
+    use std::sync::Arc;
+
+    #[test]
+    fn test_generate_ftl() {
+        let fluent_keys: Vec<FluentKey> = vec![
+            FluentKey::new(
+                Arc::new(PathBuf::from("tmp.py")), // code_path
+                String::from("message"),           // key
+                FluentEntry::Message(fluent_syntax::ast::Message {
+                    id: fluent_syntax::ast::Identifier {
+                        name: "message".to_string(),
+                    },
+                    value: Some(fluent_syntax::ast::Pattern {
+                        elements: vec![fluent_syntax::ast::PatternElement::TextElement {
+                            value: "Test message.".to_string(),
+                        }],
+                    }),
+                    attributes: vec![],
+                    comment: None,
+                }), // entry
+                Arc::new(PathBuf::from("tmp.ftl")), // path
+                Some("en".to_string()),            // locale
+                Some(0),
+                HashSet::new(),
+            ),
+            FluentKey::new(
+                Arc::new(PathBuf::from("tmp.py")),
+                String::from("term"), // key
+                FluentEntry::Term(fluent_syntax::ast::Term {
+                    id: fluent_syntax::ast::Identifier {
+                        name: "term".to_string(),
+                    },
+                    value: fluent_syntax::ast::Pattern {
+                        elements: vec![fluent_syntax::ast::PatternElement::TextElement {
+                            value: "Test term.".to_string(),
+                        }],
+                    },
+                    attributes: vec![],
+                    comment: None,
+                }), // entry
+                Arc::new(PathBuf::from("tmp.ftl")), // path
+                Some("en".to_string()), // locale
+                Some(1),
+                HashSet::new(),
+            ),
+            FluentKey::new(
+                Arc::new(PathBuf::from("tmp.py")),
+                String::from("comment"), // key
+                FluentEntry::Comment(fluent_syntax::ast::Comment {
+                    content: vec!["This is a comment.".to_string()],
+                }), // entry
+                Arc::new(PathBuf::from("tmp.ftl")), // path
+                Some("en".to_string()),  // locale
+                Some(2),
+                HashSet::new(),
+            ),
+            FluentKey::new(
+                Arc::new(PathBuf::from("tmp.py")),
+                String::from("junk"),                           // key
+                FluentEntry::Junk("This is junk.".to_string()), // entry
+                Arc::new(PathBuf::from("tmp.ftl")),             // path
+                Some("en".to_string()),                         // locale
+                Some(3),
+                HashSet::new(),
+            ),
+        ];
+        let leave_as_is: Vec<FluentKey> = vec![];
+
+        let ftl_output = super::generate_ftl(&fluent_keys, &leave_as_is);
+        let expected_output =
+            "message = Test message.\n-term = Test term.\n\n# This is a comment.\n\n";
+        assert_eq!(ftl_output, expected_output);
+    }
 }

@@ -7,14 +7,14 @@ docs_source_dir := docs_dir / "source"
 reports_dir := "reports"
 tests_dir := "tests"
 
-lint:
+lint-py:
     @echo "Running ruff..."
     uv run ruff check --config pyproject.toml --diff --unsafe-fixes {{ py_code_dir }} {{ tests_dir }}
 
     @echo "Running mypy..."
     uv run mypy --config-file pyproject.toml
 
-format:
+format-py:
     @echo "Running ruff check with --fix"
     uv run ruff check --config pyproject.toml --fix --unsafe-fixes {{ py_code_dir }} {{ tests_dir }}
 
@@ -24,7 +24,18 @@ format:
     @echo "Running isort..."
     uv run isort --settings-path pyproject.toml {{ py_code_dir }} {{ tests_dir }}
 
-py-test:
+lint-rust:
+    @echo "Running cargo clippy..."
+    cargo clippy --all-targets --all-features
+
+format-rust:
+    @echo "Running cargo fix..."
+    cargo fix --allow-dirty --all
+
+    @echo "Running cargo fmt..."
+    cargo fmt --all
+
+test-py:
     @echo "Running pytest..."
     uv run pytest \
         -vv \
@@ -34,10 +45,9 @@ py-test:
         --cov-config=.coveragerc \
         {{ tests_dir }}
 
-rust-test:
+test-rust:
     @echo "Running cargo test..."
-    $RUSTFLAGS="-C instrument-coverage" && \
-      cargo test --tests
+    cargo llvm-cov --html
 
 outdated:
     uv tree --universal --outdated --no-cache

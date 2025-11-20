@@ -83,7 +83,7 @@ pub fn extract(
     for lang in &language {
         // Import fluent keys and terms from existing FTL files
         let (mut stored_fluent_keys, mut stored_terms, mut leave_as_is) =
-            import_ftl_from_dir(output_path, lang, &mut statistics);
+            import_ftl_from_dir(output_path, lang, &mut statistics)?;
 
         for fluent_key in stored_fluent_keys.values_mut() {
             fluent_key.path = Arc::new(

@@ -131,5 +131,8 @@ fn main() {
         );
     }
 
-    println!("[Rust] Done in {:.3?}s.", start_time.elapsed().as_secs_f64());
+    println!(
+        "[Rust] Done in {:.3?}s.",
+        start_time.elapsed().as_secs_f64()
+    );
 }

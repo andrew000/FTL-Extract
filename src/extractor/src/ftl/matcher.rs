@@ -5,7 +5,9 @@ use anyhow::{Result, bail};
 use fluent::types::AnyEq;
 use hashbrown::{HashMap, HashSet};
 use ruff_python_ast::visitor::source_order::SourceOrderVisitor;
+use smallvec::SmallVec;
 use std::path::PathBuf;
+use std::sync::Arc;
 
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) enum FluentEntry {
@@ -17,10 +19,10 @@ pub(crate) enum FluentEntry {
 
 #[derive(Clone, Debug)]
 pub(crate) struct FluentKey {
-    pub(crate) code_path: PathBuf,
+    pub(crate) code_path: Arc<PathBuf>,
     pub(crate) key: String,
     pub(crate) entry: FluentEntry,
-    pub(crate) path: PathBuf,
+    pub(crate) path: Arc<PathBuf>,
     pub(crate) locale: Option<String>,
     pub(crate) position: usize,
     pub(crate) depends_on_keys: HashSet<String>,
@@ -28,10 +30,10 @@ pub(crate) struct FluentKey {
 
 impl FluentKey {
     pub(crate) fn new(
-        code_path: PathBuf,
+        code_path: Arc<PathBuf>,
         key: String,
         entry: FluentEntry,
-        path: PathBuf,
+        path: Arc<PathBuf>,
         locale: Option<String>,
         position: Option<usize>,
         depends_on_keys: HashSet<String>,
@@ -49,8 +51,8 @@ impl FluentKey {
 }
 
 pub(crate) struct I18nMatcher<'a> {
-    code_path: PathBuf,
-    default_ftl_file: PathBuf,
+    code_path: Arc<PathBuf>,
+    default_ftl_file: Arc<PathBuf>,
     i18n_keys: &'a HashSet<String>,
     i18n_keys_prefix: &'a HashSet<String>,
     ignore_attributes: &'a HashSet<String>,
@@ -64,13 +66,13 @@ impl<'a> SourceOrderVisitor<'a> for I18nMatcher<'a> {
         if expr.is_call_expr() {
             let expr = expr.as_call_expr().unwrap();
             if expr.func.is_attribute_expr() {
-                self.process_attribute_call(&expr);
+                self.process_attribute_call(expr);
             } else if expr.func.is_name_expr()
                 && self
                     .i18n_keys
                     .contains(&expr.func.as_name_expr().unwrap().id.to_string())
             {
-                self.process_name_call(&expr);
+                self.process_name_call(expr);
             } else {
                 // println!(
                 //     "Ignoring {:#?}, {}, {}",
@@ -95,27 +97,27 @@ impl<'a> I18nMatcher<'a> {
         ignore_kwargs: &'a HashSet<String>,
     ) -> Self {
         Self {
-            code_path,
-            default_ftl_file,
+            code_path: Arc::new(code_path),
+            default_ftl_file: Arc::new(default_ftl_file),
             i18n_keys,
             i18n_keys_prefix,
             ignore_attributes,
             ignore_kwargs,
-            fluent_keys: HashMap::<String, FluentKey>::new(),
+            fluent_keys: HashMap::new(),
         }
     }
     #[inline]
-    fn process_attribute_call(&mut self, expr: &ruff_python_ast::ExprCall) {
-        let mut attr = expr.func.clone();
-        let mut attrs: Vec<String> = vec![];
-        while attr.is_attribute_expr() {
-            let attribute_expr = attr.as_attribute_expr().unwrap();
-            attrs.push(attribute_expr.attr.to_string());
-            attr = attribute_expr.value.clone();
+    fn process_attribute_call(&mut self, expr: &'a ruff_python_ast::ExprCall) {
+        let mut attrs: SmallVec<&str, 8> = SmallVec::new();
+        let mut current_expr = expr.func.as_ref();
+
+        while let Some(attribute_expr) = current_expr.as_attribute_expr() {
+            attrs.push(attribute_expr.attr.as_str());
+            current_expr = &attribute_expr.value;
         }
 
-        if attr.is_name_expr() {
-            self.process_attribute_name_call(expr, attr.as_name_expr_mut().unwrap(), attrs);
+        if let Some(name_expr) = current_expr.as_name_expr() {
+            self.process_attribute_name_call(expr, name_expr, attrs);
         }
     }
     #[inline]
@@ -146,14 +148,14 @@ impl<'a> I18nMatcher<'a> {
     fn process_attribute_name_call(
         &mut self,
         expr: &ruff_python_ast::ExprCall,
-        attr: &mut ruff_python_ast::ExprName,
-        mut attrs: Vec<String>,
+        attr: &ruff_python_ast::ExprName,
+        mut attrs: SmallVec<&str, 8>,
     ) {
         if self.i18n_keys.contains(attr.id.as_str()) {
             self.process_i18n_key_call(expr, attrs);
-        } else if self.i18n_keys_prefix.contains(&attr.id.to_string())
+        } else if self.i18n_keys_prefix.contains(attr.id.as_str())
             && !attrs.is_empty()
-            && self.i18n_keys.contains(&attrs.last().unwrap().to_string())
+            && self.i18n_keys.contains(*attrs.last().unwrap())
         {
             // Remove the last attribute to handle cases where the prefix key is followed by a
             // valid i18n key.
@@ -162,24 +164,23 @@ impl<'a> I18nMatcher<'a> {
         }
     }
     #[inline]
-    fn process_i18n_key_call(&mut self, expr: &ruff_python_ast::ExprCall, attrs: Vec<String>) {
-        if attrs.len() == 1 && attrs.first().unwrap() == consts::GET_LITERAL {
-            self.process_i18n_key_call_get_literal(expr, attrs);
+    fn process_i18n_key_call(
+        &mut self,
+        expr: &ruff_python_ast::ExprCall,
+        attrs: SmallVec<&str, 8>,
+    ) {
+        if attrs.len() == 1 && *attrs.first().unwrap() == consts::GET_LITERAL {
+            self.process_i18n_key_call_get_literal(expr);
         } else {
             self.process_i18n_key_call_attrs(expr, attrs);
         }
     }
     #[inline]
-    fn process_i18n_key_call_get_literal(
-        &mut self,
-        expr: &ruff_python_ast::ExprCall,
-        mut attrs: Vec<String>,
-    ) {
+    fn process_i18n_key_call_get_literal(&mut self, expr: &ruff_python_ast::ExprCall) {
         if expr.arguments.is_empty() {
             return;
         }
 
-        attrs.clear();
         let arg = expr.arguments.find_positional(0).unwrap();
         if arg.is_string_literal_expr() {
             let key = arg
@@ -196,28 +197,31 @@ impl<'a> I18nMatcher<'a> {
     fn process_i18n_key_call_attrs(
         &mut self,
         expr: &ruff_python_ast::ExprCall,
-        attrs: Vec<String>,
+        attrs: SmallVec<&str, 8>,
     ) {
-        if self
-            .ignore_attributes
-            .contains(&attrs.last().unwrap().to_string())
-        {
+        if self.ignore_attributes.contains(*attrs.last().unwrap()) {
             return;
         }
 
-        self.add_fluent_key(
-            expr,
-            attrs
-                .iter()
-                .rev()
-                .map(|s| s.to_string())
-                .collect::<Vec<String>>()
-                .join("-"),
-        )
-        .unwrap();
+        // Calculate capacity for the new key string to avoid reallocations
+        // Sum of lengths + number of separators
+        let capacity = attrs.iter().map(|s| s.len()).sum::<usize>() + attrs.len().saturating_sub(1);
+        let mut key = String::with_capacity(capacity);
+
+        // Join in reverse order
+        for (i, s) in attrs.iter().rev().enumerate() {
+            if i > 0 {
+                key.push('-');
+            }
+            key.push_str(s);
+        }
+
+        self.add_fluent_key(expr, key).unwrap();
     }
     #[inline]
     fn create_fluent_key(&self, expr: &ruff_python_ast::ExprCall, key: String) -> FluentKey {
+        let path = self.default_ftl_file.clone();
+
         let mut fluent_key = FluentKey::new(
             self.code_path.clone(),
             key.clone(),
@@ -231,7 +235,7 @@ impl<'a> I18nMatcher<'a> {
                 attributes: vec![],
                 comment: None,
             }),
-            self.default_ftl_file.clone(),
+            path,
             None,
             None,
             HashSet::new(),
@@ -261,10 +265,17 @@ impl<'a> I18nMatcher<'a> {
 
             if arg.as_str() == consts::PATH_LITERAL {
                 if kw.value.is_string_literal_expr() {
-                    let path = &kw.value.as_string_literal_expr().as_ref().unwrap().value;
+                    let raw_path = &kw.value.as_string_literal_expr().as_ref().unwrap().value;
 
-                    if !path.is_empty() {
-                        fluent_key.path = PathBuf::from(path.clone().to_str());
+                    if !raw_path.is_empty() {
+                        let p = PathBuf::from(raw_path.to_str());
+                        if p.extension().is_none() {
+                            let mut new_p = p.clone();
+                            new_p.push(self.default_ftl_file.as_ref());
+                            fluent_key.path = Arc::new(new_p);
+                        } else {
+                            fluent_key.path = Arc::new(p);
+                        }
                     }
                 }
             } else {

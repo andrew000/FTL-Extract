@@ -7,9 +7,11 @@ use crate::ftl::process::kwargs_extractor::extract_kwargs;
 use crate::ftl::process::serializer::generate_ftl;
 use crate::ftl::utils::ExtractionStatistics;
 use anyhow::Result;
+use globset::{Glob, GlobSetBuilder};
 use hashbrown::{HashMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 pub fn extract(
     code_path: &Path,
@@ -59,12 +61,18 @@ pub fn extract(
         ignore_attributes.extend(append_ignore_attributes);
     };
 
+    let mut ignore_builder = GlobSetBuilder::new();
+    for exclude in exclude_dirs {
+        ignore_builder.add(Glob::new(exclude.as_str())?);
+    }
+    let ignore_set = ignore_builder.build()?;
+
     // Extract fluent keys from code
     let mut in_code_fluent_keys = extract_fluent_keys(
         code_path,
         i18n_keys,
         i18n_keys_prefix,
-        exclude_dirs,
+        &ignore_set,
         ignore_attributes,
         ignore_kwargs,
         default_ftl_file,
@@ -76,19 +84,23 @@ pub fn extract(
         // Import fluent keys and terms from existing FTL files
         let (mut stored_fluent_keys, mut stored_terms, mut leave_as_is) =
             import_ftl_from_dir(output_path, lang, &mut statistics);
+
         for fluent_key in stored_fluent_keys.values_mut() {
-            fluent_key.path = fluent_key
-                .path
-                .strip_prefix(output_path.join(lang))
-                .unwrap_or(&fluent_key.path)
-                .to_path_buf();
+            fluent_key.path = Arc::new(
+                fluent_key
+                    .path
+                    .strip_prefix(output_path.join(lang))
+                    .unwrap_or(&fluent_key.path)
+                    .to_path_buf(),
+            );
         }
         for term in stored_terms.values_mut() {
-            term.path = term
-                .path
-                .strip_prefix(output_path.join(lang))
-                .unwrap_or(&term.path)
-                .to_path_buf();
+            term.path = Arc::new(
+                term.path
+                    .strip_prefix(output_path.join(lang))
+                    .unwrap_or(&term.path)
+                    .to_path_buf(),
+            );
         }
 
         let mut keys_to_comment: HashMap<String, FluentKey> = HashMap::new();
@@ -180,7 +192,7 @@ pub fn extract(
                         fluent_key.key,
                         output_path
                             .join(lang)
-                            .join(fluent_key.path.clone())
+                            .join(fluent_key.path.as_ref())
                             .display()
                     );
                 }
@@ -210,7 +222,7 @@ pub fn extract(
             sorted_fluent_keys.entry(path).or_default().extend(keys);
         }
 
-        let mut leave_as_is_with_path: HashMap<PathBuf, Vec<FluentKey>> = HashMap::new();
+        let mut leave_as_is_with_path: HashMap<Arc<PathBuf>, Vec<FluentKey>> = HashMap::new();
 
         for fluent_key in leave_as_is {
             leave_as_is_with_path
@@ -223,7 +235,7 @@ pub fn extract(
             let ftl = generate_ftl(
                 keys,
                 leave_as_is_with_path
-                    .get(&output_path.join(lang).join(path))
+                    .get(&output_path.join(lang).join(path.as_ref()))
                     .unwrap_or(&vec![]),
             );
 
@@ -231,16 +243,20 @@ pub fn extract(
                 if !silent {
                     println!(
                         "[DRY-RUN] File {} has been saved. {} keys found.",
-                        output_path.join(lang).join(path).display(),
+                        output_path.join(lang).join(path.as_ref()).display(),
                         keys.len()
                     );
                 }
             } else {
-                write(output_path.join(lang).join(path), ftl, &line_endings);
+                write(
+                    output_path.join(lang).join(path.as_ref()),
+                    ftl,
+                    &line_endings,
+                );
                 if !silent {
                     println!(
                         "File {} has been saved. {} keys found.",
-                        output_path.join(lang).join(path).display(),
+                        output_path.join(lang).join(path.as_ref()).display(),
                         keys.len()
                     );
                 }

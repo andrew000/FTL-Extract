@@ -6,6 +6,7 @@ use ignore::WalkBuilder;
 use ignore::types::TypesBuilder;
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 fn import_from_ftl(
     path: &PathBuf,
@@ -27,10 +28,10 @@ fn import_from_ftl(
                 ftl_keys.insert(
                     message.id.name.clone(),
                     FluentKey::new(
-                        PathBuf::new(),
+                        Arc::new(PathBuf::new()),
                         message.id.name.clone(),
                         FluentEntry::Message(message.clone()),
-                        path.to_path_buf(),
+                        Arc::new(path.to_path_buf()),
                         Some(locale.to_string()),
                         Some(position),
                         HashSet::new(),
@@ -41,53 +42,33 @@ fn import_from_ftl(
                 terms.insert(
                     term.id.name.clone(),
                     FluentKey::new(
-                        PathBuf::new(),
+                        Arc::new(PathBuf::new()),
                         term.id.name.clone(),
                         FluentEntry::Term(term.clone()),
-                        path.to_path_buf(),
+                        Arc::new(path.to_path_buf()),
                         Some(locale.to_string()),
                         Some(position),
                         HashSet::new(),
                     ),
                 );
             }
-            Entry::Comment(comment) => leave_as_is_keys.push(FluentKey::new(
-                PathBuf::new(),
+            Entry::Comment(comment)
+            | Entry::GroupComment(comment)
+            | Entry::ResourceComment(comment) => leave_as_is_keys.push(FluentKey::new(
+                Arc::new(PathBuf::new()),
                 "".to_string(),
                 FluentEntry::Comment(comment.clone()),
-                path.to_path_buf(),
+                Arc::new(path.to_path_buf()),
                 Some(locale.to_string()),
                 Some(position),
                 HashSet::new(),
             )),
-            Entry::GroupComment(comment) => {
-                leave_as_is_keys.push(FluentKey::new(
-                    PathBuf::new(),
-                    "".to_string(),
-                    FluentEntry::Comment(comment.clone()),
-                    path.to_path_buf(),
-                    Some(locale.to_string()),
-                    Some(position),
-                    HashSet::new(),
-                ));
-            }
-            Entry::ResourceComment(comment) => {
-                leave_as_is_keys.push(FluentKey::new(
-                    PathBuf::new(),
-                    "".to_string(),
-                    FluentEntry::Comment(comment.clone()),
-                    path.to_path_buf(),
-                    Some(locale.to_string()),
-                    Some(position),
-                    HashSet::new(),
-                ));
-            }
             Entry::Junk { content } => {
                 leave_as_is_keys.push(FluentKey::new(
-                    PathBuf::new(),
+                    Arc::new(PathBuf::new()),
                     "".to_string(),
                     FluentEntry::Junk(content.clone()),
-                    path.to_path_buf(),
+                    Arc::new(path.to_path_buf()),
                     Some(locale.to_string()),
                     Some(position),
                     HashSet::new(),
@@ -140,7 +121,7 @@ pub(crate) fn import_ftl_from_dir(
         let ftl_file = match entry {
             Ok(entry) => {
                 let path = entry.path();
-                if entry.file_type().map_or(false, |ft| ft.is_file()) {
+                if entry.file_type().is_some_and(|ft| ft.is_file()) {
                     path.to_path_buf()
                 } else {
                     continue;
@@ -149,7 +130,7 @@ pub(crate) fn import_ftl_from_dir(
             Err(_) => continue,
         };
 
-        let (keys, terms, leave_as_is) = import_from_ftl(&ftl_file, &locale);
+        let (keys, terms, leave_as_is) = import_from_ftl(&ftl_file, locale);
         stored_ftl_keys.extend(keys);
         stored_terms.extend(terms);
         stored_leave_as_is_keys.extend(leave_as_is);

@@ -21,13 +21,13 @@ mod tests {
             &std::path::PathBuf::from(r"tests\files\locales"),
             Vec::from(["en".to_string()]),
             consts::DEFAULT_I18N_KEYS.clone(),
-            HashSet::from(["LF".to_string(), "cls_i18n".to_string()]),
-            HashSet::from(["self".to_string(), "cls".to_string()]),
+            HashSet::from_iter(["LF".to_string(), "cls_i18n".to_string()]),
+            HashSet::from_iter(["self".to_string(), "cls".to_string()]),
             consts::DEFAULT_EXCLUDE_DIRS.clone(),
-            HashSet::from([r".\tests\files\py\should_be_excluded\*".to_string()]),
+            HashSet::from_iter([r".\tests\files\py\should_be_excluded\*".to_string()]),
             consts::DEFAULT_IGNORE_ATTRIBUTES.clone(),
-            HashSet::from(["core".to_string()]),
-            HashSet::from(["when".to_string()]),
+            HashSet::from_iter(["core".to_string()]),
+            HashSet::from_iter(["when".to_string()]),
             true,
             &PathBuf::from(consts::DEFAULT_FTL_FILENAME),
             CommentsKeyModes::Comment,
@@ -55,6 +55,9 @@ mod tests {
             statistics.ftl_keys_commented
         );
 
-        println!("Extracted fluent keys in {:?}s.", start_time.elapsed().as_secs_f32());
+        println!(
+            "Extracted fluent keys in {:?}s.",
+            start_time.elapsed().as_secs_f32()
+        );
     }
 }

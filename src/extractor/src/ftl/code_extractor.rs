@@ -215,3 +215,127 @@ pub(crate) fn sort_fluent_keys_by_path(
     }
     sorted_fluent_keys
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::ftl::consts;
+    use crate::ftl::matcher::{FluentEntry, FluentKey};
+    use globset::GlobSet;
+    use hashbrown::{HashMap, HashSet};
+    use pretty_assertions::assert_eq;
+    use std::path::PathBuf;
+    use std::sync::Arc;
+
+    #[test]
+    fn test_find_py_files_dir() {
+        let code_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("tests")
+            .join("py");
+        let ignore_set = GlobSet::empty();
+        let py_files = super::find_py_files(&code_path, &ignore_set);
+        assert_eq!(py_files.len(), 3);
+    }
+
+    #[test]
+    fn test_find_py_files_file() {
+        let code_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("tests")
+            .join("py")
+            .join("default.py");
+        let ignore_set = GlobSet::empty();
+        let py_files = super::find_py_files(&code_path, &ignore_set);
+        assert_eq!(py_files.len(), 1);
+        assert_eq!(py_files[0], code_path);
+    }
+
+    #[test]
+    fn test_extract_fluent_keys() {
+        let code_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("tests")
+            .join("py");
+        let mut key_prefixes = consts::DEFAULT_I18N_KEYS.clone();
+        key_prefixes.insert("self".to_string());
+        key_prefixes.insert("cls".to_string());
+        let mut statistics = super::ExtractionStatistics::new();
+
+        let fluent_keys = super::extract_fluent_keys(
+            &code_path,
+            key_prefixes.clone(),
+            HashSet::new(),
+            &globset::GlobSet::empty(),
+            HashSet::new(),
+            HashSet::new(),
+            &PathBuf::from("locales/en.ftl"),
+            &mut statistics,
+        );
+
+        eprintln!("Extracted Fluent Keys: {:?}", fluent_keys.keys());
+
+        assert_eq!(fluent_keys.len(), 14);
+        assert!(fluent_keys.contains_key("text"));
+        assert!(fluent_keys.contains_key("text-kwargs"));
+        assert!(fluent_keys.contains_key("text-args-term"));
+        assert!(fluent_keys.contains_key("text-args-term-args"));
+        assert!(fluent_keys.contains_key("text-message_reference"));
+        assert!(fluent_keys.contains_key("text-message_reference-args"));
+        assert!(fluent_keys.contains_key("text-selector"));
+        assert!(fluent_keys.contains_key("text-selector-selectors"));
+        assert!(fluent_keys.contains_key("text-selector-kwargs"));
+        assert!(fluent_keys.contains_key("text-selector-reference-selector-kwargs-terms"));
+        assert_eq!(statistics.py_files_count, 2);
+    }
+
+    #[test]
+    fn test_sort_fluent_keys_by_path() {
+        let mut fluent_keys: HashMap<String, FluentKey> = HashMap::new();
+
+        let code_path1 = Arc::new(PathBuf::from("file1.py"));
+        let ftl_path1 = Arc::new(PathBuf::from("file1.ftl"));
+        let code_path2 = Arc::new(PathBuf::from("file2.py"));
+        let ftl_path2 = Arc::new(PathBuf::from("file2.ftl"));
+
+        fluent_keys.insert(
+            "key1".to_string(),
+            FluentKey::new(
+                code_path1.clone(),
+                "key1".to_string(),
+                FluentEntry::Message(fluent_syntax::ast::Message {
+                    id: fluent_syntax::ast::Identifier {
+                        name: "key1".to_string(),
+                    },
+                    value: None,
+                    attributes: vec![],
+                    comment: None,
+                }),
+                ftl_path1.clone(),
+                Some("en".to_string()),
+                Some(0),
+                HashSet::new(),
+            ),
+        );
+        fluent_keys.insert(
+            "key2".to_string(),
+            FluentKey::new(
+                code_path2.clone(),
+                "key2".to_string(),
+                FluentEntry::Message(fluent_syntax::ast::Message {
+                    id: fluent_syntax::ast::Identifier {
+                        name: "key2".to_string(),
+                    },
+                    value: None,
+                    attributes: vec![],
+                    comment: None,
+                }),
+                ftl_path2.clone(),
+                Some("en".to_string()),
+                Some(0),
+                HashSet::new(),
+            ),
+        );
+
+        let sorted = super::sort_fluent_keys_by_path(fluent_keys.clone());
+        assert_eq!(sorted.len(), 2);
+        assert!(sorted.contains_key(&ftl_path1.clone()));
+        assert!(sorted.contains_key(&ftl_path2.clone()));
+    }
+}

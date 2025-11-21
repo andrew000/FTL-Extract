@@ -130,7 +130,6 @@ pub(crate) fn import_ftl_from_dir(
         let mut type_builder = TypesBuilder::new();
         type_builder.add("ftl", "*.ftl")?;
         type_builder.select("ftl");
-        // if path.is_dir() {
         WalkBuilder::new(path.join(locale))
             .types(type_builder.build()?)
             .parents(false)
@@ -139,16 +138,6 @@ pub(crate) fn import_ftl_from_dir(
             .git_exclude(false)
             .require_git(false)
             .build()
-        // } else {
-        //     WalkBuilder::new(path.join(locale))
-        //         .types(type_builder.build().unwrap())
-        //         .parents(false)
-        //         .ignore(false)
-        //         .git_global(false)
-        //         .git_exclude(false)
-        //         .require_git(false)
-        //         .build()
-        // }
     };
     let mut stored_ftl_keys = HashMap::<String, FluentKey>::new();
     let mut stored_terms = HashMap::<String, FluentKey>::new();

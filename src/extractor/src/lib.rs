@@ -1,10 +1,5 @@
 pub mod ftl;
 
-use mimalloc::MiMalloc;
-
-#[global_allocator]
-static GLOBAL: MiMalloc = MiMalloc;
-
 #[cfg(test)]
 mod tests {
     use super::ftl::consts;

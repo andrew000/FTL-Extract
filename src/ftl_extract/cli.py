@@ -173,7 +173,7 @@ def cli_extract(
     verbose: bool,
 ) -> None:
     if fast:
-        cmd = ["fast-ftl-extract", str(code_path), str(output_path)]
+        cmd = ["fast-ftl", str(code_path), str(output_path)]
 
         # Add multi-value options to the command
         multi_value_options = {

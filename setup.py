@@ -9,7 +9,7 @@ rust_extensions = []
 if getenv("BUILD_RUST_IMPL", "0") == "1":
     rust_extensions.append(
         RustBin(
-            "fast-ftl-extract",
+            "fast-ftl",
             path="src/cli/Cargo.toml",
             strip=Strip.All,
             debug=False,

@@ -12,13 +12,13 @@ include = ["src/**/*.rs"]
 [workspace]
 resolver = "3"
 members = [
-    "src/extractor",
     "src/cli",
+    "src/extractor",
 ]
 
 [workspace.dependencies]
-extractor = { path = "src/extractor" }
 cli = { path = "src/cli" }
+extractor = { path = "src/extractor" }
 
 # Dev dependencies
 pretty_assertions = { version = "1.4.1" }

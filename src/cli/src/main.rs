@@ -1,7 +1,7 @@
 use clap::{Parser, Subcommand};
 use extractor::ftl::consts::{
-    CommentsKeyModes, LineEndings, DEFAULT_EXCLUDE_DIRS, DEFAULT_FTL_FILENAME, DEFAULT_I18N_KEYS,
-    DEFAULT_IGNORE_ATTRIBUTES, DEFAULT_IGNORE_KWARGS,
+    CommentsKeyModes, DEFAULT_EXCLUDE_DIRS, DEFAULT_FTL_FILENAME, DEFAULT_I18N_KEYS,
+    DEFAULT_IGNORE_ATTRIBUTES, DEFAULT_IGNORE_KWARGS, LineEndings,
 };
 use hashbrown::HashSet;
 use mimalloc::MiMalloc;

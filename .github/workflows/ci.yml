@@ -130,7 +130,7 @@ jobs:
           for wheel in dist/*.whl; do
             uv run --verbose --with $wheel --no-project --refresh-package ftl_extract -- python -c "import ftl_extract; print(ftl_extract.__version__)"
             uv run --verbose --with $wheel --no-project --refresh-package ftl_extract -- ftl --version
-            uv run --verbose --with $wheel --no-project --refresh-package ftl_extract -- fast-ftl-extract --version
+            uv run --verbose --with $wheel --no-project --refresh-package ftl_extract -- fast-ftl --version
           done
 
       - name: Verify wheel installation (Linux !py3.14)
@@ -203,7 +203,7 @@ jobs:
           done
           for wheel in wheelhouse/*.whl; do
             uv run --verbose --with $wheel --no-project --refresh-package ftl_extract -- ftl --version
-            uv run --verbose --with $wheel --no-project --refresh-package ftl_extract -- fast-ftl-extract --version
+            uv run --verbose --with $wheel --no-project --refresh-package ftl_extract -- fast-ftl --version
           done
 
       - name: Build, fix and test wheels (macOS arm64)
@@ -218,7 +218,7 @@ jobs:
           done
           for wheel in wheelhouse/*.whl; do
             uv run --verbose --with $wheel --no-project --refresh-package ftl_extract -- ftl --version
-            uv run --verbose --with $wheel --no-project --refresh-package ftl_extract -- fast-ftl-extract --version
+            uv run --verbose --with $wheel --no-project --refresh-package ftl_extract -- fast-ftl --version
           done
 
       - name: Build, fix and test wheels (Linux manylinux)
@@ -232,7 +232,7 @@ jobs:
             uv run wheel tags --python-tag py3 --abi-tag none --remove $wheel
           done
           for wheel in wheelhouse/*.whl; do
-            uv run --verbose --with $wheel --no-project --refresh-package ftl_extract -- fast-ftl-extract --version
+            uv run --verbose --with $wheel --no-project --refresh-package ftl_extract -- fast-ftl --version
           done
 
       - name: Build, fix and test wheels (Linux musllinux)
@@ -246,7 +246,7 @@ jobs:
             uv run wheel tags --python-tag py3 --abi-tag none --remove $wheel
           done
           for wheel in wheelhouse/*.whl; do
-            uv run --verbose --with $wheel --no-project --refresh-package ftl_extract -- fast-ftl-extract --version
+            uv run --verbose --with $wheel --no-project --refresh-package ftl_extract -- fast-ftl --version
           done
 
       - name: Build sdist

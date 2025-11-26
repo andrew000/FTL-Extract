@@ -20,7 +20,6 @@ fluent-syntax = { git = "https://github.com/projectfluent/fluent-rs.git", rev = 
 globset = { version = "0.4.18" }
 hashbrown = { version = "0.16.1" }
 ignore = { version = "0.4.25" }
-lazy_static = { version = "1.5.0" }
 memmap2 = { version = "0.9.9" }
 rayon = { version = "1.11.0" }
 ruff_python_ast = { git = "https://github.com/astral-sh/ruff.git", tag = "0.14.6" }

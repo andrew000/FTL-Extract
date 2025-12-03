@@ -137,13 +137,6 @@ def ftl() -> None: ...
     help="Do not write to output files.",
 )
 @click.option(
-    "--silent",
-    is_flag=True,
-    default=False,
-    show_default=True,
-    help="Silence output files.",
-)
-@click.option(
     "--verbose",
     "-v",
     is_flag=True,
@@ -169,11 +162,15 @@ def cli_extract(
     line_endings: Literal["default", "lf", "cr", "crlf"],
     fast: bool,
     dry_run: bool,
-    silent: bool,
     verbose: bool,
 ) -> None:
     if fast:
-        cmd = ["fast-ftl", str(code_path), str(output_path)]
+        cmd = ["fast-ftl"]
+
+        if verbose:
+            cmd.append("--verbose")
+
+        cmd.extend(["extract", str(code_path), str(output_path)])
 
         # Add multi-value options to the command
         multi_value_options = {
@@ -204,17 +201,10 @@ def cli_extract(
         )
 
         # Boolean flags
-        for flag, condition in {
-            "--comment-junks": comment_junks,
-            "--dry-run": dry_run,
-            "--silent": silent,
-            "--verbose": verbose,
-        }.items():
+        for flag, condition in {"--comment-junks": comment_junks, "--dry-run": dry_run}.items():
             if condition:
                 cmd.append(flag)
 
-        if not silent:
-            click.echo(f"Running fast implementation: {' '.join(cmd)}")
         try:
             result = subprocess.run(cmd, check=True)  # noqa: S603
         except FileNotFoundError:
@@ -250,7 +240,7 @@ def cli_extract(
         comment_keys_mode=comment_keys_mode,
         line_endings=line_endings,
         dry_run=dry_run,
-        silent=silent,
+        verbose=verbose,
     )
 
     if verbose:

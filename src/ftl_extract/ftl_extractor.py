@@ -50,7 +50,7 @@ def extract(
     line_endings: str = LINE_ENDINGS[0],
     serializer: FluentSerializer | None = None,
     dry_run: bool = False,
-    silent: bool = False,
+    verbose: bool = False,
 ) -> ExtractionStatistics:
     statistics = ExtractionStatistics()
     statistics.ftl_files_count = dict.fromkeys(language, 0)
@@ -214,14 +214,14 @@ def extract(
                 leave_as_is=leave_as_is_with_path.get(path, []),
             )
             if dry_run:
-                if not silent:
+                if verbose:
                     echo(
                         f"[DRY-RUN] File {output_path / lang / path} has been saved. {len(keys)} "
                         f"keys found.",
                     )
             else:
                 _write(path=output_path / lang / path, ftl=ftl, line_endings=line_endings)
-                if not silent:
+                if verbose:
                     echo(
                         f"File {output_path / lang / path} has been saved. {len(keys)} keys found."
                     )

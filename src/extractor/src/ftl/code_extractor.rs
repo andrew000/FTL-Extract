@@ -5,6 +5,7 @@ use hashbrown::hash_map::Entry;
 use hashbrown::{HashMap, HashSet};
 use ignore::WalkBuilder;
 use ignore::types::TypesBuilder;
+use log::error;
 use memmap2::Mmap;
 use rayon::prelude::*;
 use ruff_python_ast::visitor::source_order::SourceOrderVisitor;
@@ -40,7 +41,7 @@ fn find_py_files(search_path: &Path, ignore_set: &GlobSet) -> Vec<PathBuf> {
                         result_paths.push(path.to_path_buf());
                     }
                 }
-                Err(err) => println!("ERROR: {}", err),
+                Err(err) => error!(target: "extractor:code", "{}", err),
             }
         }
     } else if search_path.is_file() && search_path.extension().unwrap_or_default() == "py" {

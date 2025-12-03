@@ -6,6 +6,7 @@ use extractor::ftl::consts::{
 use extractor::ftl::ftl_extractor::{ExtractConfig, extract};
 
 use hashbrown::HashSet;
+use log::{error, info};
 use mimalloc::MiMalloc;
 use std::path::PathBuf;
 
@@ -22,10 +23,6 @@ struct Cli {
     /// Verbose output
     #[arg(short = 'v', long, default_value_t = false)]
     verbose: bool,
-
-    /// Silent mode, only output errors
-    #[arg(long, default_value_t = false)]
-    silent: bool,
 }
 
 #[derive(Subcommand)]
@@ -99,6 +96,20 @@ enum Commands {
 
 fn main() {
     let cli = Cli::parse();
+
+    env_logger::Builder::new()
+        .filter_level({
+            if cli.verbose {
+                log::LevelFilter::Debug
+            } else {
+                log::LevelFilter::Info
+            }
+        })
+        .filter_module("ignore::walk", log::LevelFilter::Warn)
+        .filter_module("ignore::gitignore", log::LevelFilter::Warn)
+        .filter_module("globset", log::LevelFilter::Warn)
+        .init();
+
     let start_time = std::time::Instant::now();
 
     match cli.command {
@@ -120,8 +131,8 @@ fn main() {
             line_endings,
             dry_run,
         }) => {
-            println!("Code path: {}", code_path.display());
-            println!("Output path: {}", output_path.display());
+            info!(target: "cli", "Code path: {}", code_path.display());
+            info!(target: "cli", "Output path: {}", output_path.display());
 
             let mut i18n_keys_set: HashSet<String> = HashSet::from_iter(i18n_keys);
             i18n_keys_set.extend(i18n_keys_append);
@@ -146,44 +157,30 @@ fn main() {
                 comment_keys_mode,
                 line_endings,
                 dry_run,
-                silent: cli.silent,
             };
 
             match extract(config) {
                 Ok(statistics) => {
-                    if cli.verbose {
-                        println!("Extraction statistics:");
-                        println!("  - Py files count: {}", statistics.py_files_count);
-                        println!("  - FTL files count: {:?}", statistics.ftl_files_count);
-                        println!(
-                            "  - FTL keys in code: {}",
-                            statistics.ftl_in_code_keys_count
-                        );
-                        println!(
-                            "  - FTL keys stored: {:?}",
-                            statistics.ftl_stored_keys_count
-                        );
-                        println!("  - FTL keys updated: {:?}", statistics.ftl_keys_updated);
-                        println!("  - FTL keys added: {:?}", statistics.ftl_keys_added);
-                        println!(
-                            "  - FTL keys commented: {:?}",
-                            statistics.ftl_keys_commented
-                        );
-                    }
+                    info!(target: "cli", "Extraction statistics:");
+                    info!(target: "cli", "  - Py files count: {}", statistics.py_files_count);
+                    info!(target: "cli", "  - FTL files count: {:?}", statistics.ftl_files_count);
+                    info!(target: "cli", "  - FTL keys in code: {}", statistics.ftl_in_code_keys_count);
+                    info!(target: "cli", "  - FTL keys stored: {:?}", statistics.ftl_stored_keys_count);
+                    info!(target: "cli", "  - FTL keys updated: {:?}", statistics.ftl_keys_updated);
+                    info!(target: "cli", "  - FTL keys added: {:?}", statistics.ftl_keys_added);
+                    info!(target: "cli", "  - FTL keys commented: {:?}", statistics.ftl_keys_commented);
                 }
                 Err(e) => {
-                    eprintln!("Error during extraction: {}", e);
+                    error!(target: "cli", "Error during extraction: {}", e);
                     std::process::exit(1);
                 }
             }
         }
         None => {
-            println!("No command provided. Use --help for more information.");
+            info!(target: "cli", "No command provided. Use --help for more information.");
         }
     }
 
-    println!(
-        "[Rust] Done in {:.3?}s.",
-        start_time.elapsed().as_secs_f64()
+    info!(target: "cli", "[Rust] Done in {:.3?}s.", start_time.elapsed().as_secs_f64()
     );
 }

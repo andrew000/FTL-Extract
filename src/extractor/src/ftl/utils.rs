@@ -31,4 +31,23 @@ impl ExtractionStatistics {
         self.ftl_keys_added.insert(l.clone(), 0);
         self.ftl_keys_commented.insert(l, 0);
     }
+
+    pub fn merge(&mut self, other: ExtractionStatistics) {
+        // Merge HashMaps
+        for (k, v) in other.ftl_files_count {
+            *self.ftl_files_count.entry(k).or_default() += v;
+        }
+        for (k, v) in other.ftl_stored_keys_count {
+            *self.ftl_stored_keys_count.entry(k).or_default() += v;
+        }
+        for (k, v) in other.ftl_keys_updated {
+            *self.ftl_keys_updated.entry(k).or_default() += v;
+        }
+        for (k, v) in other.ftl_keys_added {
+            *self.ftl_keys_added.entry(k).or_default() += v;
+        }
+        for (k, v) in other.ftl_keys_commented {
+            *self.ftl_keys_commented.entry(k).or_default() += v;
+        }
+    }
 }

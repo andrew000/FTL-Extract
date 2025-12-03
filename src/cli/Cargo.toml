@@ -17,7 +17,9 @@ path = "src/main.rs"
 extractor = { path = "../extractor" }
 
 clap = { version = "4.5.53" }
+env_logger = { version = "0.11.8" }
 hashbrown = { version = "0.16.1" }
+log = { version = "0.4.29" }
 mimalloc = { version = "0.1.48" }
 
 [lints.clippy]

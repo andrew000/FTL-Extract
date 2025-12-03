@@ -9,6 +9,7 @@ use crate::ftl::utils::ExtractionStatistics;
 use anyhow::Result;
 use globset::{Glob, GlobSetBuilder};
 use hashbrown::{HashMap, HashSet};
+use log::{debug, info, warn};
 use rayon::prelude::{IntoParallelRefIterator, ParallelIterator};
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -29,7 +30,6 @@ pub struct ExtractConfig {
     pub comment_keys_mode: CommentsKeyModes, // = consts::DEFAULT_IGNORE_KWARGS,
     pub line_endings: LineEndings,  // = true,
     pub dry_run: bool,              // = consts::DEFAULT_FTL_FILENAME
-    pub silent: bool,               // = consts::CommentsKeyModes::Comment,
 }
 
 pub fn extract(config: ExtractConfig) -> Result<ExtractionStatistics> {
@@ -47,7 +47,8 @@ pub fn extract(config: ExtractConfig) -> Result<ExtractionStatistics> {
     }
     let ignore_set = ignore_builder.build()?;
 
-    let mut in_code_fluent_keys = extract_fluent_keys(
+    let start = std::time::Instant::now();
+    let in_code_fluent_keys = extract_fluent_keys(
         &config.code_path,
         config.i18n_keys.clone(),
         config.i18n_keys_prefix.clone(),
@@ -58,9 +59,35 @@ pub fn extract(config: ExtractConfig) -> Result<ExtractionStatistics> {
         &mut statistics,
     );
     statistics.ftl_in_code_keys_count = in_code_fluent_keys.len();
+    info!(target: "extractor::ftl", "FTL Extraction completed in {:.3?}s.", start.elapsed().as_secs_f64());
 
-    for lang in &config.languages {
-        process_language(lang, &mut in_code_fluent_keys, &config, &mut statistics)?;
+    let start = std::time::Instant::now();
+    let results: Result<Vec<ExtractionStatistics>> = config
+        .languages
+        .par_iter()
+        .map(|lang| {
+            let mut thread_local_keys = in_code_fluent_keys.clone();
+            let mut thread_local_stats = ExtractionStatistics::new();
+            thread_local_stats.init_lang(lang);
+
+            process_language(
+                lang,
+                &mut thread_local_keys,
+                &config,
+                &mut thread_local_stats,
+            )?;
+
+            Ok(thread_local_stats)
+        })
+        .collect();
+
+    let results = results?;
+
+    info!(target: "extractor::ftl", "FTL Processing completed in {:.3?}s.", start.elapsed().as_secs_f64());
+
+    // Merge statistics back into the main object
+    for stat in results {
+        statistics.merge(stat);
     }
 
     Ok(statistics)
@@ -199,7 +226,8 @@ fn handle_comments_and_junk(
         CommentsKeyModes::Warn => {
             for fluent_key in keys_to_comment.values_mut() {
                 keys_to_add.remove(&fluent_key.key);
-                println!(
+                warn!(
+                    target: "extractor::ftl",
                     "Key `{}` in `{}` is not in code (kwargs mismatch or missing).",
                     fluent_key.key,
                     lang_dir.join(fluent_key.path.as_ref()).display()
@@ -263,18 +291,14 @@ fn write_results(
         let ftl_content = generate_ftl(keys, &misc_entries);
 
         if config.dry_run {
-            if !config.silent {
-                println!(
-                    "[DRY-RUN] Would write to {}. {} keys found.",
-                    full_path.display(),
-                    keys.len()
-                );
-            }
+            debug!(
+                "[DRY-RUN] Would write to {}. {} keys found.",
+                full_path.display(),
+                keys.len()
+            )
         } else {
             write(full_path.clone(), ftl_content, &config.line_endings);
-            if !config.silent {
-                println!("Saved {}. {} keys.", full_path.display(), keys.len());
-            }
+            debug!("Saved {}. {} keys.", full_path.display(), keys.len());
         }
 
         let count = keys

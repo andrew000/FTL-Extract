@@ -9,6 +9,7 @@ use crate::ftl::utils::ExtractionStatistics;
 use anyhow::Result;
 use globset::{Glob, GlobSetBuilder};
 use hashbrown::{HashMap, HashSet};
+use rayon::prelude::{IntoParallelRefIterator, ParallelIterator};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -249,14 +250,17 @@ fn write_results(
             .push(item);
     }
 
-    for (path, keys) in &sorted_fluent_keys {
-        let full_path = lang_dir.join(path.as_ref());
-        let misc_entries = leave_as_is_map
-            .get(&full_path)
-            .map(|v| v.as_slice())
-            .unwrap_or(&[]);
+    let stored_keys_count = std::sync::atomic::AtomicUsize::new(0);
 
-        let ftl_content = generate_ftl(keys, misc_entries);
+    sorted_fluent_keys.par_iter().for_each(|(path, keys)| {
+        let full_path = lang_dir.join(path.as_ref());
+
+        let misc_entries = leave_as_is_map
+            .get(path)
+            .map(|v| v.clone())
+            .unwrap_or_default();
+
+        let ftl_content = generate_ftl(keys, &misc_entries);
 
         if config.dry_run {
             if !config.silent {
@@ -273,11 +277,15 @@ fn write_results(
             }
         }
 
-        *statistics.ftl_stored_keys_count.get_mut(lang).unwrap() += keys
+        let count = keys
             .iter()
             .filter(|k| matches!(k.entry, FluentEntry::Message(_)))
             .count();
-    }
+        stored_keys_count.fetch_add(count, std::sync::atomic::Ordering::Relaxed);
+    });
+
+    *statistics.ftl_stored_keys_count.get_mut(lang).unwrap() +=
+        stored_keys_count.load(std::sync::atomic::Ordering::Relaxed);
 }
 
 fn normalize_line_endings(s: String, line_endings: &LineEndings) -> String {

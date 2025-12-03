@@ -5,10 +5,10 @@ use fluent_syntax::ast::Entry;
 use hashbrown::{HashMap, HashSet};
 use ignore::WalkBuilder;
 use ignore::types::TypesBuilder;
+use rayon::prelude::{IntoParallelRefIterator, ParallelIterator};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-
 type ImportResult = (
     HashMap<String, FluentKey>,
     HashMap<String, FluentKey>,
@@ -162,23 +162,37 @@ pub(crate) fn import_ftl_from_dir(
         .git_global(false)
         .build();
 
-    let mut stored_keys = HashMap::new();
-    let mut stored_terms = HashMap::new();
-    let mut stored_misc = Vec::new();
+    let paths: Vec<PathBuf> = walker
+        .filter_map(|entry| entry.ok())
+        .filter(|entry| entry.file_type().is_some_and(|ft| ft.is_file()))
+        .map(|entry| entry.path().to_path_buf())
+        .collect();
 
-    for entry in walker {
-        let entry = entry?;
-        if entry.file_type().is_some_and(|ft| ft.is_file()) {
-            let file_path = entry.path();
-            let (keys, terms, misc) = import_from_ftl(file_path, locale)?;
+    let files_count = paths.len();
+    *statistics.ftl_files_count.get_mut(locale).unwrap() += files_count;
 
-            stored_keys.extend(keys);
-            stored_terms.extend(terms);
-            stored_misc.extend(misc);
-
-            *statistics.ftl_files_count.get_mut(locale).unwrap() += 1;
-        }
-    }
+    let (stored_keys, stored_terms, stored_misc) = paths
+        .par_iter()
+        .map(|file_path| import_from_ftl(file_path, locale))
+        .try_fold(
+            || (HashMap::new(), HashMap::new(), Vec::new()),
+            |mut acc, result| {
+                let (keys, terms, misc) = result?;
+                acc.0.extend(keys);
+                acc.1.extend(terms);
+                acc.2.extend(misc);
+                Ok::<ImportResult, anyhow::Error>(acc)
+            },
+        )
+        .try_reduce(
+            || (HashMap::new(), HashMap::new(), Vec::new()),
+            |mut a, b| {
+                a.0.extend(b.0);
+                a.1.extend(b.1);
+                a.2.extend(b.2);
+                Ok(a)
+            },
+        )?;
 
     Ok((stored_keys, stored_terms, stored_misc))
 }

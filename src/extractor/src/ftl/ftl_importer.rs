@@ -1,6 +1,6 @@
 use crate::ftl::matcher::{FluentEntry, FluentKey};
 use crate::ftl::utils::ExtractionStatistics;
-use anyhow::{Result, bail};
+use anyhow::{Context, Result, bail};
 use fluent_syntax::ast::Entry;
 use hashbrown::{HashMap, HashSet};
 use ignore::WalkBuilder;
@@ -9,11 +9,11 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-type ImportFtlResult = Result<(
+type ImportResult = (
     HashMap<String, FluentKey>,
     HashMap<String, FluentKey>,
     Vec<FluentKey>,
-)>;
+);
 
 fn process_raw_ftl(
     body: &[Entry<String>],
@@ -96,75 +96,91 @@ fn process_raw_ftl(
     Ok(())
 }
 
-fn import_from_ftl(path: &PathBuf, locale: &String) -> ImportFtlResult {
-    let mut ftl_keys: HashMap<String, FluentKey> = HashMap::new();
-    let mut terms: HashMap<String, FluentKey> = HashMap::new();
-    let mut leave_as_is_keys: Vec<FluentKey> = Vec::new();
+fn import_from_ftl(path: &Path, locale: &str) -> Result<ImportResult> {
+    let content = fs::read_to_string(path)
+        .with_context(|| format!("Failed to read FTL file: {}", path.display()))?;
 
-    let resource = fluent_syntax::parser::parse(fs::read_to_string(path)?);
-    let resource = match resource {
-        Ok(res) => res,
-        Err(err) => {
-            bail!("Failed to parse FTL file {}: {:?}", path.display(), err.1);
+    let resource = fluent_syntax::parser::parse(content).map_err(|err| {
+        anyhow::anyhow!("Failed to parse FTL file {}: {:?}", path.display(), err.1)
+    })?;
+
+    let mut keys = HashMap::new();
+    let mut terms = HashMap::new();
+    let mut misc = Vec::new();
+
+    let path_arc = Arc::new(path.to_path_buf());
+    // Empty code path for imported keys
+    let code_path_arc = Arc::new(PathBuf::new());
+
+    for (pos, entry) in resource.body.into_iter().enumerate() {
+        // Helper closure to avoid repeating new() calls
+        let make_key = |key_name: String, entry_type: FluentEntry| -> FluentKey {
+            FluentKey::new(
+                code_path_arc.clone(),
+                key_name,
+                entry_type,
+                path_arc.clone(),
+                Some(locale.to_string()),
+                Some(pos),
+                HashSet::new(),
+            )
+        };
+
+        match entry {
+            Entry::Message(m) => {
+                let name = m.id.name.clone();
+                keys.insert(name.clone(), make_key(name, FluentEntry::Message(m)));
+            }
+            Entry::Term(t) => {
+                let name = t.id.name.clone();
+                terms.insert(name.clone(), make_key(name, FluentEntry::Term(t)));
+            }
+            Entry::Comment(c) => misc.push(make_key("".into(), FluentEntry::Comment(c))),
+            Entry::GroupComment(c) => misc.push(make_key("".into(), FluentEntry::GroupComment(c))),
+            Entry::ResourceComment(c) => {
+                misc.push(make_key("".into(), FluentEntry::ResourceComment(c)))
+            }
+            _ => bail!("Unsupported entry in {}: {:?}", path.display(), entry),
         }
-    };
+    }
 
-    process_raw_ftl(
-        &resource.body,
-        path,
-        locale,
-        &mut ftl_keys,
-        &mut terms,
-        &mut leave_as_is_keys,
-    )?;
-
-    Ok((ftl_keys, terms, leave_as_is_keys))
+    Ok((keys, terms, misc))
 }
 
 pub(crate) fn import_ftl_from_dir(
     path: &Path,
     locale: &String,
     statistics: &mut ExtractionStatistics,
-) -> ImportFtlResult {
-    let ftl_files = {
-        let mut type_builder = TypesBuilder::new();
-        type_builder.add("ftl", "*.ftl")?;
-        type_builder.select("ftl");
-        WalkBuilder::new(path.join(locale))
-            .types(type_builder.build()?)
-            .parents(false)
-            .ignore(false)
-            .git_global(false)
-            .git_exclude(false)
-            .require_git(false)
-            .build()
-    };
-    let mut stored_ftl_keys = HashMap::<String, FluentKey>::new();
-    let mut stored_terms = HashMap::<String, FluentKey>::new();
-    let mut stored_leave_as_is_keys: Vec<FluentKey> = Vec::new();
+) -> Result<ImportResult> {
+    let mut type_builder = TypesBuilder::new();
+    type_builder.add("ftl", "*.ftl")?;
+    type_builder.select("ftl");
 
-    for entry in ftl_files {
-        let ftl_file = match entry {
-            Ok(entry) => {
-                let path = entry.path();
-                if entry.file_type().is_some_and(|ft| ft.is_file()) {
-                    path.to_path_buf()
-                } else {
-                    continue;
-                }
-            }
-            Err(_) => continue,
-        };
+    let walker = WalkBuilder::new(path.join(locale))
+        .types(type_builder.build()?)
+        .parents(false)
+        .git_global(false)
+        .build();
 
-        let (keys, terms, leave_as_is) = import_from_ftl(&ftl_file, locale).unwrap();
-        stored_ftl_keys.extend(keys);
-        stored_terms.extend(terms);
-        stored_leave_as_is_keys.extend(leave_as_is);
+    let mut stored_keys = HashMap::new();
+    let mut stored_terms = HashMap::new();
+    let mut stored_misc = Vec::new();
 
-        *statistics.ftl_files_count.get_mut(locale).unwrap() += 1;
+    for entry in walker {
+        let entry = entry?;
+        if entry.file_type().is_some_and(|ft| ft.is_file()) {
+            let file_path = entry.path();
+            let (keys, terms, misc) = import_from_ftl(file_path, locale)?;
+
+            stored_keys.extend(keys);
+            stored_terms.extend(terms);
+            stored_misc.extend(misc);
+
+            *statistics.ftl_files_count.get_mut(locale).unwrap() += 1;
+        }
     }
 
-    Ok((stored_ftl_keys, stored_terms, stored_leave_as_is_keys))
+    Ok((stored_keys, stored_terms, stored_misc))
 }
 
 #[cfg(test)]

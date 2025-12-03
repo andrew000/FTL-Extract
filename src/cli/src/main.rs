@@ -3,6 +3,8 @@ use extractor::ftl::consts::{
     CommentsKeyModes, DEFAULT_EXCLUDE_DIRS, DEFAULT_FTL_FILENAME, DEFAULT_I18N_KEYS,
     DEFAULT_IGNORE_ATTRIBUTES, DEFAULT_IGNORE_KWARGS, LineEndings,
 };
+use extractor::ftl::ftl_extractor::{ExtractConfig, extract};
+
 use hashbrown::HashSet;
 use mimalloc::MiMalloc;
 use std::path::PathBuf;
@@ -99,7 +101,7 @@ fn main() {
     let cli = Cli::parse();
     let start_time = std::time::Instant::now();
 
-    match &cli.command {
+    match cli.command {
         Some(Commands::Extract {
             code_path,
             output_path,
@@ -118,49 +120,61 @@ fn main() {
             line_endings,
             dry_run,
         }) => {
-            use extractor::ftl::ftl_extractor::extract;
-
             println!("Code path: {}", code_path.display());
             println!("Output path: {}", output_path.display());
-            let statistics = extract(
+
+            let mut i18n_keys_set: HashSet<String> = HashSet::from_iter(i18n_keys);
+            i18n_keys_set.extend(i18n_keys_append);
+
+            let mut exclude_dirs_set: HashSet<String> = HashSet::from_iter(exclude_dirs);
+            exclude_dirs_set.extend(exclude_dirs_append);
+
+            let mut ignore_attributes_set: HashSet<String> = HashSet::from_iter(ignore_attributes);
+            ignore_attributes_set.extend(append_ignore_attributes);
+
+            let config = ExtractConfig {
                 code_path,
                 output_path,
-                language.to_owned(),
-                HashSet::from_iter(i18n_keys.to_owned()),
-                HashSet::from_iter(i18n_keys_append.to_owned()),
-                HashSet::from_iter(i18n_keys_prefix.to_owned()),
-                HashSet::from_iter(exclude_dirs.to_owned()),
-                HashSet::from_iter(exclude_dirs_append.to_owned()),
-                HashSet::from_iter(ignore_attributes.to_owned()),
-                HashSet::from_iter(append_ignore_attributes.to_owned()),
-                HashSet::from_iter(ignore_kwargs.to_owned()),
-                comment_junks.to_owned(),
+                languages: language,
+                i18n_keys: i18n_keys_set,
+                i18n_keys_prefix: HashSet::from_iter(i18n_keys_prefix),
+                exclude_dirs: exclude_dirs_set,
+                ignore_attributes: ignore_attributes_set,
+                ignore_kwargs: HashSet::from_iter(ignore_kwargs),
+                comment_junks,
                 default_ftl_file,
-                comment_keys_mode.to_owned(),
-                line_endings.to_owned(),
-                dry_run.to_owned(),
-                cli.silent,
-            )
-            .unwrap();
+                comment_keys_mode,
+                line_endings,
+                dry_run,
+                silent: cli.silent,
+            };
 
-            if cli.verbose {
-                println!("Extraction statistics:");
-                println!("  - Py files count: {}", statistics.py_files_count);
-                println!("  - FTL files count: {:?}", statistics.ftl_files_count);
-                println!(
-                    "  - FTL keys in code: {:?}",
-                    statistics.ftl_in_code_keys_count
-                );
-                println!(
-                    "  - FTL keys stored: {:?}",
-                    statistics.ftl_stored_keys_count
-                );
-                println!("  - FTL keys updated: {:?}", statistics.ftl_keys_updated);
-                println!("  - FTL keys added: {:?}", statistics.ftl_keys_added);
-                println!(
-                    "  - FTL keys commented: {:?}",
-                    statistics.ftl_keys_commented
-                );
+            match extract(config) {
+                Ok(statistics) => {
+                    if cli.verbose {
+                        println!("Extraction statistics:");
+                        println!("  - Py files count: {}", statistics.py_files_count);
+                        println!("  - FTL files count: {:?}", statistics.ftl_files_count);
+                        println!(
+                            "  - FTL keys in code: {}",
+                            statistics.ftl_in_code_keys_count
+                        );
+                        println!(
+                            "  - FTL keys stored: {:?}",
+                            statistics.ftl_stored_keys_count
+                        );
+                        println!("  - FTL keys updated: {:?}", statistics.ftl_keys_updated);
+                        println!("  - FTL keys added: {:?}", statistics.ftl_keys_added);
+                        println!(
+                            "  - FTL keys commented: {:?}",
+                            statistics.ftl_keys_commented
+                        );
+                    }
+                }
+                Err(e) => {
+                    eprintln!("Error during extraction: {}", e);
+                    std::process::exit(1);
+                }
             }
         }
         None => {

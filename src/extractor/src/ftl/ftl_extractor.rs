@@ -13,322 +13,279 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-pub fn extract(
-    code_path: &Path,
-    output_path: &Path,
-    language: Vec<String>,
-    mut i18n_keys: HashSet<String>, // = consts::DEFAULT_I18N_KEYS.clone(),
-    i18n_keys_append: HashSet<String>, // = HashSet::from(),
-    i18n_keys_prefix: HashSet<String>, // = HashSet::from(),
-    mut exclude_dirs: HashSet<String>, // = &mut consts::DEFAULT_EXCLUDE_DIRS.clone(),
-    exclude_dirs_append: HashSet<String>, // = HashSet::from(),
-    mut ignore_attributes: HashSet<String>, // = &mut consts::DEFAULT_IGNORE_ATTRIBUTES.clone(),
-    append_ignore_attributes: HashSet<String>, // = HashSet::new(),
-    ignore_kwargs: HashSet<String>, // = consts::DEFAULT_IGNORE_KWARGS,
-    comment_junks: bool,            // = true,
-    default_ftl_file: &Path,        // = consts::DEFAULT_FTL_FILENAME
-    comment_keys_mode: CommentsKeyModes, // = consts::CommentsKeyModes::Comment,
-    line_endings: LineEndings,
-    dry_run: bool, // = false,
-    silent: bool,  // = false,
-) -> Result<ExtractionStatistics> {
+#[derive(Debug, Clone)]
+pub struct ExtractConfig {
+    pub code_path: PathBuf,
+    pub output_path: PathBuf,
+    pub languages: Vec<String>,
+    pub i18n_keys: HashSet<String>, // = consts::DEFAULT_I18N_KEYS.clone(),
+    pub i18n_keys_prefix: HashSet<String>, // = HashSet::from(),
+    pub exclude_dirs: HashSet<String>, // = HashSet::from(),
+    pub ignore_attributes: HashSet<String>, // = &mut consts::DEFAULT_EXCLUDE_DIRS.clone(),
+    pub ignore_kwargs: HashSet<String>, // = HashSet::from(),
+    pub default_ftl_file: PathBuf,  // = &mut consts::DEFAULT_IGNORE_ATTRIBUTES.clone(),
+    pub comment_junks: bool,        // = HashSet::new(),
+    pub comment_keys_mode: CommentsKeyModes, // = consts::DEFAULT_IGNORE_KWARGS,
+    pub line_endings: LineEndings,  // = true,
+    pub dry_run: bool,              // = consts::DEFAULT_FTL_FILENAME
+    pub silent: bool,               // = consts::CommentsKeyModes::Comment,
+}
+
+pub fn extract(config: ExtractConfig) -> Result<ExtractionStatistics> {
     let mut statistics = ExtractionStatistics::new();
-    statistics
-        .ftl_files_count
-        .extend(language.iter().map(|lang| (lang.clone(), 0)));
-    statistics
-        .ftl_stored_keys_count
-        .extend(language.iter().map(|lang| (lang.clone(), 0)));
-    statistics
-        .ftl_keys_updated
-        .extend(language.iter().map(|lang| (lang.clone(), 0)));
-    statistics
-        .ftl_keys_added
-        .extend(language.iter().map(|lang| (lang.clone(), 0)));
-    statistics
-        .ftl_keys_commented
-        .extend(language.iter().map(|lang| (lang.clone(), 0)));
 
-    if !i18n_keys_append.is_empty() {
-        i18n_keys.extend(i18n_keys_append);
-    };
+    // Statistics for each language
+    for lang in &config.languages {
+        statistics.init_lang(lang);
+    }
 
-    if !exclude_dirs_append.is_empty() {
-        exclude_dirs.extend(exclude_dirs_append);
-    };
-
-    if !append_ignore_attributes.is_empty() {
-        ignore_attributes.extend(append_ignore_attributes);
-    };
-
+    // GlobSet for exclusions
     let mut ignore_builder = GlobSetBuilder::new();
-    for exclude in exclude_dirs {
+    for exclude in &config.exclude_dirs {
         ignore_builder.add(Glob::new(exclude.as_str())?);
     }
     let ignore_set = ignore_builder.build()?;
 
-    // Extract fluent keys from code
     let mut in_code_fluent_keys = extract_fluent_keys(
-        code_path,
-        i18n_keys,
-        i18n_keys_prefix,
+        &config.code_path,
+        config.i18n_keys.clone(),
+        config.i18n_keys_prefix.clone(),
         &ignore_set,
-        ignore_attributes,
-        ignore_kwargs,
-        default_ftl_file,
+        config.ignore_attributes.clone(),
+        config.ignore_kwargs.clone(),
+        &config.default_ftl_file,
         &mut statistics,
     );
     statistics.ftl_in_code_keys_count = in_code_fluent_keys.len();
 
-    for lang in &language {
-        // Import fluent keys and terms from existing FTL files
-        let (mut stored_fluent_keys, mut stored_terms, mut leave_as_is) =
-            import_ftl_from_dir(output_path, lang, &mut statistics)?;
-
-        for fluent_key in stored_fluent_keys.values_mut() {
-            fluent_key.path = Arc::new(
-                fluent_key
-                    .path
-                    .strip_prefix(output_path.join(lang))
-                    .unwrap_or(&fluent_key.path)
-                    .to_path_buf(),
-            );
-        }
-        for term in stored_terms.values_mut() {
-            term.path = Arc::new(
-                term.path
-                    .strip_prefix(output_path.join(lang))
-                    .unwrap_or(&term.path)
-                    .to_path_buf(),
-            );
-        }
-
-        let mut keys_to_comment: HashMap<String, FluentKey> = HashMap::new();
-        let mut keys_to_add: HashMap<String, FluentKey> = HashMap::new();
-
-        // Find keys should be commented
-        // Keys, that are not in code or not in their `path_` file
-        // First step: find keys that have different paths
-        for (key, fluent_key) in in_code_fluent_keys.iter() {
-            if stored_fluent_keys.contains_key(key)
-                && fluent_key.path != stored_fluent_keys.get(key).unwrap().path
-            {
-                keys_to_comment
-                    .insert(key.clone(), stored_fluent_keys.remove(key).unwrap().clone());
-                *statistics.ftl_keys_commented.get_mut(lang).unwrap() += 1;
-
-                keys_to_add.insert(key.clone(), fluent_key.clone());
-                *statistics.ftl_keys_updated.get_mut(lang).unwrap() += 1;
-            } else if !stored_fluent_keys.contains_key(key) {
-                keys_to_add.insert(key.clone(), fluent_key.clone());
-                *statistics.ftl_keys_added.get_mut(lang).unwrap() += 1;
-            } else {
-                stored_fluent_keys.get_mut(key).unwrap().code_path = fluent_key.code_path.clone();
-            }
-        }
-
-        // Second step: find keys that have different kwargs
-        // Make copy of in_code_fluent_keys and stored_fluent_keys to check references
-        let in_code_fluent_keys_copy = in_code_fluent_keys.clone();
-        let stored_fluent_keys_copy = stored_fluent_keys.clone();
-
-        // Keys that are not in code but stored keys are depends on them
-        let mut depend_keys: HashSet<String> = HashSet::new();
-
-        for (key, fluent_key) in in_code_fluent_keys.iter_mut() {
-            if !stored_fluent_keys.contains_key(key) {
-                continue;
-            }
-
-            let fluent_key_placeable_set = extract_kwargs(
-                fluent_key,
-                &mut stored_terms,
-                &in_code_fluent_keys_copy,
-                &mut depend_keys,
-            );
-
-            let stored_fluent_key_placeable_set = extract_kwargs(
-                stored_fluent_keys.get_mut(key).unwrap(),
-                &mut stored_terms,
-                &stored_fluent_keys_copy,
-                &mut depend_keys,
-            );
-
-            if fluent_key_placeable_set != stored_fluent_key_placeable_set {
-                keys_to_comment.insert(key.clone(), stored_fluent_keys.remove(key).unwrap());
-                *statistics.ftl_keys_commented.get_mut(lang).unwrap() += 1;
-
-                keys_to_add.insert(key.clone(), fluent_key.clone());
-                *statistics.ftl_keys_updated.get_mut(lang).unwrap() += 1;
-            }
-        }
-
-        // Third step: find keys that are not in code
-        let diff = stored_fluent_keys
-            .keys()
-            .filter(|key| !in_code_fluent_keys.contains_key(*key))
-            .cloned()
-            .collect::<Vec<String>>();
-        for key in diff {
-            if depend_keys.contains(&key) {
-                continue;
-            };
-
-            keys_to_comment.insert(key.clone(), stored_fluent_keys.remove(&key).unwrap());
-            *statistics.ftl_keys_commented.get_mut(lang).unwrap() += 1;
-        }
-
-        match comment_keys_mode {
-            CommentsKeyModes::Comment => {
-                for fluent_key in keys_to_comment.values_mut() {
-                    comment_ftl_key(fluent_key);
-                }
-            }
-            CommentsKeyModes::Warn => {
-                for fluent_key in keys_to_comment.values_mut() {
-                    keys_to_add.remove(&fluent_key.key);
-                    println!(
-                        "Key `{}` with such kwargs in `{}` is not in code.",
-                        fluent_key.key,
-                        output_path
-                            .join(lang)
-                            .join(fluent_key.path.as_ref())
-                            .display()
-                    );
-                }
-            }
-        }
-        // Comment Junk elements if needed
-        if comment_junks {
-            for fluent_key in &mut leave_as_is {
-                if matches!(fluent_key.entry, FluentEntry::Junk(_)) {
-                    comment_ftl_key(fluent_key);
-                    *statistics.ftl_keys_commented.get_mut(lang).unwrap() += 1;
-                }
-            }
-        }
-
-        let mut sorted_fluent_keys = sort_fluent_keys_by_path(stored_fluent_keys);
-
-        for (path, keys) in sort_fluent_keys_by_path(keys_to_add) {
-            sorted_fluent_keys.entry(path).or_default().extend(keys);
-        }
-
-        for (path, keys) in sort_fluent_keys_by_path(keys_to_comment) {
-            sorted_fluent_keys.entry(path).or_default().extend(keys);
-        }
-
-        for (path, keys) in sort_fluent_keys_by_path(stored_terms) {
-            sorted_fluent_keys.entry(path).or_default().extend(keys);
-        }
-
-        let mut leave_as_is_with_path: HashMap<Arc<PathBuf>, Vec<FluentKey>> = HashMap::new();
-
-        for fluent_key in leave_as_is {
-            leave_as_is_with_path
-                .entry(fluent_key.path.clone())
-                .or_default()
-                .push(fluent_key);
-        }
-
-        for (path, keys) in &sorted_fluent_keys {
-            let ftl = generate_ftl(
-                keys,
-                leave_as_is_with_path
-                    .get(&output_path.join(lang).join(path.as_ref()))
-                    .unwrap_or(&vec![]),
-            );
-
-            if dry_run {
-                if !silent {
-                    println!(
-                        "[DRY-RUN] File {} has been saved. {} keys found.",
-                        output_path.join(lang).join(path.as_ref()).display(),
-                        keys.len()
-                    );
-                }
-            } else {
-                write(
-                    output_path.join(lang).join(path.as_ref()),
-                    ftl,
-                    &line_endings,
-                );
-                if !silent {
-                    println!(
-                        "File {} has been saved. {} keys found.",
-                        output_path.join(lang).join(path.as_ref()).display(),
-                        keys.len()
-                    );
-                }
-            }
-
-            *statistics.ftl_stored_keys_count.get_mut(lang).unwrap() += keys
-                .iter()
-                .filter(|key| matches!(key.entry, FluentEntry::Message(_)))
-                .count();
-        }
+    for lang in &config.languages {
+        process_language(lang, &mut in_code_fluent_keys, &config, &mut statistics)?;
     }
 
     Ok(statistics)
 }
 
+fn process_language(
+    lang: &String,
+    in_code_fluent_keys: &mut HashMap<String, FluentKey>,
+    config: &ExtractConfig,
+    statistics: &mut ExtractionStatistics,
+) -> Result<()> {
+    let (mut stored_fluent_keys, mut stored_terms, mut leave_as_is) =
+        import_ftl_from_dir(&config.output_path, lang, statistics)?;
+
+    // Normalize paths relative to the language directory
+    let lang_dir = config.output_path.join(lang);
+    normalize_paths(&mut stored_fluent_keys, &lang_dir);
+    normalize_paths(&mut stored_terms, &lang_dir);
+
+    let mut keys_to_comment: HashMap<String, FluentKey> = HashMap::new();
+    let mut keys_to_add: HashMap<String, FluentKey> = HashMap::new();
+
+    // Compare Code Keys vs Stored Keys (Path mismatch & New keys)
+    for (key, fluent_key) in in_code_fluent_keys.iter() {
+        if let Some(stored_key) = stored_fluent_keys.get(key) {
+            if fluent_key.path != stored_key.path {
+                // Path changed: comment old, add new
+                let old_key = stored_fluent_keys.remove(key).unwrap();
+                keys_to_comment.insert(key.clone(), old_key);
+                keys_to_add.insert(key.clone(), fluent_key.clone());
+
+                *statistics.ftl_keys_commented.get_mut(lang).unwrap() += 1;
+                *statistics.ftl_keys_updated.get_mut(lang).unwrap() += 1;
+            } else {
+                // Update code path for reference
+                stored_fluent_keys.get_mut(key).unwrap().code_path = fluent_key.code_path.clone();
+            }
+        } else {
+            // New key
+            keys_to_add.insert(key.clone(), fluent_key.clone());
+            *statistics.ftl_keys_added.get_mut(lang).unwrap() += 1;
+        }
+    }
+
+    // Compare Key Kwargs
+    let in_code_fluent_keys_ref = in_code_fluent_keys.clone();
+    let stored_fluent_keys_ref = stored_fluent_keys.clone();
+    let mut depend_keys: HashSet<String> = HashSet::new();
+
+    for (key, fluent_key) in in_code_fluent_keys.iter_mut() {
+        if !stored_fluent_keys.contains_key(key) {
+            continue;
+        }
+
+        let code_args = extract_kwargs(
+            fluent_key,
+            &mut stored_terms,
+            &in_code_fluent_keys_ref,
+            &mut depend_keys,
+        );
+
+        let stored_args = extract_kwargs(
+            stored_fluent_keys.get_mut(key).unwrap(),
+            &mut stored_terms,
+            &stored_fluent_keys_ref,
+            &mut depend_keys,
+        );
+
+        if code_args != stored_args {
+            keys_to_comment.insert(key.clone(), stored_fluent_keys.remove(key).unwrap());
+            keys_to_add.insert(key.clone(), fluent_key.clone());
+
+            *statistics.ftl_keys_commented.get_mut(lang).unwrap() += 1;
+            *statistics.ftl_keys_updated.get_mut(lang).unwrap() += 1;
+        }
+    }
+
+    // Identify obsolete keys (in stored but not in code)
+    stored_fluent_keys.retain(|key, val| {
+        if in_code_fluent_keys.contains_key(key) || depend_keys.contains(key) {
+            true
+        } else {
+            keys_to_comment.insert(key.clone(), val.clone());
+            *statistics.ftl_keys_commented.get_mut(lang).unwrap() += 1;
+            false
+        }
+    });
+
+    handle_comments_and_junk(
+        &mut keys_to_comment,
+        &mut keys_to_add,
+        &mut leave_as_is,
+        &lang_dir,
+        config,
+        statistics,
+        lang,
+    );
+
+    // Merge and Write
+    write_results(
+        stored_fluent_keys,
+        keys_to_add,
+        keys_to_comment,
+        stored_terms,
+        leave_as_is,
+        &lang_dir,
+        config,
+        statistics,
+        lang,
+    );
+
+    Ok(())
+}
+fn normalize_paths(keys: &mut HashMap<String, FluentKey>, base: &Path) {
+    for key in keys.values_mut() {
+        if let Ok(stripped) = key.path.strip_prefix(base) {
+            key.path = Arc::new(stripped.to_path_buf());
+        }
+    }
+}
+fn handle_comments_and_junk(
+    keys_to_comment: &mut HashMap<String, FluentKey>,
+    keys_to_add: &mut HashMap<String, FluentKey>,
+    leave_as_is: &mut Vec<FluentKey>,
+    lang_dir: &Path,
+    config: &ExtractConfig,
+    statistics: &mut ExtractionStatistics,
+    lang: &str,
+) {
+    match config.comment_keys_mode {
+        CommentsKeyModes::Comment => {
+            for fluent_key in keys_to_comment.values_mut() {
+                comment_ftl_key(fluent_key);
+            }
+        }
+        CommentsKeyModes::Warn => {
+            for fluent_key in keys_to_comment.values_mut() {
+                keys_to_add.remove(&fluent_key.key);
+                println!(
+                    "Key `{}` in `{}` is not in code (kwargs mismatch or missing).",
+                    fluent_key.key,
+                    lang_dir.join(fluent_key.path.as_ref()).display()
+                );
+            }
+        }
+    }
+
+    if config.comment_junks {
+        for fluent_key in leave_as_is {
+            if matches!(fluent_key.entry, FluentEntry::Junk(_)) {
+                comment_ftl_key(fluent_key);
+                *statistics.ftl_keys_commented.get_mut(lang).unwrap() += 1;
+            }
+        }
+    }
+}
+fn write_results(
+    stored_keys: HashMap<String, FluentKey>,
+    added_keys: HashMap<String, FluentKey>,
+    commented_keys: HashMap<String, FluentKey>,
+    terms: HashMap<String, FluentKey>,
+    leave_as_is: Vec<FluentKey>,
+    lang_dir: &Path,
+    config: &ExtractConfig,
+    statistics: &mut ExtractionStatistics,
+    lang: &str,
+) {
+    let mut sorted_fluent_keys = sort_fluent_keys_by_path(stored_keys);
+
+    // Merge all buckets into the sorted structure
+    for (path, keys) in sort_fluent_keys_by_path(added_keys) {
+        sorted_fluent_keys.entry(path).or_default().extend(keys);
+    }
+    for (path, keys) in sort_fluent_keys_by_path(commented_keys) {
+        sorted_fluent_keys.entry(path).or_default().extend(keys);
+    }
+    for (path, keys) in sort_fluent_keys_by_path(terms) {
+        sorted_fluent_keys.entry(path).or_default().extend(keys);
+    }
+
+    // Group "leave as is" items by path
+    let mut leave_as_is_map: HashMap<Arc<PathBuf>, Vec<FluentKey>> = HashMap::new();
+    for item in leave_as_is {
+        leave_as_is_map
+            .entry(item.path.clone())
+            .or_default()
+            .push(item);
+    }
+
+    for (path, keys) in &sorted_fluent_keys {
+        let full_path = lang_dir.join(path.as_ref());
+        let misc_entries = leave_as_is_map
+            .get(&full_path)
+            .map(|v| v.as_slice())
+            .unwrap_or(&[]);
+
+        let ftl_content = generate_ftl(keys, misc_entries);
+
+        if config.dry_run {
+            if !config.silent {
+                println!(
+                    "[DRY-RUN] Would write to {}. {} keys found.",
+                    full_path.display(),
+                    keys.len()
+                );
+            }
+        } else {
+            write(full_path.clone(), ftl_content, &config.line_endings);
+            if !config.silent {
+                println!("Saved {}. {} keys.", full_path.display(), keys.len());
+            }
+        }
+
+        *statistics.ftl_stored_keys_count.get_mut(lang).unwrap() += keys
+            .iter()
+            .filter(|k| matches!(k.entry, FluentEntry::Message(_)))
+            .count();
+    }
+}
+
 fn normalize_line_endings(s: String, line_endings: &LineEndings) -> String {
     match line_endings {
         LineEndings::Default => s,
-        LineEndings::LF => {
-            // Convert all CRLF and CR to LF in a single pass
-            let mut result = String::with_capacity(s.len());
-            let mut chars = s.chars().peekable();
-            while let Some(c) = chars.next() {
-                if c == '\r' {
-                    if chars.peek() == Some(&'\n') {
-                        chars.next(); // skip '\n'
-                    }
-                    result.push('\n');
-                } else {
-                    result.push(c);
-                }
-            }
-            result
-        }
-        LineEndings::CR => {
-            // Convert all CRLF and LF to CR in a single pass
-            let mut result = String::with_capacity(s.len());
-            let mut chars = s.chars().peekable();
-            while let Some(c) = chars.next() {
-                if c == '\r' {
-                    if chars.peek() == Some(&'\n') {
-                        chars.next(); // skip '\n'
-                    }
-                    result.push('\r');
-                } else if c == '\n' {
-                    result.push('\r');
-                } else {
-                    result.push(c);
-                }
-            }
-            result
-        }
-        LineEndings::CRLF => {
-            // Convert all CR and LF to CRLF in a single pass
-            let mut result = String::with_capacity(s.len());
-            let mut chars = s.chars().peekable();
-            while let Some(c) = chars.next() {
-                if c == '\r' {
-                    if chars.peek() == Some(&'\n') {
-                        chars.next(); // skip '\n'
-                        result.push_str("\r\n");
-                    } else {
-                        result.push_str("\r\n");
-                    }
-                } else if c == '\n' {
-                    result.push_str("\r\n");
-                } else {
-                    result.push(c);
-                }
-            }
-            result
-        }
+        LineEndings::LF => s.replace("\r\n", "\n").replace('\r', "\n"),
+        LineEndings::CR => s.replace("\r\n", "\r").replace('\n', "\r"),
+        LineEndings::CRLF => s.replace('\r', "").replace('\n', "\r\n"),
     }
 }
 

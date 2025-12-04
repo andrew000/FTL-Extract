@@ -5,10 +5,9 @@ use crate::ftl::matcher::{FluentEntry, FluentKey};
 use crate::ftl::process::commentator::comment_ftl_key;
 use crate::ftl::process::kwargs_extractor::extract_kwargs;
 use crate::ftl::process::serializer::generate_ftl;
-use crate::ftl::utils::ExtractionStatistics;
+use crate::ftl::utils::{ExtractionStatistics, FastHashMap, FastHashSet};
 use anyhow::Result;
 use globset::{Glob, GlobSetBuilder};
-use hashbrown::{HashMap, HashSet};
 use log::{debug, info, warn};
 use rayon::prelude::{IntoParallelRefIterator, ParallelIterator};
 use std::fs;
@@ -20,16 +19,16 @@ pub struct ExtractConfig {
     pub code_path: PathBuf,
     pub output_path: PathBuf,
     pub languages: Vec<String>,
-    pub i18n_keys: HashSet<String>, // = consts::DEFAULT_I18N_KEYS.clone(),
-    pub i18n_keys_prefix: HashSet<String>, // = HashSet::from(),
-    pub exclude_dirs: HashSet<String>, // = HashSet::from(),
-    pub ignore_attributes: HashSet<String>, // = &mut consts::DEFAULT_EXCLUDE_DIRS.clone(),
-    pub ignore_kwargs: HashSet<String>, // = HashSet::from(),
-    pub default_ftl_file: PathBuf,  // = &mut consts::DEFAULT_IGNORE_ATTRIBUTES.clone(),
-    pub comment_junks: bool,        // = HashSet::new(),
-    pub comment_keys_mode: CommentsKeyModes, // = consts::DEFAULT_IGNORE_KWARGS,
-    pub line_endings: LineEndings,  // = true,
-    pub dry_run: bool,              // = consts::DEFAULT_FTL_FILENAME
+    pub i18n_keys: FastHashSet<String>,
+    pub i18n_keys_prefix: FastHashSet<String>,
+    pub exclude_dirs: FastHashSet<String>,
+    pub ignore_attributes: FastHashSet<String>,
+    pub ignore_kwargs: FastHashSet<String>,
+    pub default_ftl_file: PathBuf,
+    pub comment_junks: bool,
+    pub comment_keys_mode: CommentsKeyModes,
+    pub line_endings: LineEndings,
+    pub dry_run: bool,
 }
 
 pub fn extract(config: ExtractConfig) -> Result<ExtractionStatistics> {
@@ -95,7 +94,7 @@ pub fn extract(config: ExtractConfig) -> Result<ExtractionStatistics> {
 
 fn process_language(
     lang: &String,
-    in_code_fluent_keys: &mut HashMap<String, FluentKey>,
+    in_code_fluent_keys: &mut FastHashMap<String, FluentKey>,
     config: &ExtractConfig,
     statistics: &mut ExtractionStatistics,
 ) -> Result<()> {
@@ -107,8 +106,8 @@ fn process_language(
     normalize_paths(&mut stored_fluent_keys, &lang_dir);
     normalize_paths(&mut stored_terms, &lang_dir);
 
-    let mut keys_to_comment: HashMap<String, FluentKey> = HashMap::new();
-    let mut keys_to_add: HashMap<String, FluentKey> = HashMap::new();
+    let mut keys_to_comment: FastHashMap<String, FluentKey> = FastHashMap::default();
+    let mut keys_to_add: FastHashMap<String, FluentKey> = FastHashMap::default();
 
     // Compare Code Keys vs Stored Keys (Path mismatch & New keys)
     for (key, fluent_key) in in_code_fluent_keys.iter() {
@@ -135,7 +134,7 @@ fn process_language(
     // Compare Key Kwargs
     let in_code_fluent_keys_ref = in_code_fluent_keys.clone();
     let stored_fluent_keys_ref = stored_fluent_keys.clone();
-    let mut depend_keys: HashSet<String> = HashSet::new();
+    let mut depend_keys: FastHashSet<String> = FastHashSet::default();
 
     for (key, fluent_key) in in_code_fluent_keys.iter_mut() {
         if !stored_fluent_keys.contains_key(key) {
@@ -201,7 +200,7 @@ fn process_language(
 
     Ok(())
 }
-fn normalize_paths(keys: &mut HashMap<String, FluentKey>, base: &Path) {
+fn normalize_paths(keys: &mut FastHashMap<String, FluentKey>, base: &Path) {
     for key in keys.values_mut() {
         if let Ok(stripped) = key.path.strip_prefix(base) {
             key.path = Arc::new(stripped.to_path_buf());
@@ -209,8 +208,8 @@ fn normalize_paths(keys: &mut HashMap<String, FluentKey>, base: &Path) {
     }
 }
 fn handle_comments_and_junk(
-    keys_to_comment: &mut HashMap<String, FluentKey>,
-    keys_to_add: &mut HashMap<String, FluentKey>,
+    keys_to_comment: &mut FastHashMap<String, FluentKey>,
+    keys_to_add: &mut FastHashMap<String, FluentKey>,
     leave_as_is: &mut Vec<FluentKey>,
     lang_dir: &Path,
     config: &ExtractConfig,
@@ -238,7 +237,7 @@ fn handle_comments_and_junk(
 
     if config.comment_junks {
         for fluent_key in leave_as_is {
-            if matches!(fluent_key.entry, FluentEntry::Junk(_)) {
+            if matches!(fluent_key.entry.as_ref(), FluentEntry::Junk(_)) {
                 comment_ftl_key(fluent_key);
                 *statistics.ftl_keys_commented.get_mut(lang).unwrap() += 1;
             }
@@ -246,10 +245,10 @@ fn handle_comments_and_junk(
     }
 }
 fn write_results(
-    stored_keys: HashMap<String, FluentKey>,
-    added_keys: HashMap<String, FluentKey>,
-    commented_keys: HashMap<String, FluentKey>,
-    terms: HashMap<String, FluentKey>,
+    stored_keys: FastHashMap<String, FluentKey>,
+    added_keys: FastHashMap<String, FluentKey>,
+    commented_keys: FastHashMap<String, FluentKey>,
+    terms: FastHashMap<String, FluentKey>,
     leave_as_is: Vec<FluentKey>,
     lang_dir: &Path,
     config: &ExtractConfig,
@@ -270,7 +269,7 @@ fn write_results(
     }
 
     // Group "leave as is" items by path
-    let mut leave_as_is_map: HashMap<Arc<PathBuf>, Vec<FluentKey>> = HashMap::new();
+    let mut leave_as_is_map: FastHashMap<Arc<PathBuf>, Vec<FluentKey>> = FastHashMap::default();
     for item in leave_as_is {
         leave_as_is_map
             .entry(item.path.clone())
@@ -303,7 +302,7 @@ fn write_results(
 
         let count = keys
             .iter()
-            .filter(|k| matches!(k.entry, FluentEntry::Message(_)))
+            .filter(|k| matches!(k.entry.as_ref(), FluentEntry::Message(_)))
             .count();
         stored_keys_count.fetch_add(count, std::sync::atomic::Ordering::Relaxed);
     });

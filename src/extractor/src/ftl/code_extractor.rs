@@ -1,8 +1,6 @@
 use crate::ftl::matcher::{FluentEntry, FluentKey, I18nMatcher};
-use crate::ftl::utils::ExtractionStatistics;
+use crate::ftl::utils::{ExtractionStatistics, FastHashMap, FastHashSet};
 use globset::GlobSet;
-use hashbrown::hash_map::Entry;
-use hashbrown::{HashMap, HashSet};
 use ignore::WalkBuilder;
 use ignore::types::TypesBuilder;
 use log::error;
@@ -10,6 +8,7 @@ use memchr::memmem;
 use memmap2::Mmap;
 use rayon::prelude::*;
 use ruff_python_ast::visitor::source_order::SourceOrderVisitor;
+use std::collections::hash_map::Entry;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -53,30 +52,30 @@ fn find_py_files(search_path: &Path, ignore_set: &GlobSet) -> Vec<PathBuf> {
 }
 fn parse_file(
     file: &PathBuf,
-    i18n_keys: &HashSet<String>,
-    i18n_keys_prefix: &HashSet<String>,
-    ignore_attributes: &HashSet<String>,
-    ignore_kwargs: &HashSet<String>,
+    i18n_keys: &FastHashSet<String>,
+    i18n_keys_prefix: &FastHashSet<String>,
+    ignore_attributes: &FastHashSet<String>,
+    ignore_kwargs: &FastHashSet<String>,
     default_ftl_file: &Path,
-) -> HashMap<String, FluentKey> {
+) -> FastHashMap<String, FluentKey> {
     let file_handle = match fs::File::open(file) {
         Ok(f) => f,
-        Err(_) => return HashMap::new(),
+        Err(_) => return FastHashMap::default(),
     };
     // Mmap requires non-empty file. Handle empty files gracefully.
     let metadata = match file_handle.metadata() {
         Ok(m) => m,
-        Err(_) => return HashMap::new(),
+        Err(_) => return FastHashMap::default(),
     };
     if metadata.len() == 0 {
-        return HashMap::new();
+        return FastHashMap::default();
     }
 
     // Unsafe is required for mmap (file could change under us), but standard for tools like this.
     let mmap = unsafe {
         match Mmap::map(&file_handle) {
             Ok(m) => m,
-            Err(_) => return HashMap::new(),
+            Err(_) => return FastHashMap::default(),
         }
     };
 
@@ -87,19 +86,19 @@ fn parse_file(
         .any(|key| memmem::find(&mmap, key.as_bytes()).is_some());
 
     if !has_key {
-        return HashMap::new();
+        return FastHashMap::default();
     }
 
     let code = match std::str::from_utf8(&mmap) {
         Ok(c) => c,
         Err(_) => {
             error!(target: "extractor:code", "Bad UTF-8 in {}", file.display());
-            return HashMap::new();
+            return FastHashMap::default();
         }
     };
     let module = match ruff_python_parser::parse_module(code) {
         Ok(m) => m,
-        Err(_) => return HashMap::new(),
+        Err(_) => return FastHashMap::default(),
     };
 
     let mut matcher = I18nMatcher::new(
@@ -117,22 +116,22 @@ fn parse_file(
 }
 pub(crate) fn extract_fluent_keys<'a>(
     path: &'a Path,
-    i18n_keys: HashSet<String>,
-    i18n_keys_prefix: HashSet<String>,
+    i18n_keys: FastHashSet<String>,
+    i18n_keys_prefix: FastHashSet<String>,
     exclude_dirs: &GlobSet,
-    ignore_attributes: HashSet<String>,
-    ignore_kwargs: HashSet<String>,
+    ignore_attributes: FastHashSet<String>,
+    ignore_kwargs: FastHashSet<String>,
     default_ftl_file: &'a Path,
     statistics: &mut ExtractionStatistics,
-) -> HashMap<String, FluentKey> {
+) -> FastHashMap<String, FluentKey> {
     let py_files = find_py_files(path, exclude_dirs);
     let py_files_count = AtomicUsize::new(0);
 
     // Parallel Map-Reduce
-    let fluent_keys: HashMap<String, FluentKey> = py_files
+    let fluent_keys: FastHashMap<String, FluentKey> = py_files
         .par_iter()
         .fold(
-            HashMap::new, // Init local accumulator
+            FastHashMap::default, // Init local accumulator
             |mut acc, file| {
                 let keys = parse_file(
                     file,
@@ -163,7 +162,7 @@ pub(crate) fn extract_fluent_keys<'a>(
                                 )
                             }
 
-                            match (&existing_key.entry, &new_fluent_key.entry) {
+                            match (&existing_key.entry.as_ref(), &new_fluent_key.entry.as_ref()) {
                                 (FluentEntry::Message(a), FluentEntry::Message(b)) if a != b => {
                                     panic!(
                                         "FluentKey conflict: {} in {} and {}",
@@ -187,7 +186,7 @@ pub(crate) fn extract_fluent_keys<'a>(
             },
         )
         .reduce(
-            HashMap::new, // Init reducer
+            FastHashMap::default, // Init reducer
             |a, b| {
                 // Merge two Maps (a and b)
                 // We iterate over the smaller map and insert into the larger one for efficiency
@@ -220,13 +219,13 @@ pub(crate) fn extract_fluent_keys<'a>(
 }
 
 pub(crate) fn sort_fluent_keys_by_path(
-    fluent_keys: HashMap<String, FluentKey>,
-) -> HashMap<Arc<PathBuf>, Vec<FluentKey>> {
+    fluent_keys: FastHashMap<String, FluentKey>,
+) -> FastHashMap<Arc<PathBuf>, Vec<FluentKey>> {
     if fluent_keys.is_empty() {
-        return HashMap::new();
+        return FastHashMap::default();
     }
 
-    let mut sorted_fluent_keys: HashMap<Arc<PathBuf>, Vec<FluentKey>> = HashMap::new();
+    let mut sorted_fluent_keys: FastHashMap<Arc<PathBuf>, Vec<FluentKey>> = FastHashMap::default();
 
     for fluent_key in fluent_keys.into_values() {
         sorted_fluent_keys
@@ -242,8 +241,8 @@ pub(crate) fn sort_fluent_keys_by_path(
 mod tests {
     use crate::ftl::consts;
     use crate::ftl::matcher::{FluentEntry, FluentKey};
+    use crate::ftl::utils::{FastHashMap, FastHashSet};
     use globset::GlobSet;
-    use hashbrown::{HashMap, HashSet};
     use pretty_assertions::assert_eq;
     use std::path::PathBuf;
     use std::sync::Arc;
@@ -283,10 +282,10 @@ mod tests {
         let fluent_keys = super::extract_fluent_keys(
             &code_path,
             key_prefixes.clone(),
-            HashSet::new(),
+            FastHashSet::default(),
             &globset::GlobSet::empty(),
-            HashSet::new(),
-            HashSet::new(),
+            FastHashSet::default(),
+            FastHashSet::default(),
             &PathBuf::from("locales/en.ftl"),
             &mut statistics,
         );
@@ -309,7 +308,7 @@ mod tests {
 
     #[test]
     fn test_sort_fluent_keys_by_path() {
-        let mut fluent_keys: HashMap<String, FluentKey> = HashMap::new();
+        let mut fluent_keys: FastHashMap<String, FluentKey> = FastHashMap::default();
 
         let code_path1 = Arc::new(PathBuf::from("file1.py"));
         let ftl_path1 = Arc::new(PathBuf::from("file1.ftl"));
@@ -332,7 +331,7 @@ mod tests {
                 ftl_path1.clone(),
                 Some("en".to_string()),
                 Some(0),
-                HashSet::new(),
+                FastHashSet::default(),
             ),
         );
         fluent_keys.insert(
@@ -351,7 +350,7 @@ mod tests {
                 ftl_path2.clone(),
                 Some("en".to_string()),
                 Some(0),
-                HashSet::new(),
+                FastHashSet::default(),
             ),
         );
 

@@ -13,7 +13,7 @@ pub(crate) fn generate_ftl(fluent_keys: &Vec<FluentKey>, leave_as_is: &[FluentKe
     listed_fluent_keys.sort_by(|a, b| a.position.cmp(&b.position));
 
     for fluent_key in listed_fluent_keys {
-        match fluent_key.entry {
+        match fluent_key.entry.as_ref() {
             FluentEntry::Message(message) => {
                 resource.body.push(Entry::Message(message.clone()));
             }
@@ -45,7 +45,7 @@ pub(crate) fn generate_ftl(fluent_keys: &Vec<FluentKey>, leave_as_is: &[FluentKe
 #[cfg(test)]
 mod tests {
     use crate::ftl::matcher::{FluentEntry, FluentKey};
-    use hashbrown::HashSet;
+    use crate::ftl::utils::FastHashSet;
     use pretty_assertions::assert_eq;
     use std::path::PathBuf;
     use std::sync::Arc;
@@ -71,7 +71,7 @@ mod tests {
                 Arc::new(PathBuf::from("tmp.ftl")), // path
                 Some("en".to_string()),            // locale
                 Some(0),
-                HashSet::new(),
+                FastHashSet::default(),
             ),
             FluentKey::new(
                 Arc::new(PathBuf::from("tmp.py")),
@@ -91,7 +91,7 @@ mod tests {
                 Arc::new(PathBuf::from("tmp.ftl")), // path
                 Some("en".to_string()), // locale
                 Some(1),
-                HashSet::new(),
+                FastHashSet::default(),
             ),
             FluentKey::new(
                 Arc::new(PathBuf::from("tmp.py")),
@@ -102,7 +102,7 @@ mod tests {
                 Arc::new(PathBuf::from("tmp.ftl")), // path
                 Some("en".to_string()),  // locale
                 Some(2),
-                HashSet::new(),
+                FastHashSet::default(),
             ),
             FluentKey::new(
                 Arc::new(PathBuf::from("tmp.py")),
@@ -111,7 +111,7 @@ mod tests {
                 Arc::new(PathBuf::from("tmp.ftl")),             // path
                 Some("en".to_string()),                         // locale
                 Some(3),
-                HashSet::new(),
+                FastHashSet::default(),
             ),
         ];
         let leave_as_is: Vec<FluentKey> = vec![];

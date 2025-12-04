@@ -1,6 +1,7 @@
 use crate::ftl::matcher::{FluentEntry, FluentKey};
 use fluent_syntax::ast::Comment;
 use fluent_syntax::serializer::Serializer;
+use std::sync::Arc;
 
 fn split_content(raw_entry: String) -> Vec<String> {
     let mut content: Vec<String> = raw_entry.lines().map(str::to_string).collect();
@@ -17,14 +18,14 @@ fn split_content(raw_entry: String) -> Vec<String> {
 }
 
 pub(crate) fn comment_ftl_key(key: &mut FluentKey) {
-    if let FluentEntry::Comment(_) = &key.entry {
+    if let FluentEntry::Comment(_) = &key.entry.as_ref() {
         // If already a Comment, leave it unchanged.
         return;
     }
 
     let mut ser = Serializer::new(fluent_syntax::serializer::Options::default());
 
-    match &key.entry {
+    match &key.entry.as_ref() {
         FluentEntry::Message(message) => {
             ser.serialize_message(message);
         }
@@ -38,15 +39,15 @@ pub(crate) fn comment_ftl_key(key: &mut FluentKey) {
         | FluentEntry::GroupComment(_)
         | FluentEntry::ResourceComment(_) => {}
     }
-    key.entry = FluentEntry::Comment(Comment {
+    key.entry = Arc::new(FluentEntry::Comment(Comment {
         content: split_content(ser.into_serialized_text()),
-    });
+    }));
 }
 
 #[cfg(test)]
 mod tests {
     use crate::ftl::matcher::{FluentEntry, FluentKey};
-    use hashbrown::HashSet;
+    use crate::ftl::utils::FastHashSet;
     use pretty_assertions::assert_eq;
     use std::path::PathBuf;
     use std::sync::Arc;
@@ -73,11 +74,11 @@ mod tests {
             Arc::new(PathBuf::from("tmp.ftl")), // path
             Some("en".to_string()),            // locale
             Some(0),
-            HashSet::new(),
+            FastHashSet::default(),
         );
         super::comment_ftl_key(&mut key);
 
-        assert!(matches!(key.entry, FluentEntry::Comment(_)));
+        assert!(matches!(key.entry.as_ref(), FluentEntry::Comment(_)));
     }
 
     #[test]
@@ -102,11 +103,11 @@ mod tests {
             Arc::new(PathBuf::from("tmp.ftl")), // path
             Some("en".to_string()),            // locale
             Some(0),
-            HashSet::new(),
+            FastHashSet::default(),
         );
         super::comment_ftl_key(&mut key);
 
-        assert!(matches!(key.entry, FluentEntry::Comment(_)));
+        assert!(matches!(key.entry.as_ref(), FluentEntry::Comment(_)));
     }
 
     #[test]
@@ -118,11 +119,11 @@ mod tests {
             Arc::new(PathBuf::from("tmp.ftl")),                     // path
             Some("en".to_string()),                                 // locale
             Some(0),
-            HashSet::new(),
+            FastHashSet::default(),
         );
         super::comment_ftl_key(&mut key);
 
-        assert!(matches!(key.entry, FluentEntry::Comment(_)));
+        assert!(matches!(key.entry.as_ref(), FluentEntry::Comment(_)));
     }
 
     #[test]
@@ -136,12 +137,15 @@ mod tests {
             Arc::new(PathBuf::from("tmp.ftl")), // path
             Some("en".to_string()),            // locale
             Some(0),
-            HashSet::new(),
+            FastHashSet::default(),
         );
         let mut copied_key = original_key.clone();
         super::comment_ftl_key(&mut copied_key);
 
-        assert!(matches!(original_key.entry, FluentEntry::Comment(_)));
+        assert!(matches!(
+            original_key.entry.as_ref(),
+            FluentEntry::Comment(_)
+        ));
         assert_eq!(original_key.entry, copied_key.entry);
     }
 }

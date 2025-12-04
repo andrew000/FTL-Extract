@@ -1,8 +1,7 @@
 use crate::ftl::matcher::{FluentEntry, FluentKey};
-use crate::ftl::utils::ExtractionStatistics;
+use crate::ftl::utils::{ExtractionStatistics, FastHashMap, FastHashSet};
 use anyhow::{Context, Result, bail};
 use fluent_syntax::ast::Entry;
-use hashbrown::{HashMap, HashSet};
 use ignore::WalkBuilder;
 use ignore::types::TypesBuilder;
 use rayon::prelude::{IntoParallelRefIterator, ParallelIterator};
@@ -10,8 +9,8 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 type ImportResult = (
-    HashMap<String, FluentKey>,
-    HashMap<String, FluentKey>,
+    FastHashMap<String, FluentKey>,
+    FastHashMap<String, FluentKey>,
     Vec<FluentKey>,
 );
 
@@ -19,8 +18,8 @@ fn process_raw_ftl(
     body: &[Entry<String>],
     path: &Path,
     locale: &String,
-    ftl_keys: &mut HashMap<String, FluentKey>,
-    terms: &mut HashMap<String, FluentKey>,
+    ftl_keys: &mut FastHashMap<String, FluentKey>,
+    terms: &mut FastHashMap<String, FluentKey>,
     leave_as_is_keys: &mut Vec<FluentKey>,
 ) -> Result<()> {
     for (position, entry) in body.iter().enumerate() {
@@ -35,7 +34,7 @@ fn process_raw_ftl(
                         Arc::new(path.to_path_buf()),
                         Some(locale.to_string()),
                         Some(position),
-                        HashSet::new(),
+                        FastHashSet::default(),
                     ),
                 );
             }
@@ -49,7 +48,7 @@ fn process_raw_ftl(
                         Arc::new(path.to_path_buf()),
                         Some(locale.to_string()),
                         Some(position),
-                        HashSet::new(),
+                        FastHashSet::default(),
                     ),
                 );
             }
@@ -60,7 +59,7 @@ fn process_raw_ftl(
                 Arc::new(path.to_path_buf()),
                 Some(locale.to_string()),
                 Some(position),
-                HashSet::new(),
+                FastHashSet::default(),
             )),
             Entry::GroupComment(comment) => {
                 leave_as_is_keys.push(FluentKey::new(
@@ -70,7 +69,7 @@ fn process_raw_ftl(
                     Arc::new(path.to_path_buf()),
                     Some(locale.to_string()),
                     Some(position),
-                    HashSet::new(),
+                    FastHashSet::default(),
                 ));
             }
             Entry::ResourceComment(comment) => {
@@ -81,7 +80,7 @@ fn process_raw_ftl(
                     Arc::new(path.to_path_buf()),
                     Some(locale.to_string()),
                     Some(position),
-                    HashSet::new(),
+                    FastHashSet::default(),
                 ));
             }
             _ => {
@@ -104,8 +103,8 @@ fn import_from_ftl(path: &Path, locale: &str) -> Result<ImportResult> {
         anyhow::anyhow!("Failed to parse FTL file {}: {:?}", path.display(), err.1)
     })?;
 
-    let mut keys = HashMap::new();
-    let mut terms = HashMap::new();
+    let mut keys = FastHashMap::default();
+    let mut terms = FastHashMap::default();
     let mut misc = Vec::new();
 
     let path_arc = Arc::new(path.to_path_buf());
@@ -122,7 +121,7 @@ fn import_from_ftl(path: &Path, locale: &str) -> Result<ImportResult> {
                 path_arc.clone(),
                 Some(locale.to_string()),
                 Some(pos),
-                HashSet::new(),
+                FastHashSet::default(),
             )
         };
 
@@ -175,7 +174,7 @@ pub(crate) fn import_ftl_from_dir(
         .par_iter()
         .map(|file_path| import_from_ftl(file_path, locale))
         .try_fold(
-            || (HashMap::new(), HashMap::new(), Vec::new()),
+            || (FastHashMap::default(), FastHashMap::default(), Vec::new()),
             |mut acc, result| {
                 let (keys, terms, misc) = result?;
                 acc.0.extend(keys);
@@ -185,7 +184,7 @@ pub(crate) fn import_ftl_from_dir(
             },
         )
         .try_reduce(
-            || (HashMap::new(), HashMap::new(), Vec::new()),
+            || (FastHashMap::default(), FastHashMap::default(), Vec::new()),
             |mut a, b| {
                 a.0.extend(b.0);
                 a.1.extend(b.1);
@@ -199,8 +198,8 @@ pub(crate) fn import_ftl_from_dir(
 
 #[cfg(test)]
 mod tests {
+    use crate::ftl::utils::FastHashMap;
     use fluent_syntax::ast::Entry::Junk;
-    use hashbrown::HashMap;
     use std::path::PathBuf;
 
     #[test]
@@ -228,8 +227,8 @@ mod tests {
         let body: Vec<fluent_syntax::ast::Entry<String>> = vec![Junk {
             content: "This is junk".to_string(),
         }];
-        let mut ftl_keys: HashMap<String, super::FluentKey> = HashMap::new();
-        let mut terms: HashMap<String, super::FluentKey> = HashMap::new();
+        let mut ftl_keys: FastHashMap<String, super::FluentKey> = FastHashMap::default();
+        let mut terms: FastHashMap<String, super::FluentKey> = FastHashMap::default();
         let mut leave_as_is_keys: Vec<super::FluentKey> = Vec::new();
 
         super::process_raw_ftl(

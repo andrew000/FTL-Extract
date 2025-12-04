@@ -1,9 +1,9 @@
 #![allow(unused_variables)]
 
 use crate::ftl::consts;
+use crate::ftl::utils::{FastHashMap, FastHashSet};
 use anyhow::{Result, bail};
 use fluent::types::AnyEq;
-use hashbrown::{HashMap, HashSet};
 use ruff_python_ast::visitor::source_order::SourceOrderVisitor;
 use smallvec::SmallVec;
 use std::path::PathBuf;
@@ -23,11 +23,11 @@ pub(crate) enum FluentEntry {
 pub(crate) struct FluentKey {
     pub(crate) code_path: Arc<PathBuf>,
     pub(crate) key: String,
-    pub(crate) entry: FluentEntry,
+    pub(crate) entry: Arc<FluentEntry>,
     pub(crate) path: Arc<PathBuf>,
     pub(crate) locale: Option<String>,
     pub(crate) position: usize,
-    pub(crate) depends_on_keys: HashSet<String>,
+    pub(crate) depends_on_keys: FastHashSet<String>,
 }
 
 impl FluentKey {
@@ -38,12 +38,12 @@ impl FluentKey {
         path: Arc<PathBuf>,
         locale: Option<String>,
         position: Option<usize>,
-        depends_on_keys: HashSet<String>,
+        depends_on_keys: FastHashSet<String>,
     ) -> Self {
         Self {
             code_path,
             key,
-            entry,
+            entry: Arc::new(entry),
             path,
             locale,
             position: position.unwrap_or(usize::MAX),
@@ -55,11 +55,11 @@ impl FluentKey {
 pub(crate) struct I18nMatcher<'a> {
     code_path: Arc<PathBuf>,
     default_ftl_file: Arc<PathBuf>,
-    i18n_keys: &'a HashSet<String>,
-    i18n_keys_prefix: &'a HashSet<String>,
-    ignore_attributes: &'a HashSet<String>,
-    ignore_kwargs: &'a HashSet<String>,
-    pub(crate) fluent_keys: HashMap<String, FluentKey>,
+    i18n_keys: &'a FastHashSet<String>,
+    i18n_keys_prefix: &'a FastHashSet<String>,
+    ignore_attributes: &'a FastHashSet<String>,
+    ignore_kwargs: &'a FastHashSet<String>,
+    pub(crate) fluent_keys: FastHashMap<String, FluentKey>,
 }
 
 impl<'a> SourceOrderVisitor<'a> for I18nMatcher<'a> {
@@ -93,10 +93,10 @@ impl<'a> I18nMatcher<'a> {
     pub(crate) fn new(
         code_path: PathBuf,
         default_ftl_file: PathBuf,
-        i18n_keys: &'a HashSet<String>,
-        i18n_keys_prefix: &'a HashSet<String>,
-        ignore_attributes: &'a HashSet<String>,
-        ignore_kwargs: &'a HashSet<String>,
+        i18n_keys: &'a FastHashSet<String>,
+        i18n_keys_prefix: &'a FastHashSet<String>,
+        ignore_attributes: &'a FastHashSet<String>,
+        ignore_kwargs: &'a FastHashSet<String>,
     ) -> Self {
         Self {
             code_path: Arc::new(code_path),
@@ -105,7 +105,7 @@ impl<'a> I18nMatcher<'a> {
             i18n_keys_prefix,
             ignore_attributes,
             ignore_kwargs,
-            fluent_keys: HashMap::new(),
+            fluent_keys: FastHashMap::default(),
         }
     }
     #[inline]
@@ -240,7 +240,7 @@ impl<'a> I18nMatcher<'a> {
             path,
             None,
             None,
-            HashSet::new(),
+            FastHashSet::default(),
         );
 
         let keywords = expr
@@ -250,7 +250,7 @@ impl<'a> I18nMatcher<'a> {
             .filter_map(|keyword| keyword.arg.as_ref().map(|arg| keyword.to_owned()))
             .collect::<Vec<_>>();
 
-        let fluent_key_message_elements = match &mut fluent_key.entry {
+        let fluent_key_message_elements = match Arc::get_mut(&mut fluent_key.entry).unwrap() {
             FluentEntry::Message(msg) => match msg.value.as_mut() {
                 Some(pattern) => &mut pattern.elements,
                 None => panic!("Message has no value pattern"),
@@ -313,8 +313,8 @@ impl<'a> I18nMatcher<'a> {
                 )
             }
             if let (FluentEntry::Message(existing_message), FluentEntry::Message(new_message)) = (
-                &self.fluent_keys[&new_fluent_key.key].entry,
-                &new_fluent_key.entry,
+                self.fluent_keys[&new_fluent_key.key].entry.as_ref(),
+                new_fluent_key.entry.as_ref(),
             ) {
                 if !existing_message.clone().equals(new_message) {
                     bail!(

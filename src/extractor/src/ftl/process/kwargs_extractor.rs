@@ -1,25 +1,25 @@
 #![allow(unused_variables)]
 
 use crate::ftl::matcher::{FluentEntry, FluentKey};
+use crate::ftl::utils::{FastHashMap, FastHashSet};
 use anyhow::{Result, bail};
 use fluent_syntax::ast::{CallArguments, Identifier};
-use hashbrown::{HashMap, HashSet};
 
 pub(crate) fn extract_kwargs(
     key: &mut FluentKey,
-    terms: &mut HashMap<String, FluentKey>,
-    all_fluent_keys: &HashMap<String, FluentKey>,
-    depend_keys: &mut HashSet<String>,
-) -> HashSet<String> {
-    let mut kwargs: HashSet<String> = HashSet::new();
+    terms: &mut FastHashMap<String, FluentKey>,
+    all_fluent_keys: &FastHashMap<String, FluentKey>,
+    depend_keys: &mut FastHashSet<String>,
+) -> FastHashSet<String> {
+    let mut kwargs: FastHashSet<String> = FastHashSet::default();
 
-    if let FluentEntry::Message(message) = &key.entry {
+    if let FluentEntry::Message(message) = &key.entry.as_ref() {
         if message.value.is_none() || message.value.as_ref().unwrap().elements.is_empty() {
             return kwargs;
         }
 
         extract_kwargs_from_message(key, &mut kwargs, terms, all_fluent_keys, depend_keys);
-    } else if let FluentEntry::Term(term) = &key.entry {
+    } else if let FluentEntry::Term(term) = &key.entry.as_ref() {
         if term.value.elements.is_empty() {
             return kwargs;
         }
@@ -33,10 +33,10 @@ pub(crate) fn extract_kwargs(
 fn extract_kwargs_from_placeable(
     key: &mut FluentKey,
     placeable: &fluent_syntax::ast::PatternElement<String>,
-    kwargs: &mut HashSet<String>,
-    terms: &mut HashMap<String, FluentKey>,
-    all_fluent_keys: &HashMap<String, FluentKey>,
-    depend_keys: &mut HashSet<String>,
+    kwargs: &mut FastHashSet<String>,
+    terms: &mut FastHashMap<String, FluentKey>,
+    all_fluent_keys: &FastHashMap<String, FluentKey>,
+    depend_keys: &mut FastHashSet<String>,
 ) {
     if let fluent_syntax::ast::PatternElement::Placeable { expression } = placeable {
         if let fluent_syntax::ast::Expression::Inline(inline_expr) = expression {
@@ -93,7 +93,7 @@ fn extract_kwargs_from_placeable(
 
 fn extract_kwargs_from_variable_reference(
     variable_reference: &Identifier<String>,
-    kwargs: &mut HashSet<String>,
+    kwargs: &mut FastHashSet<String>,
 ) {
     kwargs.insert(variable_reference.name.clone());
 }
@@ -102,10 +102,10 @@ fn extract_kwargs_from_message_reference(
     key: &mut FluentKey,
     id: &Identifier<String>,
     attribute: &Option<Identifier<String>>,
-    kwargs: &mut HashSet<String>,
-    terms: &mut HashMap<String, FluentKey>,
-    all_fluent_keys: &HashMap<String, FluentKey>,
-    depend_keys: &mut HashSet<String>,
+    kwargs: &mut FastHashSet<String>,
+    terms: &mut FastHashMap<String, FluentKey>,
+    all_fluent_keys: &FastHashMap<String, FluentKey>,
+    depend_keys: &mut FastHashSet<String>,
 ) -> Result<()> {
     let mut reference_key = match all_fluent_keys.get(&id.name) {
         Some(key) => key.clone(),
@@ -133,9 +133,9 @@ fn extract_kwargs_from_term_reference(
     id: &Identifier<String>,
     attribute: &Option<Identifier<String>>,
     arguments: &Option<CallArguments<String>>,
-    kwargs: &mut HashSet<String>,
-    terms: &mut HashMap<String, FluentKey>,
-    all_fluent_keys: &HashMap<String, FluentKey>,
+    kwargs: &mut FastHashSet<String>,
+    terms: &mut FastHashMap<String, FluentKey>,
+    all_fluent_keys: &FastHashMap<String, FluentKey>,
 ) -> Result<()> {
     let mut term = match terms.get(&id.name) {
         Some(term) => term.clone(),
@@ -152,7 +152,7 @@ fn extract_kwargs_from_term_reference(
         &mut term,
         terms,
         all_fluent_keys,
-        &mut HashSet::new(),
+        &mut FastHashSet::default(),
     ));
 
     Ok(())
@@ -162,10 +162,10 @@ fn extract_kwargs_from_selector_expression(
     key: &mut FluentKey,
     selector: &fluent_syntax::ast::InlineExpression<String>,
     variants: &Vec<fluent_syntax::ast::Variant<String>>,
-    kwargs: &mut HashSet<String>,
-    terms: &mut HashMap<String, FluentKey>,
-    all_fluent_keys: &HashMap<String, FluentKey>,
-    depend_keys: &mut HashSet<String>,
+    kwargs: &mut FastHashSet<String>,
+    terms: &mut FastHashMap<String, FluentKey>,
+    all_fluent_keys: &FastHashMap<String, FluentKey>,
+    depend_keys: &mut FastHashSet<String>,
 ) {
     if let fluent_syntax::ast::InlineExpression::VariableReference { id } = selector {
         extract_kwargs_from_variable_reference(id, kwargs);
@@ -189,12 +189,12 @@ fn extract_kwargs_from_selector_expression(
 
 fn extract_kwargs_from_message(
     key: &mut FluentKey,
-    kwargs: &mut HashSet<String>,
-    terms: &mut HashMap<String, FluentKey>,
-    all_fluent_keys: &HashMap<String, FluentKey>,
-    depend_keys: &mut HashSet<String>,
+    kwargs: &mut FastHashSet<String>,
+    terms: &mut FastHashMap<String, FluentKey>,
+    all_fluent_keys: &FastHashMap<String, FluentKey>,
+    depend_keys: &mut FastHashSet<String>,
 ) {
-    let elements = if let FluentEntry::Message(message) = &key.entry {
+    let elements = if let FluentEntry::Message(message) = &key.entry.as_ref() {
         message.value.as_ref().unwrap().elements.clone()
     } else {
         panic!("Expected a Message entry");
@@ -216,12 +216,12 @@ fn extract_kwargs_from_message(
 
 fn extract_kwargs_from_term(
     key: &mut FluentKey,
-    kwargs: &mut HashSet<String>,
-    terms: &mut HashMap<String, FluentKey>,
-    all_fluent_keys: &HashMap<String, FluentKey>,
-    depend_keys: &mut HashSet<String>,
+    kwargs: &mut FastHashSet<String>,
+    terms: &mut FastHashMap<String, FluentKey>,
+    all_fluent_keys: &FastHashMap<String, FluentKey>,
+    depend_keys: &mut FastHashSet<String>,
 ) {
-    let elements = if let FluentEntry::Term(term) = &key.entry {
+    let elements = if let FluentEntry::Term(term) = &key.entry.as_ref() {
         term.value.elements.clone()
     } else {
         panic!("Expected a Term entry");
@@ -244,7 +244,7 @@ fn extract_kwargs_from_term(
 #[cfg(test)]
 mod tests {
     use crate::ftl::matcher::{FluentEntry, FluentKey};
-    use hashbrown::{HashMap, HashSet};
+    use crate::ftl::utils::{FastHashMap, FastHashSet};
     use std::path::PathBuf;
     use std::sync::Arc;
 
@@ -274,16 +274,16 @@ mod tests {
             Arc::new(PathBuf::from("tmp.ftl")), // path
             Some("en".to_string()),            // locale
             Some(0),
-            HashSet::new(),
+            FastHashSet::default(),
         );
-        let mut kwargs: HashSet<String> = HashSet::new();
+        let mut kwargs: FastHashSet<String> = FastHashSet::default();
 
         super::extract_kwargs_from_message(
             &mut key,
             &mut kwargs,
-            &mut HashMap::<String, FluentKey>::new(),
-            &HashMap::<String, FluentKey>::new(),
-            &mut HashSet::<String>::new(),
+            &mut FastHashMap::<String, FluentKey>::default(),
+            &FastHashMap::<String, FluentKey>::default(),
+            &mut FastHashSet::<String>::default(),
         );
 
         assert!(kwargs.contains("username"));
@@ -315,16 +315,16 @@ mod tests {
             Arc::new(PathBuf::from("tmp.ftl")), // path
             Some("en".to_string()),            // locale
             Some(0),
-            HashSet::new(),
+            FastHashSet::default(),
         );
-        let mut kwargs: HashSet<String> = HashSet::new();
+        let mut kwargs: FastHashSet<String> = FastHashSet::default();
 
         super::extract_kwargs_from_term(
             &mut key,
             &mut kwargs,
-            &mut HashMap::<String, FluentKey>::new(),
-            &HashMap::<String, FluentKey>::new(),
-            &mut HashSet::<String>::new(),
+            &mut FastHashMap::<String, FluentKey>::default(),
+            &FastHashMap::<String, FluentKey>::default(),
+            &mut FastHashSet::<String>::default(),
         );
 
         assert!(kwargs.contains("username"));
@@ -356,7 +356,7 @@ mod tests {
             Arc::new(PathBuf::from("tmp.ftl")), // path
             Some("en".to_string()),            // locale
             Some(0),
-            HashSet::new(),
+            FastHashSet::default(),
         );
         let placeable = fluent_syntax::ast::PatternElement::Placeable {
             expression: fluent_syntax::ast::Expression::Inline(
@@ -367,15 +367,15 @@ mod tests {
                 },
             ),
         };
-        let mut kwargs: HashSet<String> = HashSet::new();
+        let mut kwargs: FastHashSet<String> = FastHashSet::default();
 
         super::extract_kwargs_from_placeable(
             &mut key,
             &placeable,
             &mut kwargs,
-            &mut HashMap::<String, FluentKey>::new(),
-            &HashMap::<String, FluentKey>::new(),
-            &mut HashSet::<String>::new(),
+            &mut FastHashMap::<String, FluentKey>::default(),
+            &FastHashMap::<String, FluentKey>::default(),
+            &mut FastHashSet::<String>::default(),
         );
 
         assert!(kwargs.contains("username"));
@@ -408,7 +408,7 @@ mod tests {
             Arc::new(PathBuf::from("tmp.ftl")), // path
             Some("en".to_string()),            // locale
             Some(0),
-            HashSet::new(),
+            FastHashSet::default(),
         );
         let placeable = fluent_syntax::ast::PatternElement::Placeable {
             expression: fluent_syntax::ast::Expression::Inline(
@@ -420,8 +420,8 @@ mod tests {
                 },
             ),
         };
-        let mut kwargs: HashSet<String> = HashSet::new();
-        let mut all_fluent_keys: HashMap<String, FluentKey> = HashMap::new();
+        let mut kwargs: FastHashSet<String> = FastHashSet::default();
+        let mut all_fluent_keys: FastHashMap<String, FluentKey> = FastHashMap::default();
         all_fluent_keys.insert(
             "ref_msg".to_string(),
             FluentKey::new(
@@ -438,7 +438,7 @@ mod tests {
                 Arc::new(PathBuf::from("tmp.ftl")), // path
                 Some("en".to_string()),            // locale
                 Some(0),
-                HashSet::new(),
+                FastHashSet::default(),
             ),
         );
 
@@ -446,9 +446,9 @@ mod tests {
             &mut key,
             &placeable,
             &mut kwargs,
-            &mut HashMap::<String, FluentKey>::new(),
+            &mut FastHashMap::<String, FluentKey>::default(),
             &all_fluent_keys,
-            &mut HashSet::<String>::new(),
+            &mut FastHashSet::<String>::default(),
         );
 
         // Since all_fluent_keys is empty, no kwargs should be extracted
@@ -483,7 +483,7 @@ mod tests {
             Arc::new(PathBuf::from("tmp.ftl")), // path
             Some("en".to_string()),            // locale
             Some(0),
-            HashSet::new(),
+            FastHashSet::default(),
         );
         let placeable = fluent_syntax::ast::PatternElement::Placeable {
             expression: fluent_syntax::ast::Expression::Inline(
@@ -496,8 +496,8 @@ mod tests {
                 },
             ),
         };
-        let mut kwargs: HashSet<String> = HashSet::new();
-        let mut terms: HashMap<String, FluentKey> = HashMap::new();
+        let mut kwargs: FastHashSet<String> = FastHashSet::default();
+        let mut terms: FastHashMap<String, FluentKey> = FastHashMap::default();
         terms.insert(
             "term".to_string(),
             FluentKey::new(
@@ -514,7 +514,7 @@ mod tests {
                 Arc::new(PathBuf::from("tmp.ftl")), // path
                 Some("en".to_string()),            // locale
                 Some(0),
-                HashSet::new(),
+                FastHashSet::default(),
             ),
         );
 
@@ -523,8 +523,8 @@ mod tests {
             &placeable,
             &mut kwargs,
             &mut terms,
-            &HashMap::<String, FluentKey>::new(),
-            &mut HashSet::<String>::new(),
+            &FastHashMap::<String, FluentKey>::default(),
+            &mut FastHashSet::<String>::default(),
         );
 
         assert!(!kwargs.contains("term"));
@@ -532,7 +532,7 @@ mod tests {
 
     #[test]
     fn test_extract_kwargs_from_variable_reference() {
-        let mut kwargs: HashSet<String> = HashSet::new();
+        let mut kwargs: FastHashSet<String> = FastHashSet::default();
 
         super::extract_kwargs_from_variable_reference(
             &fluent_syntax::ast::Identifier {
@@ -571,7 +571,7 @@ mod tests {
             Arc::new(PathBuf::from("tmp.ftl")), // path
             Some("en".to_string()),            // locale
             Some(0),
-            HashSet::new(),
+            FastHashSet::default(),
         );
         let placeable = fluent_syntax::ast::PatternElement::Placeable {
             expression: fluent_syntax::ast::Expression::Select {
@@ -583,15 +583,15 @@ mod tests {
                 variants: vec![],
             },
         };
-        let mut kwargs: HashSet<String> = HashSet::new();
+        let mut kwargs: FastHashSet<String> = FastHashSet::default();
 
         super::extract_kwargs_from_placeable(
             &mut key,
             &placeable,
             &mut kwargs,
-            &mut HashMap::<String, FluentKey>::new(),
-            &HashMap::<String, FluentKey>::new(),
-            &mut HashSet::<String>::new(),
+            &mut FastHashMap::<String, FluentKey>::default(),
+            &FastHashMap::<String, FluentKey>::default(),
+            &mut FastHashSet::<String>::default(),
         );
 
         assert!(kwargs.contains("user_role"));
@@ -624,10 +624,10 @@ mod tests {
             Arc::new(PathBuf::from("tmp.ftl")), // path
             Some("en".to_string()),            // locale
             Some(0),
-            HashSet::new(),
+            FastHashSet::default(),
         );
-        let mut kwargs: HashSet<String> = HashSet::new();
-        let mut all_fluent_keys: HashMap<String, FluentKey> = HashMap::new();
+        let mut kwargs: FastHashSet<String> = FastHashSet::default();
+        let mut all_fluent_keys: FastHashMap<String, FluentKey> = FastHashMap::default();
         all_fluent_keys.insert(
             "ref_msg".to_string(),
             FluentKey::new(
@@ -654,7 +654,7 @@ mod tests {
                 Arc::new(PathBuf::from("tmp.ftl")), // path
                 Some("en".to_string()),            // locale
                 Some(0),
-                HashSet::new(),
+                FastHashSet::default(),
             ),
         );
 
@@ -665,9 +665,9 @@ mod tests {
             },
             &None,
             &mut kwargs,
-            &mut HashMap::<String, FluentKey>::new(),
+            &mut FastHashMap::<String, FluentKey>::default(),
             &all_fluent_keys,
-            &mut HashSet::new(),
+            &mut FastHashSet::default(),
         )
         .unwrap();
 
@@ -702,7 +702,7 @@ mod tests {
             Arc::new(PathBuf::from("tmp.ftl")), // path
             Some("en".to_string()),            // locale
             Some(0),
-            HashSet::new(),
+            FastHashSet::default(),
         );
         let id = fluent_syntax::ast::Identifier {
             name: "ref_msg".to_string(),
@@ -712,10 +712,10 @@ mod tests {
             &mut key,
             &id,
             &None,
-            &mut HashSet::<String>::new(),
-            &mut HashMap::<String, FluentKey>::new(),
-            &HashMap::<String, FluentKey>::new(),
-            &mut HashSet::new(),
+            &mut FastHashSet::<String>::default(),
+            &mut FastHashMap::<String, FluentKey>::default(),
+            &FastHashMap::<String, FluentKey>::default(),
+            &mut FastHashSet::default(),
         )
         .unwrap();
     }
@@ -748,10 +748,10 @@ mod tests {
             Arc::new(PathBuf::from("tmp.ftl")), // path
             Some("en".to_string()),            // locale
             Some(0),
-            HashSet::new(),
+            FastHashSet::default(),
         );
-        let mut kwargs: HashSet<String> = HashSet::new();
-        let mut terms: HashMap<String, FluentKey> = HashMap::new();
+        let mut kwargs: FastHashSet<String> = FastHashSet::default();
+        let mut terms: FastHashMap<String, FluentKey> = FastHashMap::default();
         terms.insert(
             "term".to_string(),
             FluentKey::new(
@@ -778,7 +778,7 @@ mod tests {
                 Arc::new(PathBuf::from("tmp.ftl")), // path
                 Some("en".to_string()),            // locale
                 Some(0),
-                HashSet::new(),
+                FastHashSet::default(),
             ),
         );
 
@@ -791,7 +791,7 @@ mod tests {
             &None,
             &mut kwargs,
             &mut terms,
-            &HashMap::<String, FluentKey>::new(),
+            &FastHashMap::<String, FluentKey>::default(),
         )
         .unwrap();
 
@@ -827,7 +827,7 @@ mod tests {
             Arc::new(PathBuf::from("tmp.ftl")), // path
             Some("en".to_string()),            // locale
             Some(0),
-            HashSet::new(),
+            FastHashSet::default(),
         );
 
         super::extract_kwargs_from_term_reference(
@@ -837,9 +837,9 @@ mod tests {
             },
             &None,
             &None,
-            &mut HashSet::<String>::new(),
-            &mut HashMap::<String, FluentKey>::new(),
-            &HashMap::<String, FluentKey>::new(),
+            &mut FastHashSet::<String>::default(),
+            &mut FastHashMap::<String, FluentKey>::default(),
+            &FastHashMap::<String, FluentKey>::default(),
         )
         .unwrap();
     }
@@ -886,7 +886,7 @@ mod tests {
             Arc::new(PathBuf::from("tmp.ftl")), // path
             Some("en".to_string()),            // locale
             Some(0),
-            HashSet::new(),
+            FastHashSet::default(),
         );
         let selector = fluent_syntax::ast::InlineExpression::VariableReference {
             id: fluent_syntax::ast::Identifier {
@@ -919,16 +919,16 @@ mod tests {
                 default: true,
             },
         ];
-        let mut kwargs: HashSet<String> = HashSet::new();
+        let mut kwargs: FastHashSet<String> = FastHashSet::default();
 
         super::extract_kwargs_from_selector_expression(
             &mut key,
             &selector,
             &variants,
             &mut kwargs,
-            &mut HashMap::<String, FluentKey>::new(),
-            &HashMap::<String, FluentKey>::new(),
-            &mut HashSet::<String>::new(),
+            &mut FastHashMap::<String, FluentKey>::default(),
+            &FastHashMap::<String, FluentKey>::default(),
+            &mut FastHashSet::<String>::default(),
         );
 
         assert!(kwargs.contains("user_role"));
@@ -960,16 +960,16 @@ mod tests {
             Arc::new(PathBuf::from("tmp.ftl")), // path
             Some("en".to_string()),            // locale
             Some(0),
-            HashSet::new(),
+            FastHashSet::default(),
         );
-        let mut kwargs: HashSet<String> = HashSet::new();
+        let mut kwargs: FastHashSet<String> = FastHashSet::default();
 
         super::extract_kwargs_from_message(
             &mut key,
             &mut kwargs,
-            &mut HashMap::<String, FluentKey>::new(),
-            &HashMap::<String, FluentKey>::new(),
-            &mut HashSet::<String>::new(),
+            &mut FastHashMap::<String, FluentKey>::default(),
+            &FastHashMap::<String, FluentKey>::default(),
+            &mut FastHashSet::<String>::default(),
         );
 
         assert!(kwargs.contains("username"));
@@ -992,15 +992,15 @@ mod tests {
             Arc::new(PathBuf::from("tmp.ftl")), // path
             Some("en".to_string()),            // locale
             Some(0),
-            HashSet::new(),
+            FastHashSet::default(),
         );
 
         super::extract_kwargs_from_message(
             &mut key,
-            &mut HashSet::<String>::new(),
-            &mut HashMap::<String, FluentKey>::new(),
-            &HashMap::<String, FluentKey>::new(),
-            &mut HashSet::<String>::new(),
+            &mut FastHashSet::<String>::default(),
+            &mut FastHashMap::<String, FluentKey>::default(),
+            &FastHashMap::<String, FluentKey>::default(),
+            &mut FastHashSet::<String>::default(),
         );
     }
 
@@ -1030,16 +1030,16 @@ mod tests {
             Arc::new(PathBuf::from("tmp.ftl")), // path
             Some("en".to_string()),            // locale
             Some(0),
-            HashSet::new(),
+            FastHashSet::default(),
         );
-        let mut kwargs: HashSet<String> = HashSet::new();
+        let mut kwargs: FastHashSet<String> = FastHashSet::default();
 
         super::extract_kwargs_from_term(
             &mut key,
             &mut kwargs,
-            &mut HashMap::<String, FluentKey>::new(),
-            &HashMap::<String, FluentKey>::new(),
-            &mut HashSet::<String>::new(),
+            &mut FastHashMap::<String, FluentKey>::default(),
+            &FastHashMap::<String, FluentKey>::default(),
+            &mut FastHashSet::<String>::default(),
         );
 
         assert!(kwargs.contains("username"));
@@ -1062,15 +1062,15 @@ mod tests {
             Arc::new(PathBuf::from("tmp.ftl")), // path
             Some("en".to_string()),            // locale
             Some(0),
-            HashSet::new(),
+            FastHashSet::default(),
         );
 
         super::extract_kwargs_from_term(
             &mut key,
-            &mut HashSet::<String>::new(),
-            &mut HashMap::<String, FluentKey>::new(),
-            &HashMap::<String, FluentKey>::new(),
-            &mut HashSet::<String>::new(),
+            &mut FastHashSet::<String>::default(),
+            &mut FastHashMap::<String, FluentKey>::default(),
+            &FastHashMap::<String, FluentKey>::default(),
+            &mut FastHashSet::<String>::default(),
         );
     }
 }

@@ -4,8 +4,7 @@ use extractor::ftl::consts::{
     DEFAULT_IGNORE_ATTRIBUTES, DEFAULT_IGNORE_KWARGS, LineEndings,
 };
 use extractor::ftl::ftl_extractor::{ExtractConfig, extract};
-
-use hashbrown::HashSet;
+use extractor::ftl::utils::FastHashSet;
 use log::{error, info};
 use mimalloc::MiMalloc;
 use std::path::PathBuf;
@@ -134,13 +133,14 @@ fn main() {
             info!(target: "cli", "Code path: {}", code_path.display());
             info!(target: "cli", "Output path: {}", output_path.display());
 
-            let mut i18n_keys_set: HashSet<String> = HashSet::from_iter(i18n_keys);
+            let mut i18n_keys_set: FastHashSet<String> = FastHashSet::from_iter(i18n_keys);
             i18n_keys_set.extend(i18n_keys_append);
 
-            let mut exclude_dirs_set: HashSet<String> = HashSet::from_iter(exclude_dirs);
+            let mut exclude_dirs_set: FastHashSet<String> = FastHashSet::from_iter(exclude_dirs);
             exclude_dirs_set.extend(exclude_dirs_append);
 
-            let mut ignore_attributes_set: HashSet<String> = HashSet::from_iter(ignore_attributes);
+            let mut ignore_attributes_set: FastHashSet<String> =
+                FastHashSet::from_iter(ignore_attributes);
             ignore_attributes_set.extend(append_ignore_attributes);
 
             let config = ExtractConfig {
@@ -148,10 +148,10 @@ fn main() {
                 output_path,
                 languages: language,
                 i18n_keys: i18n_keys_set,
-                i18n_keys_prefix: HashSet::from_iter(i18n_keys_prefix),
+                i18n_keys_prefix: FastHashSet::from_iter(i18n_keys_prefix),
                 exclude_dirs: exclude_dirs_set,
                 ignore_attributes: ignore_attributes_set,
-                ignore_kwargs: HashSet::from_iter(ignore_kwargs),
+                ignore_kwargs: FastHashSet::from_iter(ignore_kwargs),
                 comment_junks,
                 default_ftl_file,
                 comment_keys_mode,

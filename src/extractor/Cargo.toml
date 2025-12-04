@@ -18,7 +18,6 @@ clap = { version = "4.5.53", features = ["derive"] }
 fluent = { git = "https://github.com/projectfluent/fluent-rs.git", rev = "e0b443552a9b277badc958ab533b506394aad915" }
 fluent-syntax = { git = "https://github.com/projectfluent/fluent-rs.git", rev = "e0b443552a9b277badc958ab533b506394aad915" }
 globset = { version = "0.4.18" }
-hashbrown = { version = "0.16.1", features = ["rayon"] }
 ignore = { version = "0.4.25" }
 log = { version = "0.4.29" }
 memchr = { version = "2.7.6" }
@@ -26,6 +25,7 @@ memmap2 = { version = "0.9.9" }
 rayon = { version = "1.11.0" }
 ruff_python_ast = { git = "https://github.com/astral-sh/ruff.git", tag = "0.14.7" }
 ruff_python_parser = { git = "https://github.com/astral-sh/ruff.git", tag = "0.14.7" }
+rustc-hash = { version = "2.1.1" }
 smallvec = { version = "2.0.0-alpha.12" }
 
 [dev-dependencies]

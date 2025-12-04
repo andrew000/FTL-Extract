@@ -1,25 +1,30 @@
-use hashbrown::HashMap;
+use rustc_hash::FxHasher;
+use std::collections::{HashMap, HashSet};
+use std::hash::BuildHasherDefault;
+
+pub type FastHashMap<K, V> = HashMap<K, V, BuildHasherDefault<FxHasher>>;
+pub type FastHashSet<K> = HashSet<K, BuildHasherDefault<FxHasher>>;
 
 pub struct ExtractionStatistics {
     pub py_files_count: usize,
-    pub ftl_files_count: HashMap<String, usize>,
+    pub ftl_files_count: FastHashMap<String, usize>,
     pub ftl_in_code_keys_count: usize,
-    pub ftl_stored_keys_count: HashMap<String, usize>,
-    pub ftl_keys_updated: HashMap<String, usize>,
-    pub ftl_keys_added: HashMap<String, usize>,
-    pub ftl_keys_commented: HashMap<String, usize>,
+    pub ftl_stored_keys_count: FastHashMap<String, usize>,
+    pub ftl_keys_updated: FastHashMap<String, usize>,
+    pub ftl_keys_added: FastHashMap<String, usize>,
+    pub ftl_keys_commented: FastHashMap<String, usize>,
 }
 
 impl ExtractionStatistics {
     pub(crate) fn new() -> Self {
         Self {
             py_files_count: 0,
-            ftl_files_count: HashMap::new(),
+            ftl_files_count: FastHashMap::default(),
             ftl_in_code_keys_count: 0,
-            ftl_stored_keys_count: HashMap::new(),
-            ftl_keys_updated: HashMap::new(),
-            ftl_keys_added: HashMap::new(),
-            ftl_keys_commented: HashMap::new(),
+            ftl_stored_keys_count: FastHashMap::default(),
+            ftl_keys_updated: FastHashMap::default(),
+            ftl_keys_added: FastHashMap::default(),
+            ftl_keys_commented: FastHashMap::default(),
         }
     }
 

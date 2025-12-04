@@ -92,7 +92,10 @@ fn parse_file(
 
     let code = match std::str::from_utf8(&mmap) {
         Ok(c) => c,
-        Err(_) => return HashMap::new(),
+        Err(_) => {
+            error!(target: "extractor:code", "Bad UTF-8 in {}", file.display());
+            return HashMap::new();
+        }
     };
     let module = match ruff_python_parser::parse_module(code) {
         Ok(m) => m,

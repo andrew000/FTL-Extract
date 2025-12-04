@@ -6,6 +6,7 @@ use hashbrown::{HashMap, HashSet};
 use ignore::WalkBuilder;
 use ignore::types::TypesBuilder;
 use log::error;
+use memchr::memmem;
 use memmap2::Mmap;
 use rayon::prelude::*;
 use ruff_python_ast::visitor::source_order::SourceOrderVisitor;
@@ -78,6 +79,17 @@ fn parse_file(
             Err(_) => return HashMap::new(),
         }
     };
+
+    // Quick check: does the file contain any of the i18n keys or prefixes?
+    let has_key = i18n_keys
+        .iter()
+        .chain(i18n_keys_prefix.iter())
+        .any(|key| memmem::find(&mmap, key.as_bytes()).is_some());
+
+    if !has_key {
+        return HashMap::new();
+    }
+
     let code = match std::str::from_utf8(&mmap) {
         Ok(c) => c,
         Err(_) => return HashMap::new(),

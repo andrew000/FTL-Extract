@@ -219,13 +219,19 @@ pub(crate) fn extract_fluent_keys<'a>(
 pub(crate) fn sort_fluent_keys_by_path(
     fluent_keys: HashMap<String, FluentKey>,
 ) -> HashMap<Arc<PathBuf>, Vec<FluentKey>> {
+    if fluent_keys.is_empty() {
+        return HashMap::new();
+    }
+
     let mut sorted_fluent_keys: HashMap<Arc<PathBuf>, Vec<FluentKey>> = HashMap::new();
-    for fluent_key in fluent_keys.values() {
+
+    for fluent_key in fluent_keys.into_values() {
         sorted_fluent_keys
             .entry(fluent_key.path.clone())
             .or_default()
-            .push(fluent_key.clone());
+            .push(fluent_key);
     }
+
     sorted_fluent_keys
 }
 

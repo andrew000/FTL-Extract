@@ -11,6 +11,7 @@ repos:
         args: [ "--fix", "crlf" ]
         types:
           - python
+          - rust
           - yaml
           - toml
       - id: "detect-private-key"
@@ -19,7 +20,7 @@ repos:
       - id: "check-json"
 
   - repo: https://github.com/charliermarsh/ruff-pre-commit
-    rev: v0.14.7
+    rev: v0.14.8
     hooks:
       - id: ruff
         args: [ "--fix" ]

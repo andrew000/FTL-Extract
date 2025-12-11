@@ -148,7 +148,7 @@ pub(crate) fn extract_fluent_keys<'a>(
 
                 // Merge found keys into local accumulator
                 for (key, new_fluent_key) in keys {
-                    match acc.entry(key.clone()) {
+                    match acc.entry(key) {
                         Entry::Occupied(entry) => {
                             let existing_key: &FluentKey = entry.get();
 
@@ -156,7 +156,7 @@ pub(crate) fn extract_fluent_keys<'a>(
                             if existing_key.path != new_fluent_key.path {
                                 panic!(
                                     "FluentKey conflict: {} in {} and {}",
-                                    key,
+                                    entry.key(),
                                     existing_key.path.display(),
                                     new_fluent_key.path.display()
                                 )
@@ -166,13 +166,18 @@ pub(crate) fn extract_fluent_keys<'a>(
                                 (FluentEntry::Message(a), FluentEntry::Message(b)) if a != b => {
                                     panic!(
                                         "FluentKey conflict: {} in {} and {}",
-                                        key,
+                                        entry.key(),
                                         existing_key.path.display(),
                                         new_fluent_key.path.display()
                                     );
                                 }
                                 (a, b) if a != b => {
-                                    panic!("FluentKey type conflict: {} ({:?} vs {:?})", key, a, b);
+                                    panic!(
+                                        "FluentKey type conflict: {} ({:?} vs {:?})",
+                                        entry.key(),
+                                        a,
+                                        b
+                                    );
                                 }
                                 _ => {}
                             }
@@ -196,11 +201,11 @@ pub(crate) fn extract_fluent_keys<'a>(
                     // Same conflict logic as above needed here strictly speaking,
                     // but if keys are unique per file or conflicts handled in fold,
                     // we just insert. To be safe, we use the same check:
-                    match target.entry(key.clone()) {
+                    match target.entry(key) {
                         Entry::Occupied(entry) => {
                             let existing_key: &FluentKey = entry.get();
                             if existing_key.path != val.path {
-                                panic!("FluentKey conflict during merge: {}", key);
+                                panic!("FluentKey conflict during merge: {}", entry.key());
                             }
                             // Additional checks omitted for brevity, but should be mirrored
                         }

@@ -230,9 +230,7 @@ impl<'a> I18nMatcher<'a> {
             FluentEntry::Message(fluent_syntax::ast::Message {
                 id: fluent_syntax::ast::Identifier { name: key.clone() },
                 value: Some(fluent_syntax::ast::Pattern {
-                    elements: vec![fluent_syntax::ast::PatternElement::TextElement {
-                        value: key.clone(),
-                    }],
+                    elements: vec![fluent_syntax::ast::PatternElement::TextElement { value: key }],
                 }),
                 attributes: vec![],
                 comment: None,
@@ -263,7 +261,7 @@ impl<'a> I18nMatcher<'a> {
                 continue;
             }
 
-            let arg = kw.arg.clone().unwrap();
+            let arg = kw.arg.as_ref().unwrap();
 
             if arg.as_str() == consts::PATH_LITERAL {
                 if kw.value.is_string_literal_expr() {
@@ -281,7 +279,7 @@ impl<'a> I18nMatcher<'a> {
                     }
                 }
             } else {
-                if self.ignore_kwargs.contains(&arg.to_string()) {
+                if self.ignore_kwargs.contains(arg.as_str()) {
                     continue;
                 }
 
@@ -289,7 +287,7 @@ impl<'a> I18nMatcher<'a> {
                     expression: fluent_syntax::ast::Expression::Inline(
                         fluent_syntax::ast::InlineExpression::VariableReference {
                             id: fluent_syntax::ast::Identifier {
-                                name: kw.arg.as_ref().unwrap().to_string(),
+                                name: arg.to_string(),
                             },
                         },
                     ),

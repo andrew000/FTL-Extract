@@ -283,7 +283,7 @@ fn write_results(
         let full_path = lang_dir.join(path.as_ref());
 
         let misc_entries = leave_as_is_map
-            .get(path)
+            .get(&full_path)
             .map(|v| v.clone())
             .unwrap_or_default();
 

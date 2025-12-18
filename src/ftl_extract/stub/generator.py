@@ -349,6 +349,11 @@ def generate_stubs(ftl_path: Path, output_path: Path, export_tree: bool = False)
     ast.fix_missing_locations(module)
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    output_path.write_text("# mypy: ignore-errors\n" + ast.unparse(module), encoding="utf-8")
+    output_path.write_text(
+        "# mypy: ignore-errors\n"
+        "# This is auto-generated file, do not edit!\n"
+        f"{ast.unparse(module)}",
+        encoding="utf-8",
+    )
 
     click.echo(f"Stub file generated at {output_path}")

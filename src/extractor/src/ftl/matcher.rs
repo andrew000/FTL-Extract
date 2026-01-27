@@ -5,12 +5,13 @@ use crate::ftl::utils::{FastHashMap, FastHashSet};
 use anyhow::{Result, bail};
 use fluent::types::AnyEq;
 use ruff_python_ast::visitor::source_order::SourceOrderVisitor;
+use serde::{Deserialize, Serialize};
 use smallvec::SmallVec;
 use std::path::PathBuf;
 use std::sync::Arc;
 
-#[derive(Clone, Debug, PartialEq)]
-pub(crate) enum FluentEntry {
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub enum FluentEntry {
     Message(fluent_syntax::ast::Message<String>),
     Term(fluent_syntax::ast::Term<String>),
     Comment(fluent_syntax::ast::Comment<String>),
@@ -19,19 +20,19 @@ pub(crate) enum FluentEntry {
     Junk(String),
 }
 
-#[derive(Clone, Debug)]
-pub(crate) struct FluentKey {
-    pub(crate) code_path: Arc<PathBuf>,
-    pub(crate) key: String,
-    pub(crate) entry: Arc<FluentEntry>,
-    pub(crate) path: Arc<PathBuf>,
-    pub(crate) locale: Option<String>,
-    pub(crate) position: usize,
-    pub(crate) depends_on_keys: FastHashSet<String>,
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct FluentKey {
+    pub code_path: Arc<PathBuf>,
+    pub key: String,
+    pub entry: Arc<FluentEntry>,
+    pub path: Arc<PathBuf>,
+    pub locale: Option<String>,
+    pub position: usize,
+    pub depends_on_keys: FastHashSet<String>,
 }
 
 impl FluentKey {
-    pub(crate) fn new(
+    pub fn new(
         code_path: Arc<PathBuf>,
         key: String,
         entry: FluentEntry,
@@ -52,14 +53,14 @@ impl FluentKey {
     }
 }
 
-pub(crate) struct I18nMatcher<'a> {
+pub struct I18nMatcher<'a> {
     code_path: Arc<PathBuf>,
     default_ftl_file: Arc<PathBuf>,
     i18n_keys: &'a FastHashSet<String>,
     i18n_keys_prefix: &'a FastHashSet<String>,
     ignore_attributes: &'a FastHashSet<String>,
     ignore_kwargs: &'a FastHashSet<String>,
-    pub(crate) fluent_keys: FastHashMap<String, FluentKey>,
+    pub fluent_keys: FastHashMap<String, FluentKey>,
 }
 
 impl<'a> SourceOrderVisitor<'a> for I18nMatcher<'a> {
@@ -90,7 +91,7 @@ impl<'a> SourceOrderVisitor<'a> for I18nMatcher<'a> {
 }
 
 impl<'a> I18nMatcher<'a> {
-    pub(crate) fn new(
+    pub fn new(
         code_path: PathBuf,
         default_ftl_file: PathBuf,
         i18n_keys: &'a FastHashSet<String>,

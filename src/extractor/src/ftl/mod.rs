@@ -1,3 +1,4 @@
+pub mod change_detector;
 mod code_extractor;
 pub mod consts;
 pub mod ftl_extractor;

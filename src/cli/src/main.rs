@@ -87,6 +87,10 @@ enum Commands {
         #[arg(long, value_enum, default_value_t = LineEndings::Default)]
         line_endings: LineEndings,
 
+        /// Use caching
+        #[arg(long, default_value_t = false)]
+        use_cache: bool,
+
         /// Dry run, do not write to files
         #[arg(long, default_value_t = false)]
         dry_run: bool,
@@ -128,6 +132,7 @@ fn main() {
             default_ftl_file,
             comment_keys_mode,
             line_endings,
+            use_cache,
             dry_run,
         }) => {
             info!(target: "cli", "Code path: {}", code_path.display());
@@ -156,19 +161,24 @@ fn main() {
                 default_ftl_file,
                 comment_keys_mode,
                 line_endings,
+                use_cache,
                 dry_run,
             };
 
             match extract(config) {
                 Ok(statistics) => {
-                    info!(target: "cli", "Extraction statistics:");
-                    info!(target: "cli", "  - Py files count: {}", statistics.py_files_count);
-                    info!(target: "cli", "  - FTL files count: {:?}", statistics.ftl_files_count);
-                    info!(target: "cli", "  - FTL keys in code: {}", statistics.ftl_in_code_keys_count);
-                    info!(target: "cli", "  - FTL keys stored: {:?}", statistics.ftl_stored_keys_count);
-                    info!(target: "cli", "  - FTL keys updated: {:?}", statistics.ftl_keys_updated);
-                    info!(target: "cli", "  - FTL keys added: {:?}", statistics.ftl_keys_added);
-                    info!(target: "cli", "  - FTL keys commented: {:?}", statistics.ftl_keys_commented);
+                    if statistics.py_files_changes_detected {
+                        info!(target: "cli", "Extraction statistics:");
+                        info!(target: "cli", "  - Py files count: {}", statistics.py_files_count);
+                        info!(target: "cli", "  - FTL files count: {:?}", statistics.ftl_files_count);
+                        info!(target: "cli", "  - FTL keys in code: {}", statistics.ftl_in_code_keys_count);
+                        info!(target: "cli", "  - FTL keys stored: {:?}", statistics.ftl_stored_keys_count);
+                        info!(target: "cli", "  - FTL keys updated: {:?}", statistics.ftl_keys_updated);
+                        info!(target: "cli", "  - FTL keys added: {:?}", statistics.ftl_keys_added);
+                        info!(target: "cli", "  - FTL keys commented: {:?}", statistics.ftl_keys_commented);
+                    }
+                    info!(target: "cli", "  - Cache enabled: {:?}", use_cache);
+                    info!(target: "cli", "  - .py files changes detected: {}", statistics.py_files_changes_detected);
                 }
                 Err(e) => {
                     error!(target: "cli", "Error during extraction: {}", e);

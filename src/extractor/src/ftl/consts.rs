@@ -5,6 +5,7 @@ pub const I18N_LITERAL: &str = "i18n";
 pub const GET_LITERAL: &str = "get";
 pub const PATH_LITERAL: &str = "_path";
 pub const DEFAULT_FTL_FILENAME: &str = "_default.ftl";
+pub const CACHE_PATH: &str = ".ftl_extract_cache";
 
 pub static DEFAULT_I18N_KEYS: LazyLock<FastHashSet<String>> = LazyLock::new(|| {
     FastHashSet::from_iter([

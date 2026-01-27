@@ -1,4 +1,7 @@
-use crate::ftl::code_extractor::{extract_fluent_keys, sort_fluent_keys_by_path};
+use crate::ftl::change_detector::FileCache;
+use crate::ftl::code_extractor::{
+    extract_code_path_from_fluent_keys, extract_fluent_keys, sort_fluent_keys_by_path,
+};
 use crate::ftl::consts::{CommentsKeyModes, LineEndings};
 use crate::ftl::ftl_importer::import_ftl_from_dir;
 use crate::ftl::matcher::{FluentEntry, FluentKey};
@@ -28,6 +31,7 @@ pub struct ExtractConfig {
     pub comment_junks: bool,
     pub comment_keys_mode: CommentsKeyModes,
     pub line_endings: LineEndings,
+    pub use_cache: bool,
     pub dry_run: bool,
 }
 
@@ -46,6 +50,13 @@ pub fn extract(config: ExtractConfig) -> Result<ExtractionStatistics> {
     }
     let ignore_set = ignore_builder.build()?;
 
+    let cache_path: PathBuf = config.output_path.join(".ftl_extract_cache");
+    let mut cache: Option<FileCache> = if config.use_cache {
+        Some(FileCache::load(&cache_path)?)
+    } else {
+        None
+    };
+
     let start = std::time::Instant::now();
     let in_code_fluent_keys = extract_fluent_keys(
         &config.code_path,
@@ -55,13 +66,25 @@ pub fn extract(config: ExtractConfig) -> Result<ExtractionStatistics> {
         config.ignore_attributes.clone(),
         config.ignore_kwargs.clone(),
         &config.default_ftl_file,
+        &mut cache,
         &mut statistics,
     );
+
+    let in_code_fluent_keys = {
+        if let Some(keys) = in_code_fluent_keys {
+            statistics.py_files_changes_detected = true;
+            keys
+        } else {
+            statistics.py_files_changes_detected = false;
+            return Ok(statistics);
+        }
+    };
+
     statistics.ftl_in_code_keys_count = in_code_fluent_keys.len();
     info!(target: "extractor::ftl", "FTL Extraction completed in {:.3?}s.", start.elapsed().as_secs_f64());
 
     let start = std::time::Instant::now();
-    let results: Result<Vec<ExtractionStatistics>> = config
+    let results: Result<Vec<(FastHashMap<String, FluentKey>, ExtractionStatistics)>> = config
         .languages
         .par_iter()
         .map(|lang| {
@@ -76,16 +99,24 @@ pub fn extract(config: ExtractConfig) -> Result<ExtractionStatistics> {
                 &mut thread_local_stats,
             )?;
 
-            Ok(thread_local_stats)
+            Ok((thread_local_keys, thread_local_stats))
         })
         .collect();
 
     let results = results?;
 
+    if let Some(mut cache) = cache {
+        for path in extract_code_path_from_fluent_keys(&results[0].0) {
+            cache.mark_file_with_keys(&*path)
+        }
+
+        cache.save(&cache_path)?;
+    }
+
     info!(target: "extractor::ftl", "FTL Processing completed in {:.3?}s.", start.elapsed().as_secs_f64());
 
     // Merge statistics back into the main object
-    for stat in results {
+    for (_keys, stat) in results {
         statistics.merge(stat);
     }
 

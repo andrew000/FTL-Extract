@@ -1,3 +1,4 @@
+use crate::ftl::change_detector::FileCache;
 use crate::ftl::matcher::{FluentEntry, FluentKey, I18nMatcher};
 use crate::ftl::utils::{ExtractionStatistics, FastHashMap, FastHashSet};
 use globset::GlobSet;
@@ -50,6 +51,23 @@ fn find_py_files(search_path: &Path, ignore_set: &GlobSet) -> Vec<PathBuf> {
 
     result_paths
 }
+
+fn py_files_mtime_modified(py_files: &Vec<PathBuf>, cache: &mut FileCache) -> bool {
+    for file in py_files {
+        if cache.is_file_modified(&file) {
+            return true;
+        } else {
+            // Delete cache entries to detect deleted .py files later
+            cache.remove_entry(&file)
+        };
+    }
+    if cache.has_entries() {
+        // Some .py files were deleted but left in cache
+        return true;
+    };
+    false
+}
+
 fn parse_file(
     file: &PathBuf,
     i18n_keys: &FastHashSet<String>,
@@ -114,7 +132,7 @@ fn parse_file(
 
     matcher.fluent_keys
 }
-pub(crate) fn extract_fluent_keys<'a>(
+pub fn extract_fluent_keys<'a>(
     path: &'a Path,
     i18n_keys: FastHashSet<String>,
     i18n_keys_prefix: FastHashSet<String>,
@@ -122,10 +140,28 @@ pub(crate) fn extract_fluent_keys<'a>(
     ignore_attributes: FastHashSet<String>,
     ignore_kwargs: FastHashSet<String>,
     default_ftl_file: &'a Path,
+    cache: &mut Option<FileCache>,
     statistics: &mut ExtractionStatistics,
-) -> FastHashMap<String, FluentKey> {
+) -> Option<FastHashMap<String, FluentKey>> {
+    // Extract fluent keys from py files
+    // Return None if no .py files were modified
+
     let py_files = find_py_files(path, exclude_dirs);
     let py_files_count = AtomicUsize::new(0);
+
+    if let Some(cache) = cache {
+        py_files.iter().for_each(|file| {
+            cache.mark_file_without_keys(file);
+        });
+
+        if cache.has_entries() {
+            if !py_files_mtime_modified(&py_files, cache) {
+                return None;
+            } else {
+                cache.clean_files_with_keys();
+            }
+        }
+    }
 
     // Parallel Map-Reduce
     let fluent_keys: FastHashMap<String, FluentKey> = py_files
@@ -207,7 +243,6 @@ pub(crate) fn extract_fluent_keys<'a>(
                             if existing_key.path != val.path {
                                 panic!("FluentKey conflict during merge: {}", entry.key());
                             }
-                            // Additional checks omitted for brevity, but should be mirrored
                         }
                         Entry::Vacant(entry) => {
                             entry.insert(val);
@@ -220,10 +255,10 @@ pub(crate) fn extract_fluent_keys<'a>(
 
     statistics.py_files_count += py_files_count.load(Ordering::Relaxed);
 
-    fluent_keys
+    Some(fluent_keys)
 }
 
-pub(crate) fn sort_fluent_keys_by_path(
+pub fn sort_fluent_keys_by_path(
     fluent_keys: FastHashMap<String, FluentKey>,
 ) -> FastHashMap<Arc<PathBuf>, Vec<FluentKey>> {
     if fluent_keys.is_empty() {
@@ -237,6 +272,22 @@ pub(crate) fn sort_fluent_keys_by_path(
             .entry(fluent_key.path.clone())
             .or_default()
             .push(fluent_key);
+    }
+
+    sorted_fluent_keys
+}
+
+pub fn extract_code_path_from_fluent_keys(
+    fluent_keys: &FastHashMap<String, FluentKey>,
+) -> FastHashSet<Arc<PathBuf>> {
+    if (&fluent_keys).is_empty() {
+        return FastHashSet::default();
+    }
+
+    let mut sorted_fluent_keys: FastHashSet<Arc<PathBuf>> = FastHashSet::default();
+
+    for fluent_key in fluent_keys.values() {
+        sorted_fluent_keys.insert(fluent_key.code_path.clone());
     }
 
     sorted_fluent_keys
@@ -288,12 +339,14 @@ mod tests {
             &code_path,
             key_prefixes.clone(),
             FastHashSet::default(),
-            &globset::GlobSet::empty(),
+            &GlobSet::empty(),
             FastHashSet::default(),
             FastHashSet::default(),
             &PathBuf::from("locales/en.ftl"),
+            &mut None,
             &mut statistics,
-        );
+        )
+        .unwrap();
 
         eprintln!("Extracted Fluent Keys: {:?}", fluent_keys.keys());
 

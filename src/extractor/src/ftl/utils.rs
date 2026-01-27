@@ -13,6 +13,7 @@ pub struct ExtractionStatistics {
     pub ftl_keys_updated: FastHashMap<String, usize>,
     pub ftl_keys_added: FastHashMap<String, usize>,
     pub ftl_keys_commented: FastHashMap<String, usize>,
+    pub py_files_changes_detected: bool
 }
 
 impl ExtractionStatistics {
@@ -25,6 +26,7 @@ impl ExtractionStatistics {
             ftl_keys_updated: FastHashMap::default(),
             ftl_keys_added: FastHashMap::default(),
             ftl_keys_commented: FastHashMap::default(),
+            py_files_changes_detected: false
         }
     }
 

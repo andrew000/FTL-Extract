@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, cast
 import click
 from fluent.syntax import FluentParser
 
+from ftl_extract.stub.base_ast import BASE_STUB_AST
 from ftl_extract.stub.tree import METADATA_DICT_KEY, Metadata, generate_tree
 from ftl_extract.stub.utils import to_camel_case
 from ftl_extract.stub.visitor import FluentVisitor, Message
@@ -42,194 +43,7 @@ def locate_ftl_files(path: Path) -> Generator[Path, Any, Any]:
 
 
 def build_base_ast() -> ast.Module:
-    return ast.Module(
-        body=[
-            ast.ImportFrom(module="collections.abc", names=[ast.alias(name="Generator")], level=0),
-            ast.ImportFrom(module="contextlib", names=[ast.alias(name="contextmanager")], level=0),
-            ast.ImportFrom(
-                module="typing",
-                names=[
-                    ast.alias(name="Any"),
-                    ast.alias(name="Literal"),
-                    ast.alias(name="overload"),
-                ],
-                level=0,
-            ),
-            ast.ImportFrom(module="aiogram_i18n", names=[ast.alias(name="LazyProxy")], level=0),
-            ast.ClassDef(
-                name="I18nContext",
-                bases=[ast.Name(id="I18nStub")],
-                keywords=[],
-                body=[
-                    ast.FunctionDef(
-                        name="get",
-                        args=ast.arguments(
-                            posonlyargs=[
-                                ast.arg(arg="self"),
-                                ast.arg(arg="key", annotation=ast.Name(id="str")),
-                            ],
-                            args=[],
-                            vararg=None,
-                            kwonlyargs=[],
-                            kw_defaults=[],
-                            kwarg=ast.arg(arg="kwargs", annotation=ast.Name(id="Any")),
-                            defaults=[],
-                        ),
-                        body=[ast.Expr(value=ast.Constant(value=Ellipsis))],
-                        decorator_list=[],
-                        returns=ast.Name(id="str"),
-                    ),
-                    ast.AsyncFunctionDef(
-                        name="set_locale",
-                        args=ast.arguments(
-                            posonlyargs=[],
-                            args=[
-                                ast.arg(arg="self"),
-                                ast.arg(arg="locale", annotation=ast.Name(id="str")),
-                            ],
-                            vararg=None,
-                            kwonlyargs=[],
-                            kw_defaults=[],
-                            kwarg=ast.arg(arg="kwargs", annotation=ast.Name(id="Any")),
-                            defaults=[],
-                        ),
-                        body=[ast.Expr(value=ast.Constant(value=Ellipsis))],
-                        decorator_list=[],
-                        returns=ast.Constant(value=None),
-                    ),
-                    ast.FunctionDef(
-                        name="use_locale",
-                        args=ast.arguments(
-                            posonlyargs=[],
-                            args=[
-                                ast.arg(arg="self"),
-                                ast.arg(arg="locale", annotation=ast.Name(id="str")),
-                            ],
-                            vararg=None,
-                            kwonlyargs=[],
-                            kw_defaults=[],
-                            kwarg=None,
-                            defaults=[],
-                        ),
-                        body=[ast.Expr(value=ast.Constant(value=Ellipsis))],
-                        decorator_list=[ast.Name(id="contextmanager")],
-                        returns=ast.Subscript(
-                            value=ast.Name(id="Generator"),
-                            slice=ast.Tuple(
-                                elts=[
-                                    ast.Name(id="I18nContext"),
-                                    ast.Constant(value=None),
-                                    ast.Constant(value=None),
-                                ],
-                            ),
-                        ),
-                    ),
-                    ast.FunctionDef(
-                        name="use_context",
-                        args=ast.arguments(
-                            posonlyargs=[],
-                            args=[ast.arg(arg="self")],
-                            vararg=None,
-                            kwonlyargs=[],
-                            kw_defaults=[],
-                            kwarg=ast.arg(arg="kwargs", annotation=ast.Name(id="Any")),
-                            defaults=[],
-                        ),
-                        body=[ast.Expr(value=ast.Constant(value=Ellipsis))],
-                        decorator_list=[ast.Name(id="contextmanager")],
-                        returns=ast.Subscript(
-                            value=ast.Name(id="Generator"),
-                            slice=ast.Tuple(
-                                elts=[
-                                    ast.Name(id="I18nContext"),
-                                    ast.Constant(value=None),
-                                    ast.Constant(value=None),
-                                ],
-                            ),
-                        ),
-                    ),
-                    ast.FunctionDef(
-                        name="set_context",
-                        args=ast.arguments(
-                            posonlyargs=[],
-                            args=[ast.arg(arg="self")],
-                            vararg=None,
-                            kwonlyargs=[],
-                            kw_defaults=[],
-                            kwarg=ast.arg(arg="kwargs", annotation=ast.Name(id="Any")),
-                            defaults=[],
-                        ),
-                        body=[ast.Expr(value=ast.Constant(value=Ellipsis))],
-                        decorator_list=[],
-                        returns=ast.Constant(value=None),
-                    ),
-                ],
-                decorator_list=[],
-            ),
-            ast.ClassDef(
-                name="LazyFactory",
-                bases=[ast.Name(id="I18nStub")],
-                keywords=[],
-                body=[
-                    ast.AnnAssign(
-                        target=ast.Name(id="key_separator"),
-                        annotation=ast.Name(id="str"),
-                        simple=1,
-                    ),
-                    ast.FunctionDef(
-                        name="set_separator",
-                        args=ast.arguments(
-                            posonlyargs=[],
-                            args=[
-                                ast.arg(arg="self"),
-                                ast.arg(arg="key_separator", annotation=ast.Name(id="str")),
-                            ],
-                            vararg=None,
-                            kwonlyargs=[],
-                            kw_defaults=[],
-                            kwarg=None,
-                            defaults=[],
-                        ),
-                        body=[ast.Expr(value=ast.Constant(value=Ellipsis))],
-                        decorator_list=[],
-                        returns=ast.Constant(value=None),
-                    ),
-                    ast.FunctionDef(
-                        name="__call__",
-                        args=ast.arguments(
-                            posonlyargs=[
-                                ast.arg(arg="self"),
-                                ast.arg(arg="key", annotation=ast.Name(id="str")),
-                            ],
-                            args=[],
-                            vararg=None,
-                            kwonlyargs=[],
-                            kw_defaults=[],
-                            kwarg=ast.arg(
-                                arg="kwargs",
-                                annotation=ast.Subscript(
-                                    value=ast.Name(id="dict"),
-                                    slice=ast.Tuple(
-                                        elts=[
-                                            ast.Name(id="str"),
-                                            ast.Name(id="Any"),
-                                        ],
-                                    ),
-                                ),
-                            ),
-                            defaults=[],
-                        ),
-                        body=[ast.Expr(value=ast.Constant(value=Ellipsis))],
-                        decorator_list=[],
-                        returns=ast.Name(id="LazyProxy"),
-                    ),
-                ],
-                decorator_list=[],
-            ),
-            ast.AnnAssign(target=ast.Name(id="L"), annotation=ast.Name(id="LazyFactory"), simple=1),
-        ],
-        type_ignores=[],
-    )
+    return ast.parse(BASE_STUB_AST)
 
 
 def create_static_method(name: str, metadata: Metadata) -> ast.FunctionDef:
@@ -290,11 +104,7 @@ def process_tree(
                 ast.stmt,
                 ast.Assign(
                     targets=[ast.Name(id=name, ctx=ast.Store())],
-                    value=ast.Call(
-                        func=ast.Name(id=f"__{to_camel_case(name)}", ctx=ast.Load()),
-                        args=[],
-                        keywords=[],
-                    ),
+                    value=ast.Name(id=f"__{to_camel_case(name)}", ctx=ast.Load()),
                 ),
             ),
         )
@@ -334,6 +144,11 @@ def generate_stubs(ftl_path: Path, output_path: Path, export_tree: bool = False)
 
     for ftl_file in ftl_files:
         read_ftl_messages(visitor, ftl_file)
+
+    visitor.run_delayed_term_reference_markers()
+
+    # Sort messages by key to have deterministic output
+    visitor.messages = dict(sorted(visitor.messages.items(), key=lambda item: item[0]))
 
     tree = generate_tree(visitor.messages)
     tree: dict[str, dict[str, Any]] = {"i18n_stub": {**tree}}

@@ -63,7 +63,7 @@ test-rust-cov:
     cargo llvm-cov --all-features --workspace --lcov --output-path lcov.info
 
 outdated:
-    uv tree --universal --outdated --no-cache
+    uv tree --universal --outdated --no-cache --depth=1
 
 sync:
     uv sync --reinstall-package ftl_extract --all-extras

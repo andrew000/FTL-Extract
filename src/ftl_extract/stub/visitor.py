@@ -31,6 +31,8 @@ class FluentVisitor(Visitor):
         self.messages: dict[str, Message] = {}  # { key: Message }
         self.terms: dict[str, Term] = {}  # { key: Term }
 
+        self.delayed_kwargs_from_term_reference: list[tuple[Message | Term, ast.TermReference]] = []
+
     @staticmethod
     def _extract_kwargs_from_variable_reference(
         *,
@@ -72,6 +74,14 @@ class FluentVisitor(Visitor):
 
         obj.kwargs.extend(self._extract_kwargs_from_message(message=reference_message))
 
+    def _mark_for_delayed_extract_kwargs_from_term_reference(
+        self,
+        *,
+        obj: Message | Term,
+        term_reference: ast.TermReference,
+    ) -> None:
+        self.delayed_kwargs_from_term_reference.append((obj, term_reference))
+
     def _extract_kwargs_from_term_reference(
         self,
         *,
@@ -112,7 +122,7 @@ class FluentVisitor(Visitor):
             )
 
         elif isinstance(expression, ast.TermReference):
-            self._extract_kwargs_from_term_reference(
+            self._mark_for_delayed_extract_kwargs_from_term_reference(
                 obj=obj,
                 term_reference=expression,
             )
@@ -167,3 +177,7 @@ class FluentVisitor(Visitor):
         self._extract_kwargs_from_term(term)
 
         return self.generic_visit(fluent_term)
+
+    def run_delayed_term_reference_markers(self) -> None:
+        for obj, term_reference in self.delayed_kwargs_from_term_reference:
+            self._extract_kwargs_from_term_reference(obj=obj, term_reference=term_reference)

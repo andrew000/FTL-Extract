@@ -35,7 +35,7 @@ pub static DEFAULT_IGNORE_ATTRIBUTES: LazyLock<FastHashSet<String>> = LazyLock::
 });
 
 pub static DEFAULT_IGNORE_KWARGS: LazyLock<FastHashSet<String>> =
-    LazyLock::new(|| FastHashSet::default());
+    LazyLock::new(FastHashSet::default);
 
 #[derive(PartialEq, Clone, Debug, clap::ValueEnum)]
 pub enum CommentsKeyModes {

@@ -282,10 +282,7 @@ fn write_results(
     sorted_fluent_keys.par_iter().for_each(|(path, keys)| {
         let full_path = lang_dir.join(path.as_ref());
 
-        let misc_entries = leave_as_is_map
-            .get(&full_path)
-            .map(|v| v.clone())
-            .unwrap_or_default();
+        let misc_entries = leave_as_is_map.get(&full_path).cloned().unwrap_or_default();
 
         let ftl_content = generate_ftl(keys, &misc_entries);
 

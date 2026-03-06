@@ -1,10 +1,10 @@
 [workspace.package]
 version = "0.10.0"
 edition = "2024"
-rust-version = "1.91"
-homepage = "https://example.com"
-documentation = "https://example.com"
-repository = "https://example.com"
+rust-version = "1.94"
+homepage = "https://github.com/andrew000/FTL-Extract"
+documentation = "https://github.com/andrew000/FTL-Extract"
+repository = "https://github.com/andrew000/FTL-Extract"
 authors = ["Andrew King <help@kusbot.com>"]
 license = "MIT"
 include = ["src/**/*.rs"]
@@ -14,11 +14,13 @@ resolver = "3"
 members = [
     "src/cli",
     "src/extractor",
+    "src/stub",
 ]
 
 [workspace.dependencies]
 cli = { path = "src/cli" }
 extractor = { path = "src/extractor" }
+stub = { path = "src/stub" }
 
 # Dev dependencies
 pretty_assertions = { version = "1.4.1" }

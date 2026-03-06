@@ -7,14 +7,24 @@ docs_source_dir := docs_dir / "source"
 reports_dir := "reports"
 tests_dir := "tests"
 
-lint-py:
+lint target="py":
+    @{{ if target == "py" { "just _lint-py" } else if target == "rust" { "just _lint-rust" } else { "echo \"Unknown target: " + target + ". Please specify 'py' or 'rust'.\"" } }}
+
+_lint-py:
     @echo "Running ruff..."
     uv run ruff check --config pyproject.toml --diff --unsafe-fixes {{ py_code_dir }} {{ tests_dir }}
 
     @echo "Running mypy..."
     uv run mypy --config-file pyproject.toml
 
-format-py:
+_lint-rust:
+    @echo "Running cargo clippy..."
+    cargo clippy --all-targets --all-features
+
+format target="py":
+    @{{ if target == "py" { "just _format-py" } else if target == "rust" { "just _format-rust" } else { "echo \"Unknown target: " + target + ". Please specify 'py' or 'rust'.\"" } }}
+
+_format-py:
     @echo "Running ruff check with --fix"
     uv run ruff check --config pyproject.toml --fix --unsafe-fixes {{ py_code_dir }} {{ tests_dir }}
 
@@ -24,11 +34,7 @@ format-py:
     @echo "Running isort..."
     uv run isort --settings-path pyproject.toml {{ py_code_dir }} {{ tests_dir }}
 
-lint-rust:
-    @echo "Running cargo clippy..."
-    cargo clippy --all-targets --all-features
-
-format-rust:
+_format-rust:
     @echo "Running cargo fix..."
     cargo fix --allow-dirty --all
 
@@ -68,5 +74,12 @@ outdated:
 sync:
     uv sync --reinstall-package ftl_extract --all-extras
 
+[windows]
 build:
     uv build --wheel --sdist
+    $env:BUILD_RUST_IMPL = "1"; uv pip install -e .
+
+[unix]
+build:
+    uv build --wheel --sdist
+    BUILD_RUST_IMPL=1 uv pip install -e .

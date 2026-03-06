@@ -18,7 +18,6 @@ classifiers = [
 ]
 
 dependencies = [
-    "click==8.*",
     "fluent-syntax>=0.19,<1",
 ]
 
@@ -55,7 +54,7 @@ Issues = "https://github.com/andrew000/FTL-Extract/issues"
 Repository = "https://github.com/andrew000/FTL-Extract"
 
 [project.scripts]
-ftl = "ftl_extract.cli:ftl"
+ftl = "ftl_extract.cli:main"
 
 [tool.uv]
 package = true

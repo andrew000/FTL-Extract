@@ -1,0 +1,25 @@
+[package]
+name = "stub"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+homepage.workspace = true
+documentation.workspace = true
+repository.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[lib]
+name = "stub"
+
+[dependencies]
+anyhow = { version = "1.0.102" }
+fluent-syntax = { git = "https://github.com/projectfluent/fluent-rs.git", rev = "e0b443552a9b277badc958ab533b506394aad915" }
+log = { version = "0.4.29" }
+serde = { version = "1.0.228", features = ["derive"] }
+serde_json = { version = "1.0.149" }
+indexmap = { version = "2.13.0", features = ["serde"] }
+walkdir = { version = "2.5.0" }
+
+[dev-dependencies]
+tempfile = { version = "3.26.0" }

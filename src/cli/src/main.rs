@@ -8,6 +8,7 @@ use extractor::ftl::utils::FastHashSet;
 use log::{error, info};
 use mimalloc::MiMalloc;
 use std::path::PathBuf;
+use stub::{StubConfig, generate_stub};
 
 #[global_allocator]
 static GLOBAL: MiMalloc = MiMalloc;
@@ -91,6 +92,19 @@ enum Commands {
         #[arg(long, default_value_t = false)]
         dry_run: bool,
     },
+    Stub {
+        /// Path to the FTL files directory
+        #[arg()]
+        ftl_path: PathBuf,
+
+        /// Output path for the .pyi stub file
+        #[arg()]
+        output_path: PathBuf,
+
+        /// Export intermediate tree structure as JSON
+        #[arg(long, default_value_t = false)]
+        export_tree: bool,
+    },
 }
 
 fn main() {
@@ -172,6 +186,30 @@ fn main() {
                 }
                 Err(e) => {
                     error!(target: "cli", "Error during extraction: {}", e);
+                    std::process::exit(1);
+                }
+            }
+        }
+        Some(Commands::Stub {
+            ftl_path,
+            output_path,
+            export_tree,
+        }) => {
+            info!(target: "cli", "FTL path: {}", ftl_path.display());
+            info!(target: "cli", "Output path: {}", output_path.display());
+
+            let config = StubConfig {
+                ftl_path,
+                output_path,
+                export_tree,
+            };
+
+            match generate_stub(config) {
+                Ok(()) => {
+                    info!(target: "cli", "Stub generation completed successfully");
+                }
+                Err(e) => {
+                    error!(target: "cli", "Error during stub generation: {}", e);
                     std::process::exit(1);
                 }
             }

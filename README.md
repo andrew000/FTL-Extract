@@ -5,11 +5,7 @@
 **FTL-Extract** is a Python package that extracts Fluent keys from `.py` files and generates `.ftl` file with extracted
 keys.
 
-***
-
-🔥 Try `fast-ftl-extract` command.
-
-It's Rust version of `ftl extract` command, that is 10-20 times faster than Python version.
+The `ftl` CLI is implemented in Rust and ships as a native binary inside the Python wheel.
 
 ***
 
@@ -125,7 +121,7 @@ $ ftl extract project_path/code_path project_path/locales -K LF -K LazyProxy -K 
 ## How I use FTL-Extract in most of my projects
 
 ```shell
-$ fast-ftl-extract \
+$ ftl extract \
   'app/bot' \
   'app/bot/locales' \
   -l 'en' \

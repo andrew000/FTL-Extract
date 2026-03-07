@@ -14,9 +14,6 @@ _lint-py:
     @echo "Running ruff..."
     uv run ruff check --config pyproject.toml --diff --unsafe-fixes {{ py_code_dir }} {{ tests_dir }}
 
-    @echo "Running mypy..."
-    uv run mypy --config-file pyproject.toml
-
 _lint-rust:
     @echo "Running cargo clippy..."
     cargo clippy --all-targets --all-features
@@ -77,9 +74,9 @@ sync:
 [windows]
 build:
     uv build --wheel --sdist
-    $env:BUILD_RUST_IMPL = "1"; uv pip install -e .
+    uv pip install -e .
 
 [unix]
 build:
     uv build --wheel --sdist
-    BUILD_RUST_IMPL=1 uv pip install -e .
+    uv pip install -e .

@@ -15,7 +15,7 @@ static GLOBAL: MiMalloc = MiMalloc;
 
 /// Fast Fluent CLI
 #[derive(Parser)]
-#[command(name = "fast-ftl", version, about)]
+#[command(name = "ftl", version, about)]
 struct Cli {
     #[command(subcommand)]
     command: Option<Commands>,

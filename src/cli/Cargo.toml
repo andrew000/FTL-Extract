@@ -10,7 +10,7 @@ authors.workspace = true
 license.workspace = true
 
 [[bin]]
-name = "fast-ftl"
+name = "ftl"
 path = "src/main.rs"
 
 [dependencies]

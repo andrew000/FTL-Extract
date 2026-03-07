@@ -17,13 +17,6 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      # Set up the environment for the extension build on macOS and Windows
-      # This OS doesn't compile the extension for `{many,musl}linux` distributions in containers
-      - name: Set up 'BUILD_RUST_IMPL' environment variable
-        if: runner.os == 'Linux'
-        shell: bash
-        run: echo "BUILD_RUST_IMPL=1" >> $GITHUB_ENV
-
       - name: Install uv
         uses: astral-sh/setup-uv@v7
         with:
@@ -37,22 +30,7 @@ jobs:
       - name: Rust cache
         uses: Swatinem/rust-cache@v2
 
-      - name: Prepare the project (Windows and macOS)
-        if: runner.os == 'Windows' || runner.os == 'macOS'
-        shell: bash
-        run: uv sync --all-extras
-
-      - name: Prepare the project (Linux py3.14)
-        if: runner.os == 'Linux' && matrix.python-version == '3.14'
-        env:
-          BUILD_RUST_IMPL: "1"
-        shell: bash
-        run: uv sync --all-extras
-
-      - name: Prepare the project (Linux !py3.14)
-        if: runner.os == 'Linux' && matrix.python-version != '3.14'
-        env:
-          BUILD_RUST_IMPL: "0"
+      - name: Prepare the project
         shell: bash
         run: uv sync --all-extras
 
@@ -68,21 +46,18 @@ jobs:
         if: runner.os == 'Linux' && matrix.python-version == '3.14'
         uses: taiki-e/install-action@cargo-llvm-cov
 
-      - name: Test with Rust extension (Linux py3.14)
+      - name: Test with coverage (Linux py3.14)
         if: runner.os == 'Linux' && matrix.python-version == '3.14'
         shell: bash
         env:
-          BUILD_RUST_IMPL: "1"
           CARGO_TERM_COLOR: "always"
         run: |
           just test-py-cov
           just test-rust-cov
 
-      - name: Test without Rust extension (Other OS and Python versions)
-        if: runner.os != 'Linux' && matrix.python-version != '3.14'
+      - name: Test (other OS and Python versions)
+        if: runner.os != 'Linux' || matrix.python-version != '3.14'
         shell: bash
-        env:
-          BUILD_RUST_IMPL: "0"
         run: just test-py
 
       - name: Upload coverage to Codecov
@@ -93,48 +68,11 @@ jobs:
           files: lcov.info,coverage.xml
           fail_ci_if_error: true
 
-      - name: Build the package without Rust extension (Windows and macOS)
-        if: runner.os == 'Windows' || runner.os == 'macOS'
+      - name: Build the package
         shell: bash
-        env:
-          BUILD_RUST_IMPL: "0"
         run: uv build --wheel
 
-      - name: Build the package with Rust extension (Linux py3.14)
-        if: runner.os == 'Linux' && matrix.python-version == '3.14'
-        shell: bash
-        env:
-          BUILD_RUST_IMPL: "1"
-        run: uv build --wheel
-
-      - name: Build the package without Rust extension (Linux !py3.14)
-        if: runner.os == 'Linux' && matrix.python-version != '3.14'
-        shell: bash
-        env:
-          BUILD_RUST_IMPL: "0"
-        run: uv build --wheel
-
-      - name: Verify wheel installation (Windows and macOS)
-        if: runner.os == 'Windows' || runner.os == 'macOS'
-        shell: bash
-        run: |
-          for wheel in dist/*.whl; do
-            uv run --verbose --with $wheel --no-project --refresh-package ftl_extract -- python -c "import ftl_extract; print(ftl_extract.__version__)"
-            uv run --verbose --with $wheel --no-project --refresh-package ftl_extract -- ftl --version
-          done
-
-      - name: Verify wheel installation (Linux py3.14)
-        if: runner.os == 'Linux' && matrix.python-version == '3.14'
-        shell: bash
-        run: |
-          for wheel in dist/*.whl; do
-            uv run --verbose --with $wheel --no-project --refresh-package ftl_extract -- python -c "import ftl_extract; print(ftl_extract.__version__)"
-            uv run --verbose --with $wheel --no-project --refresh-package ftl_extract -- ftl --version
-            uv run --verbose --with $wheel --no-project --refresh-package ftl_extract -- fast-ftl --version
-          done
-
-      - name: Verify wheel installation (Linux !py3.14)
-        if: runner.os == 'Linux' && matrix.python-version != '3.14'
+      - name: Verify wheel installation
         shell: bash
         run: |
           for wheel in dist/*.whl; do
@@ -170,13 +108,6 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      # Set up the environment for the extension build on macOS and Windows
-      # This OS doesn't compile the extension for `{many,musl}linux` distributions in containers
-      - name: Set up 'BUILD_RUST_IMPL' environment variable
-        if: runner.os == 'Windows' || runner.os == 'macOS'
-        shell: bash
-        run: echo "BUILD_RUST_IMPL=1" >> $GITHUB_ENV
-
       - name: Install uv
         uses: astral-sh/setup-uv@v7
         with:
@@ -203,7 +134,6 @@ jobs:
           done
           for wheel in wheelhouse/*.whl; do
             uv run --verbose --with $wheel --no-project --refresh-package ftl_extract -- ftl --version
-            uv run --verbose --with $wheel --no-project --refresh-package ftl_extract -- fast-ftl --version
           done
 
       - name: Build, fix and test wheels (macOS arm64)
@@ -218,7 +148,6 @@ jobs:
           done
           for wheel in wheelhouse/*.whl; do
             uv run --verbose --with $wheel --no-project --refresh-package ftl_extract -- ftl --version
-            uv run --verbose --with $wheel --no-project --refresh-package ftl_extract -- fast-ftl --version
           done
 
       - name: Build, fix and test wheels (Linux manylinux)
@@ -232,7 +161,7 @@ jobs:
             uv run wheel tags --python-tag py3 --abi-tag none --remove $wheel
           done
           for wheel in wheelhouse/*.whl; do
-            uv run --verbose --with $wheel --no-project --refresh-package ftl_extract -- fast-ftl --version
+            uv run --verbose --with $wheel --no-project --refresh-package ftl_extract -- ftl --version
           done
 
       - name: Build, fix and test wheels (Linux musllinux)
@@ -246,7 +175,7 @@ jobs:
             uv run wheel tags --python-tag py3 --abi-tag none --remove $wheel
           done
           for wheel in wheelhouse/*.whl; do
-            uv run --verbose --with $wheel --no-project --refresh-package ftl_extract -- fast-ftl --version
+            uv run --verbose --with $wheel --no-project --refresh-package ftl_extract -- ftl --version
           done
 
       - name: Build sdist

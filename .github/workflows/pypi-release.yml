@@ -31,13 +31,6 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      # Set up the environment for the extension build on macOS and Windows
-      # This OS doesn't compile the extension for `{many,musl}linux` distributions in containers
-      - name: Set up 'BUILD_RUST_IMPL' environment variable
-        if: runner.os == 'Windows' || runner.os == 'macOS'
-        shell: bash
-        run: echo "BUILD_RUST_IMPL=1" >> $GITHUB_ENV
-
       - name: Install uv
         uses: astral-sh/setup-uv@v7
         with:
@@ -64,7 +57,6 @@ jobs:
           done
           for wheel in wheelhouse/*.whl; do
             uv run --verbose --with $wheel --no-project --refresh-package ftl_extract -- ftl --version
-            uv run --verbose --with $wheel --no-project --refresh-package ftl_extract -- fast-ftl --version
           done
 
       - name: Build, fix and test wheels (macOS arm64)
@@ -79,7 +71,6 @@ jobs:
           done
           for wheel in wheelhouse/*.whl; do
             uv run --verbose --with $wheel --no-project --refresh-package ftl_extract -- ftl --version
-            uv run --verbose --with $wheel --no-project --refresh-package ftl_extract -- fast-ftl --version
           done
 
       - name: Build, fix and test wheels (Linux manylinux)
@@ -93,7 +84,7 @@ jobs:
             uv run wheel tags --python-tag py3 --abi-tag none --remove $wheel
           done
           for wheel in wheelhouse/*.whl; do
-            uv run --verbose --with $wheel --no-project --refresh-package ftl_extract -- fast-ftl --version
+            uv run --verbose --with $wheel --no-project --refresh-package ftl_extract -- ftl --version
           done
 
       - name: Build, fix and test wheels (Linux musllinux)
@@ -107,7 +98,7 @@ jobs:
             uv run wheel tags --python-tag py3 --abi-tag none --remove $wheel
           done
           for wheel in wheelhouse/*.whl; do
-            uv run --verbose --with $wheel --no-project --refresh-package ftl_extract -- fast-ftl --version
+            uv run --verbose --with $wheel --no-project --refresh-package ftl_extract -- ftl --version
           done
 
       - name: Build sdist

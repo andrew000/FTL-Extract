@@ -17,16 +17,12 @@ classifiers = [
     "Programming Language :: Python :: 3.14",
 ]
 
-dependencies = [
-    "fluent-syntax>=0.19,<1",
-]
+dependencies = []
 
 [project.optional-dependencies]
 dev = [
     "cibuildwheel==3.4.0",
-    "fluent-runtime==0.4.0",
     "isort==8.0.1",
-    "mypy==1.19.1",
     "pre-commit==4.5.1",
     "ruff==0.15.5",
     "setuptools-rust==1.12.0",
@@ -53,9 +49,6 @@ Homepage = "https://github.com/andrew000/FTL-Extract"
 Issues = "https://github.com/andrew000/FTL-Extract/issues"
 Repository = "https://github.com/andrew000/FTL-Extract"
 
-[project.scripts]
-ftl = "ftl_extract.cli:main"
-
 [tool.uv]
 package = true
 
@@ -72,7 +65,7 @@ build-verbosity = 1
 [tool.cibuildwheel.linux]
 before-all = "curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal"
 before-build = "cargo build --release"
-environment = { PATH = "$HOME/.cargo/bin:$PATH", BUILD_RUST_IMPL = 1 }
+environment = { PATH = "$HOME/.cargo/bin:$PATH" }
 
 [tool.pytest.ini_options]
 testpaths = "tests"
@@ -103,7 +96,6 @@ src = ["src", "tests"]
 line-length = 100
 exclude = [
     ".git",
-    ".mypy_cache",
     ".ruff_cache",
     "__pypackages__",
     "__pycache__",
@@ -140,36 +132,3 @@ quote-style = "double"
 indent-style = "space"
 skip-magic-trailing-comma = false
 line-ending = "auto"
-
-[tool.mypy]
-python_version = "3.11"
-mypy_path = "src"
-packages = ["ftl_extract"]
-plugins = []
-allow_redefinition = true
-check_untyped_defs = true
-disallow_any_generics = true
-disallow_incomplete_defs = true
-disallow_untyped_calls = true
-disallow_untyped_defs = true
-extra_checks = true
-follow_imports = "skip"
-follow_imports_for_stubs = false
-ignore_missing_imports = false
-namespace_packages = true
-no_implicit_optional = true
-no_implicit_reexport = true
-pretty = true
-show_absolute_path = true
-show_error_codes = true
-show_error_context = true
-warn_unused_configs = true
-warn_unused_ignores = true
-disable_error_code = [
-    "no-redef",
-]
-exclude = [
-    "\\.?venv",
-    "\\.idea",
-    "\\.tests?",
-]

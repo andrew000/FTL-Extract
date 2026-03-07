@@ -2,12 +2,9 @@ set shell := ["bash", "-c"]
 set windows-shell := ["pwsh.exe", "-NoLogo", "-Command"]
 
 py_code_dir := "src/ftl_extract"
-docs_dir := "docs"
-docs_source_dir := docs_dir / "source"
-reports_dir := "reports"
 tests_dir := "tests"
 
-lint target="py":
+lint target="rust":
     @{{ if target == "py" { "just _lint-py" } else if target == "rust" { "just _lint-rust" } else { "echo \"Unknown target: " + target + ". Please specify 'py' or 'rust'.\"" } }}
 
 _lint-py:
@@ -18,7 +15,7 @@ _lint-rust:
     @echo "Running cargo clippy..."
     cargo clippy --all-targets --all-features
 
-format target="py":
+format target="rust":
     @{{ if target == "py" { "just _format-py" } else if target == "rust" { "just _format-rust" } else { "echo \"Unknown target: " + target + ". Please specify 'py' or 'rust'.\"" } }}
 
 _format-py:
@@ -38,30 +35,12 @@ _format-rust:
     @echo "Running cargo fmt..."
     cargo fmt --all
 
-test-py:
-    @echo "Running pytest..."
-    uv run pytest \
-        -vv \
-        --cov={{ py_code_dir }} \
-        --cov-report=html \
-        --cov-report=term \
-        {{ tests_dir }}
 
-test-py-cov:
-    @echo "Running pytest for coverage report..."
-    uv run pytest \
-        -vv \
-        --cov={{ py_code_dir }} \
-        --cov-branch \
-        --cov-report=xml \
-        --cov-report=term \
-        {{ tests_dir }}
-
-test-rust:
+test:
     @echo "Running cargo llvm-cov..."
     cargo llvm-cov --html
 
-test-rust-cov:
+test-cov:
     @echo "Running cargo llvm-cov for lcov report..."
     cargo llvm-cov --all-features --workspace --lcov --output-path lcov.info
 

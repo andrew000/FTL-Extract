@@ -43,7 +43,7 @@ jobs:
 
       - name: Prepare the project
         shell: bash
-        run: uv sync --all-extras --verbose
+        run: uv sync --all-extras
 
       - name: Build and fix wheels (Windows)
         if: runner.os == 'Windows' && matrix.arch == 'AMD64'

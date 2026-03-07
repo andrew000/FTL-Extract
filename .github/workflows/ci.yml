@@ -1,4 +1,4 @@
-name: Python package Lint+Test+Build
+name: CI
 
 on:
   push:
@@ -7,82 +7,7 @@ on:
     branches: [ "dev" ]
 
 jobs:
-  ci:
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: true
-      matrix:
-        os: [ ubuntu-latest, windows-latest ]  # Ahh... Why macOS is so expensive for CI builds...
-        python-version: [ "3.11", "3.12", "3.13", "3.14" ]
-    steps:
-      - uses: actions/checkout@v6
-
-      - name: Install uv
-        uses: astral-sh/setup-uv@v7
-        with:
-          python-version: ${{ matrix.python-version }}
-          version: "latest"
-          enable-cache: true
-
-      - name: Install Just
-      - uses: taiki-e/install-action@just
-
-      - name: Rust cache
-        uses: Swatinem/rust-cache@v2
-
-      - name: Prepare the project
-        shell: bash
-        run: uv sync --all-extras
-
-      - name: Minimize uv cache
-        shell: bash
-        run: uv cache prune --ci
-
-      - name: Lint
-        shell: bash
-        run: just lint py
-
-      - name: Install cargo-llvm-cov (Linux py3.14)
-        if: runner.os == 'Linux' && matrix.python-version == '3.14'
-        uses: taiki-e/install-action@cargo-llvm-cov
-
-      - name: Test with coverage (Linux py3.14)
-        if: runner.os == 'Linux' && matrix.python-version == '3.14'
-        shell: bash
-        env:
-          CARGO_TERM_COLOR: "always"
-        run: |
-          just test-py-cov
-          just test-rust-cov
-
-      - name: Test (other OS and Python versions)
-        if: runner.os != 'Linux' || matrix.python-version != '3.14'
-        shell: bash
-        run: just test-py
-
-      - name: Upload coverage to Codecov
-        if: runner.os == 'Linux' && matrix.python-version == '3.14'
-        uses: codecov/codecov-action@v5
-        with:
-          token: ${{ secrets.CODECOV_TOKEN }} # required for private repos or protected branches
-          files: lcov.info,coverage.xml
-          fail_ci_if_error: true
-
-      - name: Build the package
-        shell: bash
-        run: uv build --wheel
-
-      - name: Verify wheel installation
-        shell: bash
-        run: |
-          for wheel in dist/*.whl; do
-            uv run --verbose --with $wheel --no-project --refresh-package ftl_extract -- python -c "import ftl_extract; print(ftl_extract.__version__)"
-            uv run --verbose --with $wheel --no-project --refresh-package ftl_extract -- ftl --version
-          done
-
-  extension-build:
-    # Wait for the `ci` job to finish to save resources and money if `ci` can't compile the extension 🤷‍♂️
-    needs: ci
+  build:
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: true
@@ -115,12 +40,39 @@ jobs:
           version: "latest"
           activate-environment: "true"
 
+      - name: Install Just
+        uses: taiki-e/install-action@just
+
       - name: Rust cache
         uses: Swatinem/rust-cache@v2
 
       - name: Prepare the project
         shell: bash
-        run: uv sync --all-extras --verbose
+        run: uv sync --all-extras
+
+      - name: Lint
+        if: matrix.os == 'ubuntu-latest' && matrix.libc == 'manylinux'
+        shell: bash
+        run: just lint rust
+
+      - name: Install cargo-llvm-cov
+        if: matrix.os == 'ubuntu-latest' && matrix.libc == 'manylinux'
+        uses: taiki-e/install-action@cargo-llvm-cov
+
+      - name: Test
+        if: matrix.os == 'ubuntu-latest' && matrix.libc == 'manylinux'
+        shell: bash
+        env:
+          CARGO_TERM_COLOR: "always"
+        run: just test-cov
+
+      - name: Upload coverage to Codecov
+        if: matrix.os == 'ubuntu-latest' && matrix.libc == 'manylinux'
+        uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: lcov.info
+          fail_ci_if_error: true
 
       - name: Build and fix wheels (Windows)
         if: runner.os == 'Windows' && matrix.arch == 'AMD64'
@@ -179,7 +131,7 @@ jobs:
           done
 
       - name: Build sdist
-        if: runner.os == 'Linux' && matrix.arch == 'x86_64' && matrix.libc == 'manylinux'
+        if: matrix.os == 'ubuntu-latest' && matrix.arch == 'x86_64' && matrix.libc == 'manylinux'
         shell: bash
         run: uv build --sdist --out-dir wheelhouse
 

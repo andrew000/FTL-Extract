@@ -199,10 +199,10 @@ impl FluentVisitor {
             }
 
             // Only the first line is used as the Literal type annotation value.
-            if result.contains('\n') {
-                if let Some(first_line) = result.lines().next() {
-                    return first_line.to_string();
-                }
+            if result.contains('\n')
+                && let Some(first_line) = result.lines().next()
+            {
+                return first_line.to_string();
             }
         }
 
@@ -258,7 +258,7 @@ pub fn parse_ftl_files<P: AsRef<Path>>(ftl_path: P) -> Result<IndexMap<String, M
         let entry = entry.context("Failed to read directory entry")?;
         let path = entry.path();
 
-        if path.extension().map_or(false, |ext| ext == "ftl") {
+        if path.extension().is_some_and(|ext| ext == "ftl") {
             debug!("Parsing FTL file: {}", path.display());
 
             let content = fs::read_to_string(path)
@@ -445,18 +445,16 @@ welcome = { -greeting }
             let resource =
                 fluent_syntax::parser::parse(ftl_string).expect("Failed to parse test pattern");
 
-            if let Some(entry) = resource.body.first() {
-                if let fluent_syntax::ast::Entry::Message(message) = entry {
-                    if let Some(pattern) = &message.value {
-                        let result = visitor.pattern_to_text(&pattern.elements);
-                        assert!(
-                            result.contains(expected_output),
-                            "Pattern '{}' should contain '{}'",
-                            result,
-                            expected_output
-                        );
-                    }
-                }
+            if let Some(fluent_syntax::ast::Entry::Message(message)) = resource.body.first()
+                && let Some(pattern) = &message.value
+            {
+                let result = visitor.pattern_to_text(&pattern.elements);
+                assert!(
+                    result.contains(expected_output),
+                    "Pattern '{}' should contain '{}'",
+                    result,
+                    expected_output
+                );
             }
         }
     }
@@ -472,12 +470,12 @@ welcome = { -greeting }
         let resource =
             fluent_syntax::parser::parse(nested_ftl).expect("Failed to parse nested expression");
 
-        if let Some(fluent_syntax::ast::Entry::Message(message)) = resource.body.first() {
-            if let Some(pattern) = &message.value {
-                for element in &pattern.elements {
-                    if let PatternElement::Placeable { expression } = element {
-                        visitor.extract_args_from_expression(expression, &mut args, &mut seen);
-                    }
+        if let Some(fluent_syntax::ast::Entry::Message(message)) = resource.body.first()
+            && let Some(pattern) = &message.value
+        {
+            for element in &pattern.elements {
+                if let PatternElement::Placeable { expression } = element {
+                    visitor.extract_args_from_expression(expression, &mut args, &mut seen);
                 }
             }
         }

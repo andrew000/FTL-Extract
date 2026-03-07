@@ -21,7 +21,7 @@ struct Cli {
     command: Option<Commands>,
 
     /// Verbose output
-    #[arg(short = 'v', long, default_value_t = false)]
+    #[arg(short = 'v', long, global = true, default_value_t = false)]
     verbose: bool,
 }
 

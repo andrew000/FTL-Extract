@@ -5,6 +5,6 @@ mod tests {
 
     #[test]
     fn _test_extract() {
-        // cargo run --release -- --silent --verbose extract $CODE_PATH $OUTPATH -l "en" -l "uk" -l "ru" -K "LF" -K "LazyProxy" -I "core" --comment-junks --comment-keys-mode=comment --line-endings=crlf
+        // cargo run --release -- --verbose extract $CODE_PATH $OUT_PATH -l "en" -l "uk" -l "ru" -K "LF" -K "LazyProxy" -I "core" --comment-junks --comment-keys-mode=comment --line-endings=crlf
     }
 }

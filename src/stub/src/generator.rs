@@ -2,7 +2,6 @@ use crate::tree::{Metadata, TreeNode, sorted_keys};
 use anyhow::Result;
 use indexmap::IndexMap;
 
-/// Generate complete Python stub file content
 pub fn generate_stub_content(tree: &IndexMap<String, TreeNode>) -> Result<String> {
     let mut content = String::new();
 
@@ -41,7 +40,6 @@ fn generate_class_body(
         return Ok(());
     }
 
-    // Add blank line at start of class body
     content.push('\n');
 
     for key in keys {
@@ -52,7 +50,6 @@ fn generate_class_body(
     Ok(())
 }
 
-/// Generate code for a single tree node
 fn generate_node(
     key: String,
     node: &TreeNode,
@@ -75,7 +72,7 @@ fn generate_node(
     Ok(())
 }
 
-/// Generate an overloaded node (both method and class with same name)
+/// Generates both a `@staticmethod @overload` and an inner class with the same name.
 fn generate_overloaded_node(
     key: &str,
     meta: &Metadata,
@@ -115,7 +112,6 @@ fn generate_overloaded_node(
     Ok(())
 }
 
-/// Generate I18nContext class with full method implementations
 fn generate_i18n_context_class(content: &mut String) -> Result<()> {
     content.push_str("class I18nContext(I18nStub):\n\n");
     content.push_str("    def get(self, key: str, /, **kwargs: Any) -> str:\n");
@@ -133,18 +129,17 @@ fn generate_i18n_context_class(content: &mut String) -> Result<()> {
     Ok(())
 }
 
-/// Generate LazyFactory class with full method implementations
 fn generate_lazy_factory_class(content: &mut String) -> Result<()> {
     content.push_str("class LazyFactory(I18nStub):\n");
     content.push_str("    key_separator: str\n\n");
     content.push_str("    def set_separator(self, key_separator: str) -> None:\n");
     content.push_str("        ...\n\n");
-    content.push_str("    def __call__(self, key: str, /, **kwargs: dict[str, Any]) -> LazyProxy:\n");
+    content
+        .push_str("    def __call__(self, key: str, /, **kwargs: dict[str, Any]) -> LazyProxy:\n");
     content.push_str("        ...\n");
     Ok(())
 }
 
-/// Generate a static method
 fn generate_method(key: &str, meta: &Metadata, content: &mut String, indent_level: usize) {
     let indent = "    ".repeat(indent_level);
     let return_type = format!("Literal[{}]", format_literal_value(&meta.translation));
@@ -173,7 +168,7 @@ fn generate_method(key: &str, meta: &Metadata, content: &mut String, indent_leve
     content.push('\n');
 }
 
-/// Generate an inner class definition with assignment
+/// Emits `class __Foo:` followed by `foo = __Foo` so the key is accessible as both a callable and a namespace.
 fn generate_inner_class(
     key: &str,
     children: &IndexMap<String, TreeNode>,
@@ -191,7 +186,6 @@ fn generate_inner_class(
     Ok(())
 }
 
-/// Convert snake_case or kebab-case to PascalCase for class names
 fn to_pascal_case(s: &str) -> String {
     s.split('_')
         .filter(|part| !part.is_empty())
@@ -205,12 +199,10 @@ fn to_pascal_case(s: &str) -> String {
         .collect()
 }
 
-/// Format literal value with proper single quotes and escaping
 fn format_literal_value(s: &str) -> String {
     format!("'{}'", escape_string_single_quotes(s))
 }
 
-/// Escape string for Python single-quoted literals
 fn escape_string_single_quotes(s: &str) -> String {
     s.replace('\\', "\\\\")
         .replace('\'', "\\'")
@@ -229,7 +221,7 @@ mod tests {
         let mut tree = IndexMap::new();
 
         let metadata = Metadata {
-            args: vec![], // No actual variable references in this example
+            args: vec![],
             translation: "Hello, {name}!".to_string(),
         };
 
@@ -302,10 +294,14 @@ mod tests {
 
         assert!(content.contains("class I18nContext(I18nStub):"));
         assert!(content.contains("def get(self, key: str, /, **kwargs: Any) -> str:"));
-        assert!(content.contains("async def set_locale(self, locale: str, **kwargs: Any) -> None:"));
+        assert!(
+            content.contains("async def set_locale(self, locale: str, **kwargs: Any) -> None:")
+        );
         assert!(content.contains("@contextmanager"));
         assert!(content.contains("def use_locale(self, locale: str) -> Generator[I18nContext]:"));
-        assert!(content.contains("def use_context(self, **kwargs: Any) -> Generator[I18nContext]:"));
+        assert!(
+            content.contains("def use_context(self, **kwargs: Any) -> Generator[I18nContext]:")
+        );
         assert!(content.contains("def set_context(self, **kwargs: Any) -> None:"));
 
         Ok(())
@@ -319,7 +315,11 @@ mod tests {
         assert!(content.contains("class LazyFactory(I18nStub):"));
         assert!(content.contains("key_separator: str"));
         assert!(content.contains("def set_separator(self, key_separator: str) -> None:"));
-        assert!(content.contains("def __call__(self, key: str, /, **kwargs: dict[str, Any]) -> LazyProxy:"));
+        assert!(
+            content.contains(
+                "def __call__(self, key: str, /, **kwargs: dict[str, Any]) -> LazyProxy:"
+            )
+        );
 
         Ok(())
     }
@@ -331,7 +331,6 @@ mod tests {
 
         generate_class_body(&tree, &mut content, 1)?;
 
-        // Empty tree should generate pass
         assert!(content.contains("pass"));
 
         Ok(())
@@ -340,20 +339,21 @@ mod tests {
     #[test]
     fn test_generate_inner_class() -> Result<()> {
         let mut children = IndexMap::new();
-        children.insert("test".to_string(), TreeNode::Leaf {
-            meta: Metadata {
-                args: vec![],
-                translation: "Test".to_string(),
+        children.insert(
+            "test".to_string(),
+            TreeNode::Leaf {
+                meta: Metadata {
+                    args: vec![],
+                    translation: "Test".to_string(),
+                },
+                children: IndexMap::new(),
             },
-            children: IndexMap::new(),
-        });
+        );
 
         let mut content = String::new();
         generate_inner_class("TestClass", &children, &mut content, 1)?;
 
         assert!(content.contains("class __TestClass:"));
-        // The assignment might be on the next line or generated separately
-        // Let's just check the class is generated properly
         assert!(content.contains("def test(**kwargs: Any)"));
 
         Ok(())
@@ -370,13 +370,16 @@ mod tests {
     #[test]
     fn test_generate_overloaded_node_comprehensive() -> Result<()> {
         let mut children = IndexMap::new();
-        children.insert("nested".to_string(), TreeNode::Leaf {
-            meta: Metadata {
-                args: vec!["nested_arg".to_string()],
-                translation: "Nested message".to_string(),
+        children.insert(
+            "nested".to_string(),
+            TreeNode::Leaf {
+                meta: Metadata {
+                    args: vec!["nested_arg".to_string()],
+                    translation: "Nested message".to_string(),
+                },
+                children: IndexMap::new(),
             },
-            children: IndexMap::new(),
-        });
+        );
 
         let meta = Metadata {
             args: vec!["arg1".to_string(), "arg2".to_string()],
@@ -386,14 +389,9 @@ mod tests {
         let mut content = String::new();
         generate_overloaded_node("overloaded", &meta, &children, &mut content, 1)?;
 
-        // Should have @staticmethod @overload
         assert!(content.contains("@staticmethod"));
         assert!(content.contains("@overload"));
-
-        // Should have method with args
         assert!(content.contains("def overloaded(*, arg1: Any, arg2: Any, **kwargs: Any)"));
-
-        // Should have class definition
         assert!(content.contains("class __Overloaded:"));
 
         Ok(())
@@ -434,50 +432,52 @@ mod tests {
         let mut tree = IndexMap::new();
 
         // Add various node types
-        tree.insert("simple".to_string(), TreeNode::Leaf {
-            meta: Metadata {
-                args: vec![],
-                translation: "Simple".to_string(),
+        tree.insert(
+            "simple".to_string(),
+            TreeNode::Leaf {
+                meta: Metadata {
+                    args: vec![],
+                    translation: "Simple".to_string(),
+                },
+                children: IndexMap::new(),
             },
-            children: IndexMap::new(),
-        });
+        );
 
-        tree.insert("complex".to_string(), TreeNode::Leaf {
-            meta: Metadata {
-                args: vec!["arg".to_string()],
-                translation: "Complex with {arg}".to_string(),
+        tree.insert(
+            "complex".to_string(),
+            TreeNode::Leaf {
+                meta: Metadata {
+                    args: vec!["arg".to_string()],
+                    translation: "Complex with {arg}".to_string(),
+                },
+                children: IndexMap::new(),
             },
-            children: IndexMap::new(),
-        });
+        );
 
         let mut nested_children = IndexMap::new();
-        nested_children.insert("child".to_string(), TreeNode::Leaf {
-            meta: Metadata {
-                args: vec![],
-                translation: "Child".to_string(),
+        nested_children.insert(
+            "child".to_string(),
+            TreeNode::Leaf {
+                meta: Metadata {
+                    args: vec![],
+                    translation: "Child".to_string(),
+                },
+                children: IndexMap::new(),
             },
-            children: IndexMap::new(),
-        });
+        );
 
         tree.insert("nested".to_string(), TreeNode::Branch(nested_children));
 
         let content = generate_stub_content(&tree)?;
 
-        // Check header
         assert!(content.contains("# mypy: ignore-errors"));
         assert!(content.contains("from collections.abc import Generator"));
         assert!(content.contains("from typing import Any, Literal, overload"));
-
-        // Check classes
         assert!(content.contains("class I18nContext(I18nStub):"));
         assert!(content.contains("class LazyFactory(I18nStub):"));
         assert!(content.contains("class I18nStub:"));
-
-        // Check methods
         assert!(content.contains("def simple(**kwargs: Any)"));
         assert!(content.contains("def complex(*, arg: Any, **kwargs: Any)"));
-
-        // Check nested structure
         assert!(content.contains("class __Nested:"));
         assert!(content.contains("def child(**kwargs: Any)"));
 

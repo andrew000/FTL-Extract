@@ -4,22 +4,19 @@ use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 
-/// Metadata for a translation message
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Metadata {
-    /// List of argument names used in the translation
     pub args: Vec<String>,
-    /// First line of the translation text for type annotations
+    /// First line only; used as the Literal type annotation value.
     pub translation: String,
 }
 
-/// Tree node that can either be a branch (with children) or a leaf (with metadata)
+/// A node is either a branch (pure namespace) or a leaf (has a translation).
+/// A leaf can also have children when a key is both a message and a prefix, requiring `@overload`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum TreeNode {
-    /// Branch node containing child nodes
     Branch(IndexMap<String, TreeNode>),
-    /// Leaf node containing translation metadata
     Leaf {
         #[serde(rename = "$_meta$")]
         meta: Metadata,
@@ -29,12 +26,10 @@ pub enum TreeNode {
 }
 
 impl TreeNode {
-    /// Create a new empty branch node
     fn new_branch() -> Self {
         TreeNode::Branch(IndexMap::new())
     }
 
-    /// Create a new leaf node with metadata
     pub fn new_leaf(meta: Metadata) -> Self {
         TreeNode::Leaf {
             meta,
@@ -42,7 +37,6 @@ impl TreeNode {
         }
     }
 
-    /// Get mutable access to children, converting to leaf if necessary
     fn children_mut(&mut self) -> &mut IndexMap<String, TreeNode> {
         match self {
             TreeNode::Branch(children) => children,
@@ -50,7 +44,6 @@ impl TreeNode {
         }
     }
 
-    /// Get immutable access to children
     pub fn children(&self) -> &IndexMap<String, TreeNode> {
         match self {
             TreeNode::Branch(children) => children,
@@ -58,7 +51,6 @@ impl TreeNode {
         }
     }
 
-    /// Get metadata if this is a leaf node
     pub fn metadata(&self) -> Option<&Metadata> {
         match self {
             TreeNode::Leaf { meta, .. } => Some(meta),
@@ -66,7 +58,6 @@ impl TreeNode {
         }
     }
 
-    /// Check if this node has metadata (is a leaf)
     pub fn has_metadata(&self) -> bool {
         matches!(self, TreeNode::Leaf { .. })
     }
@@ -84,28 +75,23 @@ pub fn build_tree(messages: IndexMap<String, Message>) -> Result<IndexMap<String
     let mut tree = IndexMap::new();
 
     for (key, message) in messages {
-        // Split key by hyphens to create hierarchy
         let parts: Vec<&str> = key.split('-').collect();
 
         if parts.is_empty() {
             continue;
         }
 
-        // Navigate/create the tree structure
         let mut current = &mut tree;
 
-        // Navigate through all parts except the last
         for part in &parts[..parts.len() - 1] {
             if !current.contains_key(*part) {
                 current.insert(part.to_string(), TreeNode::new_branch());
             }
 
-            // Get the node and ensure it can hold children
             let node = current.get_mut(*part).unwrap();
             current = node.children_mut();
         }
 
-        // Handle the final part (leaf node)
         let final_part = parts[parts.len() - 1];
         let metadata = Metadata {
             args: message.args,
@@ -114,10 +100,9 @@ pub fn build_tree(messages: IndexMap<String, Message>) -> Result<IndexMap<String
 
         match current.get_mut(final_part) {
             Some(existing_node) => {
-                // If node already exists, convert it to a leaf while preserving children
                 match existing_node {
                     TreeNode::Branch(children) => {
-                        // Convert branch to leaf, preserving existing children
+                        // Preserve existing children when promoting a branch to a leaf.
                         let old_children = std::mem::take(children);
                         *existing_node = TreeNode::Leaf {
                             meta: metadata,
@@ -128,14 +113,13 @@ pub fn build_tree(messages: IndexMap<String, Message>) -> Result<IndexMap<String
                         meta: existing_meta,
                         ..
                     } => {
-                        // Node already has metadata - this shouldn't happen with unique keys
+                        // Duplicate key — shouldn't happen with valid FTL.
                         log::warn!("Duplicate key found: {}", key);
                         *existing_meta = metadata;
                     }
                 }
             }
             None => {
-                // Create new leaf node
                 current.insert(final_part.to_string(), TreeNode::new_leaf(metadata));
             }
         }
@@ -144,7 +128,6 @@ pub fn build_tree(messages: IndexMap<String, Message>) -> Result<IndexMap<String
     Ok(tree)
 }
 
-/// Export tree structure to JSON file for debugging
 pub fn export_tree_json<P: AsRef<Path>>(
     tree: &IndexMap<String, TreeNode>,
     output_path: P,
@@ -154,7 +137,7 @@ pub fn export_tree_json<P: AsRef<Path>>(
     Ok(())
 }
 
-/// Check if a tree node represents both a method and has children (needs @overload)
+/// Returns true when a key is both a message and a namespace prefix, requiring `@overload` in the stub.
 pub fn needs_overload(node: &TreeNode) -> bool {
     match node {
         TreeNode::Leaf { children, .. } => !children.is_empty(),
@@ -162,7 +145,7 @@ pub fn needs_overload(node: &TreeNode) -> bool {
     }
 }
 
-/// Get sorted keys for consistent output
+/// Returns keys in sorted order for deterministic output.
 pub fn sorted_keys(map: &IndexMap<String, TreeNode>) -> Vec<String> {
     let mut keys: Vec<_> = map.keys().cloned().collect();
     keys.sort();
@@ -253,7 +236,6 @@ mod tests {
         let tree = build_tree(messages).unwrap();
         let greeting = tree.get("greeting").unwrap();
 
-        // Should need overload since it has both metadata and children
         assert!(needs_overload(greeting));
     }
 
@@ -278,11 +260,9 @@ mod tests {
 
         assert!(json_path.exists());
 
-        // Verify JSON content is valid
         let json_content = std::fs::read_to_string(&json_path)?;
         let parsed: serde_json::Value = serde_json::from_str(&json_content)?;
 
-        // Should contain test node
         assert!(parsed.get("test").is_some());
 
         Ok(())

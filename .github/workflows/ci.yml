@@ -15,7 +15,7 @@ jobs:
         os: [ ubuntu-latest, windows-latest ]  # Ahh... Why macOS is so expensive for CI builds...
         python-version: [ "3.11", "3.12", "3.13", "3.14" ]
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
 
       # Set up the environment for the extension build on macOS and Windows
       # This OS doesn't compile the extension for `{many,musl}linux` distributions in containers
@@ -32,7 +32,7 @@ jobs:
           enable-cache: true
 
       - name: Install Just
-        uses: extractions/setup-just@v3
+      - uses: taiki-e/install-action@just
 
       - name: Rust cache
         uses: Swatinem/rust-cache@v2
@@ -62,7 +62,7 @@ jobs:
 
       - name: Lint
         shell: bash
-        run: just lint-py
+        run: just lint py
 
       - name: Install cargo-llvm-cov (Linux py3.14)
         if: runner.os == 'Linux' && matrix.python-version == '3.14'
@@ -168,7 +168,7 @@ jobs:
           # - os: macos-14
           #   arch: arm64
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
 
       # Set up the environment for the extension build on macOS and Windows
       # This OS doesn't compile the extension for `{many,musl}linux` distributions in containers

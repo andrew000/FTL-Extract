@@ -6,34 +6,26 @@ use std::collections::HashSet;
 use std::fs;
 use std::path::Path;
 
-/// Represents a Fluent message with its arguments
 #[derive(Debug, Clone)]
 pub struct Message {
-    /// The message identifier (key)
     pub id: String,
-    /// List of argument names used in the message
     pub args: Vec<String>,
-    /// The first line of the message translation (for type annotations)
+    /// First line only; used as the Literal type annotation value.
     pub translation: String,
 }
 
-/// Represents a Fluent term with its arguments
 #[derive(Debug, Clone)]
 pub struct Term {
-    /// The term identifier (key)
     pub id: String,
-    /// List of argument names used in the term
     pub args: Vec<String>,
-    /// The first line of the term translation
     pub translation: String,
 }
 
-/// Visitor for collecting messages and terms from Fluent AST
 #[derive(Debug)]
 struct FluentVisitor {
     messages: IndexMap<String, Message>,
     terms: IndexMap<String, Term>,
-    /// Terms that need delayed resolution for forward references
+    /// Populated during parsing; moved to `terms` after all files are read to handle forward references.
     delayed_terms: IndexMap<String, Term>,
 }
 
@@ -46,7 +38,6 @@ impl FluentVisitor {
         }
     }
 
-    /// Visit a Fluent resource and extract all messages and terms
     fn visit_resource(&mut self, resource: &Resource<String>) {
         for entry in &resource.body {
             match entry {
@@ -74,17 +65,15 @@ impl FluentVisitor {
                         translation,
                     };
 
-                    // Terms are stored with delayed resolution for forward references
                     self.delayed_terms.insert(term.id.name.clone(), term_obj);
                 }
                 _ => {
-                    // Skip comments, resource comments, and group comments
+                    // Junk, comments, group comments
                 }
             }
         }
     }
 
-    /// Extract argument names from pattern elements
     fn extract_arguments(&self, elements: &[PatternElement<String>]) -> Vec<String> {
         let mut args = Vec::new();
         let mut seen = HashSet::new();
@@ -96,7 +85,6 @@ impl FluentVisitor {
         args
     }
 
-    /// Extract arguments from a single pattern element recursively
     fn extract_args_from_element(
         &self,
         element: &PatternElement<String>,
@@ -107,13 +95,10 @@ impl FluentVisitor {
             PatternElement::Placeable { expression } => {
                 self.extract_args_from_expression(expression, args, seen);
             }
-            PatternElement::TextElement { .. } => {
-                // Text elements don't contain arguments
-            }
+            PatternElement::TextElement { .. } => {}
         }
     }
 
-    /// Extract arguments from expressions
     fn extract_args_from_expression(
         &self,
         expr: &Expression<String>,
@@ -125,10 +110,8 @@ impl FluentVisitor {
                 self.extract_args_from_inline_expression(inline_expr, args, seen);
             }
             Expression::Select { selector, variants } => {
-                // Extract from selector
                 self.extract_args_from_inline_expression(selector, args, seen);
 
-                // Extract from each variant
                 for variant in variants {
                     for element in &variant.value.elements {
                         self.extract_args_from_element(element, args, seen);
@@ -138,7 +121,6 @@ impl FluentVisitor {
         }
     }
 
-    /// Extract arguments from inline expressions
     fn extract_args_from_inline_expression(
         &self,
         expr: &InlineExpression<String>,
@@ -147,17 +129,15 @@ impl FluentVisitor {
     ) {
         match expr {
             InlineExpression::VariableReference { id } => {
-                // Only variable references (with $) are actual arguments
+                // Only `$var` references are arguments; message/term references are not.
                 if seen.insert(id.name.clone()) {
                     args.push(id.name.clone());
                 }
             }
             InlineExpression::MessageReference { id, .. } => {
-                // Message references are not arguments, they're references to other messages
                 debug!("Found message reference (not treating as arg): {}", id.name);
             }
             InlineExpression::TermReference { id, arguments, .. } => {
-                // Extract arguments passed to the term
                 if let Some(call_args) = arguments {
                     for arg in &call_args.positional {
                         self.extract_args_from_inline_expression(arg, args, seen);
@@ -169,7 +149,6 @@ impl FluentVisitor {
                 debug!("Found term reference: {}", id.name);
             }
             InlineExpression::FunctionReference { id, arguments } => {
-                // Extract arguments from function calls
                 for arg in &arguments.positional {
                     self.extract_args_from_inline_expression(arg, args, seen);
                 }
@@ -181,13 +160,10 @@ impl FluentVisitor {
             InlineExpression::Placeable { expression } => {
                 self.extract_args_from_expression(expression, args, seen);
             }
-            InlineExpression::StringLiteral { .. } | InlineExpression::NumberLiteral { .. } => {
-                // Literals don't contain arguments
-            }
+            InlineExpression::StringLiteral { .. } | InlineExpression::NumberLiteral { .. } => {}
         }
     }
 
-    /// Convert pattern elements to readable text for type annotations
     fn pattern_to_text(&self, elements: &[PatternElement<String>]) -> String {
         let mut result = String::new();
 
@@ -222,7 +198,7 @@ impl FluentVisitor {
                 },
             }
 
-            // Only return first line for type annotations
+            // Only the first line is used as the Literal type annotation value.
             if result.contains('\n') {
                 if let Some(first_line) = result.lines().next() {
                     return first_line.to_string();
@@ -233,7 +209,6 @@ impl FluentVisitor {
         result
     }
 
-    /// Convert expression to text representation (recursive helper for nested structures)
     fn expression_to_text(&self, expression: &Expression<String>) -> String {
         match expression {
             Expression::Inline(inline_expr) => self.inline_expression_to_text(inline_expr),
@@ -241,7 +216,6 @@ impl FluentVisitor {
         }
     }
 
-    /// Convert inline expression to text representation (recursive helper)
     fn inline_expression_to_text(&self, expression: &InlineExpression<String>) -> String {
         match expression {
             InlineExpression::VariableReference { id } => {
@@ -260,23 +234,19 @@ impl FluentVisitor {
         }
     }
 
-    /// Resolve delayed terms after all terms have been collected
+    /// Term args are not resolved against referenced terms; args bubble up from call sites only.
     pub fn resolve_delayed_terms(&mut self) {
-        // For now, just move all delayed terms to the main terms collection
-        // In a more sophisticated implementation, we'd resolve forward references
         for (key, term) in self.delayed_terms.drain(..) {
             self.terms.insert(key, term);
         }
     }
 
-    /// Get all collected messages
     fn into_messages(mut self) -> IndexMap<String, Message> {
         self.resolve_delayed_terms();
         self.messages
     }
 }
 
-/// Parse all FTL files in a directory and extract messages
 pub fn parse_ftl_files<P: AsRef<Path>>(ftl_path: P) -> Result<IndexMap<String, Message>> {
     let ftl_path = ftl_path.as_ref();
     debug!("Parsing FTL files from: {}", ftl_path.display());
@@ -284,7 +254,6 @@ pub fn parse_ftl_files<P: AsRef<Path>>(ftl_path: P) -> Result<IndexMap<String, M
     let mut visitor = FluentVisitor::new();
     let mut file_count = 0;
 
-    // Recursively find all .ftl files
     for entry in walkdir::WalkDir::new(ftl_path) {
         let entry = entry.context("Failed to read directory entry")?;
         let path = entry.path();
@@ -374,9 +343,8 @@ rocket-message = Blast off { -emoji }
         let simple = messages.get("simple").expect("simple message");
         assert!(simple.args.is_empty());
 
-        // Check simple message without expecting term resolution
         let app_title = messages.get("app-title").expect("app-title message");
-        // Our implementation keeps term references as { -brand-name }, it doesn't resolve them
+        // Term references are kept as `{ -brand-name }` literals; they are not resolved.
         assert!(app_title.translation.contains("{ -brand-name }"));
 
         Ok(())
@@ -413,15 +381,18 @@ complex-term = { $value } with { $count ->
     [one] one item
     *[other] { $count } items
 } and { -brand }
-"#.to_string();
+"#
+        .to_string();
 
-        let resource = fluent_syntax::parser::parse(complex_ftl)
-            .expect("Failed to parse test FTL");
+        let resource = fluent_syntax::parser::parse(complex_ftl).expect("Failed to parse test FTL");
 
         visitor.visit_resource(&resource);
 
         // Should capture all variable references
-        let message = visitor.messages.get("complex-term").expect("complex-term message");
+        let message = visitor
+            .messages
+            .get("complex-term")
+            .expect("complex-term message");
         assert!(message.args.contains(&"value".to_string()));
         assert!(message.args.contains(&"count".to_string()));
     }
@@ -435,14 +406,15 @@ complex-term = { $value } with { $count ->
 -greeting = Hello, { $name }!
 
 welcome = { -greeting }
-"#.to_string();
+"#
+        .to_string();
 
-        let resource = fluent_syntax::parser::parse(ftl_with_term_args)
-            .expect("Failed to parse test FTL");
+        let resource =
+            fluent_syntax::parser::parse(ftl_with_term_args).expect("Failed to parse test FTL");
 
         visitor.visit_resource(&resource);
 
-        // Before calling into_messages, terms are in delayed_terms
+        // Before resolution, terms land in delayed_terms
         assert!(visitor.delayed_terms.contains_key("greeting"));
 
         // Trigger resolution manually
@@ -470,15 +442,19 @@ welcome = { -greeting }
 
         for (input_ftl, expected_output) in test_patterns {
             let ftl_string = format!("test = {}", input_ftl);
-            let resource = fluent_syntax::parser::parse(ftl_string)
-                .expect("Failed to parse test pattern");
+            let resource =
+                fluent_syntax::parser::parse(ftl_string).expect("Failed to parse test pattern");
 
             if let Some(entry) = resource.body.first() {
                 if let fluent_syntax::ast::Entry::Message(message) = entry {
                     if let Some(pattern) = &message.value {
                         let result = visitor.pattern_to_text(&pattern.elements);
-                        assert!(result.contains(expected_output),
-                                "Pattern '{}' should contain '{}'", result, expected_output);
+                        assert!(
+                            result.contains(expected_output),
+                            "Pattern '{}' should contain '{}'",
+                            result,
+                            expected_output
+                        );
                     }
                 }
             }
@@ -493,8 +469,8 @@ welcome = { -greeting }
 
         // Test nested placeable expressions
         let nested_ftl = "test = { { $nested } }".to_string();
-        let resource = fluent_syntax::parser::parse(nested_ftl)
-            .expect("Failed to parse nested expression");
+        let resource =
+            fluent_syntax::parser::parse(nested_ftl).expect("Failed to parse nested expression");
 
         if let Some(fluent_syntax::ast::Entry::Message(message)) = resource.body.first() {
             if let Some(pattern) = &message.value {
@@ -557,14 +533,15 @@ welcome = { -greeting }
         let ftl_content = r#"
 -simple-term = Simple value
 message = { -simple-term }
-"#.to_string();
+"#
+        .to_string();
 
-        let resource = fluent_syntax::parser::parse(ftl_content)
-            .expect("Failed to parse FTL content");
+        let resource =
+            fluent_syntax::parser::parse(ftl_content).expect("Failed to parse FTL content");
 
         visitor.visit_resource(&resource);
 
-        // Before resolution, terms are in delayed_terms
+        // Before resolution, terms land in delayed_terms
         assert!(visitor.delayed_terms.contains_key("simple-term"));
         assert!(visitor.messages.contains_key("message"));
 

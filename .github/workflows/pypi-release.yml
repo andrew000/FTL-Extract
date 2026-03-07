@@ -29,7 +29,7 @@ jobs:
           - os: macos-14
             arch: arm64
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
 
       # Set up the environment for the extension build on macOS and Windows
       # This OS doesn't compile the extension for `{many,musl}linux` distributions in containers

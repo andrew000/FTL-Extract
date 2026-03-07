@@ -16,3 +16,4 @@ __pycache__/
 /wheelhouse/
 Cargo.lock
 /coverage.xml
+uv.lock

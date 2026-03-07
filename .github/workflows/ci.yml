@@ -48,7 +48,7 @@ jobs:
 
       - name: Prepare the project
         shell: bash
-        run: uv sync --all-extras
+        run: uv sync --all-extras --no-install-project
 
       - name: Lint
         if: matrix.os == 'ubuntu-latest' && matrix.libc == 'manylinux'

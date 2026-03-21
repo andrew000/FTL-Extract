@@ -1,10 +1,10 @@
 use crate::ftl::matcher::{FluentEntry, FluentKey, I18nMatcher};
 use crate::ftl::utils::{ExtractionStatistics, FastHashMap, FastHashSet};
+use aho_corasick::AhoCorasick;
 use globset::GlobSet;
 use ignore::WalkBuilder;
 use ignore::types::TypesBuilder;
 use log::error;
-use memchr::memmem;
 use memmap2::Mmap;
 use rayon::prelude::*;
 use ruff_python_ast::visitor::source_order::SourceOrderVisitor;
@@ -12,7 +12,6 @@ use std::collections::hash_map::Entry;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use std::sync::atomic::{AtomicUsize, Ordering};
 
 fn find_py_files(search_path: &Path, ignore_set: &GlobSet) -> Vec<PathBuf> {
     let mut result_paths: Vec<PathBuf> = Vec::new();
@@ -52,6 +51,7 @@ fn find_py_files(search_path: &Path, ignore_set: &GlobSet) -> Vec<PathBuf> {
 }
 fn parse_file(
     file: &PathBuf,
+    i18n_matcher: &AhoCorasick,
     i18n_keys: &FastHashSet<String>,
     i18n_keys_prefix: &FastHashSet<String>,
     ignore_attributes: &FastHashSet<String>,
@@ -79,13 +79,8 @@ fn parse_file(
         }
     };
 
-    // Quick check: does the file contain any of the i18n keys or prefixes?
-    let has_key = i18n_keys
-        .iter()
-        .chain(i18n_keys_prefix.iter())
-        .any(|key| memmem::find(&mmap, key.as_bytes()).is_some());
-
-    if !has_key {
+    // Quick check: does the file contain any i18n key/prefix marker?
+    if !i18n_matcher.is_match(&mmap) {
         return FastHashMap::default();
     }
 
@@ -114,6 +109,51 @@ fn parse_file(
 
     matcher.fluent_keys
 }
+
+fn insert_with_conflict_check(
+    target: &mut FastHashMap<String, FluentKey>,
+    key: String,
+    new_fluent_key: FluentKey,
+) {
+    match target.entry(key) {
+        Entry::Occupied(entry) => {
+            let existing_key: &FluentKey = entry.get();
+
+            if existing_key.path != new_fluent_key.path {
+                panic!(
+                    "FluentKey conflict: {} in {} and {}",
+                    entry.key(),
+                    existing_key.path.display(),
+                    new_fluent_key.path.display()
+                )
+            }
+
+            match (&existing_key.entry.as_ref(), &new_fluent_key.entry.as_ref()) {
+                (FluentEntry::Message(a), FluentEntry::Message(b)) if a != b => {
+                    panic!(
+                        "FluentKey conflict: {} in {} and {}",
+                        entry.key(),
+                        existing_key.path.display(),
+                        new_fluent_key.path.display()
+                    );
+                }
+                (a, b) if a != b => {
+                    panic!(
+                        "FluentKey type conflict: {} ({:?} vs {:?})",
+                        entry.key(),
+                        a,
+                        b
+                    );
+                }
+                _ => {}
+            }
+        }
+        Entry::Vacant(entry) => {
+            entry.insert(new_fluent_key);
+        }
+    }
+}
+
 pub(crate) fn extract_fluent_keys<'a>(
     path: &'a Path,
     i18n_keys: FastHashSet<String>,
@@ -125,100 +165,40 @@ pub(crate) fn extract_fluent_keys<'a>(
     statistics: &mut ExtractionStatistics,
 ) -> FastHashMap<String, FluentKey> {
     let py_files = find_py_files(path, exclude_dirs);
-    let py_files_count = AtomicUsize::new(0);
+    let i18n_patterns: Vec<&str> = i18n_keys
+        .iter()
+        .map(String::as_str)
+        .chain(i18n_keys_prefix.iter().map(String::as_str))
+        .collect();
+    let i18n_matcher = AhoCorasick::new(i18n_patterns).expect("Failed to build i18n matcher");
 
-    // Parallel Map-Reduce
-    let fluent_keys: FastHashMap<String, FluentKey> = py_files
+    // Phase 1: parse files in parallel.
+    let per_file_keys: Vec<FastHashMap<String, FluentKey>> = py_files
         .par_iter()
-        .fold(
-            FastHashMap::default, // Init local accumulator
-            |mut acc, file| {
-                let keys = parse_file(
-                    file,
-                    &i18n_keys,
-                    &i18n_keys_prefix,
-                    &ignore_attributes,
-                    &ignore_kwargs,
-                    default_ftl_file,
-                );
+        .map(|file| {
+            parse_file(
+                file,
+                &i18n_matcher,
+                &i18n_keys,
+                &i18n_keys_prefix,
+                &ignore_attributes,
+                &ignore_kwargs,
+                default_ftl_file,
+            )
+        })
+        .collect();
 
-                if !keys.is_empty() {
-                    py_files_count.fetch_add(1, Ordering::Relaxed);
-                }
+    statistics.py_files_count += per_file_keys.iter().filter(|m| !m.is_empty()).count();
 
-                // Merge found keys into local accumulator
-                for (key, new_fluent_key) in keys {
-                    match acc.entry(key) {
-                        Entry::Occupied(entry) => {
-                            let existing_key: &FluentKey = entry.get();
-
-                            // Validation Logic
-                            if existing_key.path != new_fluent_key.path {
-                                panic!(
-                                    "FluentKey conflict: {} in {} and {}",
-                                    entry.key(),
-                                    existing_key.path.display(),
-                                    new_fluent_key.path.display()
-                                )
-                            }
-
-                            match (&existing_key.entry.as_ref(), &new_fluent_key.entry.as_ref()) {
-                                (FluentEntry::Message(a), FluentEntry::Message(b)) if a != b => {
-                                    panic!(
-                                        "FluentKey conflict: {} in {} and {}",
-                                        entry.key(),
-                                        existing_key.path.display(),
-                                        new_fluent_key.path.display()
-                                    );
-                                }
-                                (a, b) if a != b => {
-                                    panic!(
-                                        "FluentKey type conflict: {} ({:?} vs {:?})",
-                                        entry.key(),
-                                        a,
-                                        b
-                                    );
-                                }
-                                _ => {}
-                            }
-                        }
-                        Entry::Vacant(entry) => {
-                            entry.insert(new_fluent_key);
-                        }
-                    }
-                }
-                acc
-            },
-        )
-        .reduce(
-            FastHashMap::default, // Init reducer
-            |a, b| {
-                // Merge two Maps (a and b)
-                // We iterate over the smaller map and insert into the larger one for efficiency
-                let (mut target, source) = if a.len() > b.len() { (a, b) } else { (b, a) };
-
-                for (key, val) in source {
-                    // Same conflict logic as above needed here strictly speaking,
-                    // but if keys are unique per file or conflicts handled in fold,
-                    // we just insert. To be safe, we use the same check:
-                    match target.entry(key) {
-                        Entry::Occupied(entry) => {
-                            let existing_key: &FluentKey = entry.get();
-                            if existing_key.path != val.path {
-                                panic!("FluentKey conflict during merge: {}", entry.key());
-                            }
-                            // Additional checks omitted for brevity, but should be mirrored
-                        }
-                        Entry::Vacant(entry) => {
-                            entry.insert(val);
-                        }
-                    }
-                }
-                target
-            },
-        );
-
-    statistics.py_files_count += py_files_count.load(Ordering::Relaxed);
+    // Phase 2: merge sequentially once to avoid repeated parallel hash-map reduce overhead.
+    let total_capacity = per_file_keys.iter().map(FastHashMap::len).sum::<usize>();
+    let mut fluent_keys: FastHashMap<String, FluentKey> =
+        FastHashMap::with_capacity_and_hasher(total_capacity, Default::default());
+    for keys in per_file_keys {
+        for (key, new_fluent_key) in keys {
+            insert_with_conflict_check(&mut fluent_keys, key, new_fluent_key);
+        }
+    }
 
     fluent_keys
 }

@@ -36,3 +36,7 @@ opt-level = 0
 lto = "off"
 codegen-units = 128
 strip = false
+
+[profile.bench]
+debug = "full"
+strip = false

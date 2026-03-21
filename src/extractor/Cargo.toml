@@ -13,6 +13,7 @@ license.workspace = true
 name = "extractor"
 
 [dependencies]
+aho-corasick = { version = "1.1.4" }
 anyhow = { version = "1.0.102" }
 clap = { version = "4.6.0", features = ["derive"] }
 fluent = { git = "https://github.com/projectfluent/fluent-rs.git", rev = "e0b443552a9b277badc958ab533b506394aad915" }
@@ -20,7 +21,6 @@ fluent-syntax = { git = "https://github.com/projectfluent/fluent-rs.git", rev = 
 globset = { version = "0.4.18" }
 ignore = { version = "0.4.25" }
 log = { version = "0.4.29" }
-memchr = { version = "2.8.0" }
 memmap2 = { version = "0.9.10" }
 rayon = { version = "1.11.0" }
 ruff_python_ast = { git = "https://github.com/astral-sh/ruff.git", tag = "0.15.7" }
@@ -30,6 +30,11 @@ smallvec = { version = "2.0.0-alpha.12" }
 
 [dev-dependencies]
 pretty_assertions.workspace = true
+criterion = { version = "0.8.2", features = ["html_reports"] }
+
+[[bench]]
+name = "extractor_bench"
+harness = false
 
 [lints.rust]
 dead_code = "allow"

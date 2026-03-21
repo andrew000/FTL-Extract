@@ -3,7 +3,7 @@ use crate::ftl::consts::{CommentsKeyModes, LineEndings};
 use crate::ftl::ftl_importer::import_ftl_from_dir;
 use crate::ftl::matcher::{FluentEntry, FluentKey};
 use crate::ftl::process::commentator::comment_ftl_key;
-use crate::ftl::process::kwargs_extractor::extract_kwargs;
+use crate::ftl::process::kwargs_extractor::{KwargsMemo, extract_kwargs_memoized};
 use crate::ftl::process::serializer::generate_ftl;
 use crate::ftl::utils::{ExtractionStatistics, FastHashMap, FastHashSet};
 use anyhow::Result;
@@ -65,16 +65,10 @@ pub fn extract(config: ExtractConfig) -> Result<ExtractionStatistics> {
         .languages
         .par_iter()
         .map(|lang| {
-            let mut thread_local_keys = in_code_fluent_keys.clone();
             let mut thread_local_stats = ExtractionStatistics::new();
             thread_local_stats.init_lang(lang);
 
-            process_language(
-                lang,
-                &mut thread_local_keys,
-                &config,
-                &mut thread_local_stats,
-            )?;
+            process_language(lang, &in_code_fluent_keys, &config, &mut thread_local_stats)?;
 
             Ok(thread_local_stats)
         })
@@ -94,7 +88,7 @@ pub fn extract(config: ExtractConfig) -> Result<ExtractionStatistics> {
 
 fn process_language(
     lang: &String,
-    in_code_fluent_keys: &mut FastHashMap<String, FluentKey>,
+    in_code_fluent_keys: &FastHashMap<String, FluentKey>,
     config: &ExtractConfig,
     statistics: &mut ExtractionStatistics,
 ) -> Result<()> {
@@ -132,26 +126,28 @@ fn process_language(
     }
 
     // Compare Key Kwargs
-    let in_code_fluent_keys_ref = in_code_fluent_keys.clone();
-    let stored_fluent_keys_ref = stored_fluent_keys.clone();
     let mut depend_keys: FastHashSet<String> = FastHashSet::default();
+    let mut code_kwargs_memo = KwargsMemo::default();
+    let mut stored_kwargs_memo = KwargsMemo::default();
 
-    for (key, fluent_key) in in_code_fluent_keys.iter_mut() {
+    for (key, fluent_key) in in_code_fluent_keys {
         if !stored_fluent_keys.contains_key(key) {
             continue;
         }
 
-        let code_args = extract_kwargs(
-            fluent_key,
-            &mut stored_terms,
-            &in_code_fluent_keys_ref,
+        let code_args = extract_kwargs_memoized(
+            key,
+            in_code_fluent_keys,
+            &stored_terms,
+            &mut code_kwargs_memo,
             &mut depend_keys,
         );
 
-        let stored_args = extract_kwargs(
-            stored_fluent_keys.get_mut(key).unwrap(),
-            &mut stored_terms,
-            &stored_fluent_keys_ref,
+        let stored_args = extract_kwargs_memoized(
+            key,
+            &stored_fluent_keys,
+            &stored_terms,
+            &mut stored_kwargs_memo,
             &mut depend_keys,
         );
 

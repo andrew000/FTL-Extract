@@ -5,6 +5,212 @@ use crate::ftl::utils::{FastHashMap, FastHashSet};
 use anyhow::{Result, bail};
 use fluent_syntax::ast::{CallArguments, Identifier};
 
+#[derive(Default)]
+pub(crate) struct KwargsMemo {
+    message_kwargs: FastHashMap<String, FastHashSet<String>>,
+    term_kwargs: FastHashMap<String, FastHashSet<String>>,
+    visiting_messages: FastHashSet<String>,
+    visiting_terms: FastHashSet<String>,
+}
+
+pub(crate) fn extract_kwargs_memoized(
+    key_name: &str,
+    all_fluent_keys: &FastHashMap<String, FluentKey>,
+    terms: &FastHashMap<String, FluentKey>,
+    memo: &mut KwargsMemo,
+    depend_keys: &mut FastHashSet<String>,
+) -> FastHashSet<String> {
+    extract_kwargs_for_message_key(key_name, all_fluent_keys, terms, memo, depend_keys)
+}
+
+fn extract_kwargs_for_message_key(
+    key_name: &str,
+    all_fluent_keys: &FastHashMap<String, FluentKey>,
+    terms: &FastHashMap<String, FluentKey>,
+    memo: &mut KwargsMemo,
+    depend_keys: &mut FastHashSet<String>,
+) -> FastHashSet<String> {
+    if let Some(cached) = memo.message_kwargs.get(key_name) {
+        return cached.clone();
+    }
+    if !memo.visiting_messages.insert(key_name.to_string()) {
+        return FastHashSet::default();
+    }
+
+    let mut kwargs = FastHashSet::default();
+    let key = all_fluent_keys
+        .get(key_name)
+        .unwrap_or_else(|| panic!("Can't find reference key `{key_name}`"));
+    collect_kwargs_from_fluent_entry(
+        key.entry.as_ref(),
+        all_fluent_keys,
+        terms,
+        memo,
+        depend_keys,
+        &mut kwargs,
+    );
+
+    memo.visiting_messages.remove(key_name);
+    memo.message_kwargs
+        .insert(key_name.to_string(), kwargs.clone());
+    kwargs
+}
+
+fn extract_kwargs_for_term_key(
+    term_name: &str,
+    all_fluent_keys: &FastHashMap<String, FluentKey>,
+    terms: &FastHashMap<String, FluentKey>,
+    memo: &mut KwargsMemo,
+    depend_keys: &mut FastHashSet<String>,
+) -> FastHashSet<String> {
+    if let Some(cached) = memo.term_kwargs.get(term_name) {
+        return cached.clone();
+    }
+    if !memo.visiting_terms.insert(term_name.to_string()) {
+        return FastHashSet::default();
+    }
+
+    let mut kwargs = FastHashSet::default();
+    let term = terms
+        .get(term_name)
+        .unwrap_or_else(|| panic!("Can't find reference term `{term_name}`"));
+    collect_kwargs_from_fluent_entry(
+        term.entry.as_ref(),
+        all_fluent_keys,
+        terms,
+        memo,
+        depend_keys,
+        &mut kwargs,
+    );
+
+    memo.visiting_terms.remove(term_name);
+    memo.term_kwargs
+        .insert(term_name.to_string(), kwargs.clone());
+    kwargs
+}
+
+fn collect_kwargs_from_fluent_entry(
+    entry: &FluentEntry,
+    all_fluent_keys: &FastHashMap<String, FluentKey>,
+    terms: &FastHashMap<String, FluentKey>,
+    memo: &mut KwargsMemo,
+    depend_keys: &mut FastHashSet<String>,
+    kwargs: &mut FastHashSet<String>,
+) {
+    match entry {
+        FluentEntry::Message(message) => {
+            if let Some(value) = &message.value {
+                collect_kwargs_from_elements(
+                    &value.elements,
+                    all_fluent_keys,
+                    terms,
+                    memo,
+                    depend_keys,
+                    kwargs,
+                );
+            }
+        }
+        FluentEntry::Term(term) => {
+            collect_kwargs_from_elements(
+                &term.value.elements,
+                all_fluent_keys,
+                terms,
+                memo,
+                depend_keys,
+                kwargs,
+            );
+        }
+        _ => {}
+    }
+}
+
+fn collect_kwargs_from_elements(
+    elements: &[fluent_syntax::ast::PatternElement<String>],
+    all_fluent_keys: &FastHashMap<String, FluentKey>,
+    terms: &FastHashMap<String, FluentKey>,
+    memo: &mut KwargsMemo,
+    depend_keys: &mut FastHashSet<String>,
+    kwargs: &mut FastHashSet<String>,
+) {
+    for element in elements {
+        if let fluent_syntax::ast::PatternElement::Placeable { expression } = element {
+            collect_kwargs_from_expression(
+                expression,
+                all_fluent_keys,
+                terms,
+                memo,
+                depend_keys,
+                kwargs,
+            );
+        }
+    }
+}
+
+fn collect_kwargs_from_expression(
+    expression: &fluent_syntax::ast::Expression<String>,
+    all_fluent_keys: &FastHashMap<String, FluentKey>,
+    terms: &FastHashMap<String, FluentKey>,
+    memo: &mut KwargsMemo,
+    depend_keys: &mut FastHashSet<String>,
+    kwargs: &mut FastHashSet<String>,
+) {
+    match expression {
+        fluent_syntax::ast::Expression::Inline(inline) => {
+            collect_kwargs_from_inline(inline, all_fluent_keys, terms, memo, depend_keys, kwargs);
+        }
+        fluent_syntax::ast::Expression::Select { selector, variants } => {
+            if let fluent_syntax::ast::InlineExpression::VariableReference { id } = selector {
+                kwargs.insert(id.name.clone());
+            }
+            for variant in variants {
+                collect_kwargs_from_elements(
+                    &variant.value.elements,
+                    all_fluent_keys,
+                    terms,
+                    memo,
+                    depend_keys,
+                    kwargs,
+                );
+            }
+        }
+    }
+}
+
+fn collect_kwargs_from_inline(
+    inline: &fluent_syntax::ast::InlineExpression<String>,
+    all_fluent_keys: &FastHashMap<String, FluentKey>,
+    terms: &FastHashMap<String, FluentKey>,
+    memo: &mut KwargsMemo,
+    depend_keys: &mut FastHashSet<String>,
+    kwargs: &mut FastHashSet<String>,
+) {
+    match inline {
+        fluent_syntax::ast::InlineExpression::VariableReference { id } => {
+            kwargs.insert(id.name.clone());
+        }
+        fluent_syntax::ast::InlineExpression::MessageReference { id, .. } => {
+            depend_keys.insert(id.name.clone());
+            kwargs.extend(extract_kwargs_for_message_key(
+                &id.name,
+                all_fluent_keys,
+                terms,
+                memo,
+                depend_keys,
+            ));
+        }
+        fluent_syntax::ast::InlineExpression::TermReference { id, .. } => {
+            kwargs.extend(extract_kwargs_for_term_key(
+                &id.name,
+                all_fluent_keys,
+                terms,
+                memo,
+                depend_keys,
+            ));
+        }
+        _ => {}
+    }
+}
+
 pub(crate) fn extract_kwargs(
     key: &mut FluentKey,
     terms: &mut FastHashMap<String, FluentKey>,

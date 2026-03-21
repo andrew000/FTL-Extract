@@ -24,9 +24,9 @@ dev = [
     "cibuildwheel==3.4.0",
     "isort==8.0.1",
     "pre-commit==4.5.1",
-    "ruff==0.15.5",
+    "ruff==0.15.7",
     "setuptools-rust==1.12.0",
-    "setuptools==82.0.0",
+    "setuptools==82.0.1",
     "wheel==0.46.3",
 ]
 

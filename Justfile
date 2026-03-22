@@ -46,6 +46,7 @@ test-cov:
 
 outdated:
     uv tree --universal --outdated --no-cache --depth=1
+    cargo outdated -w
 
 sync:
     uv sync --reinstall-package ftl_extract --all-extras

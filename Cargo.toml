@@ -15,15 +15,30 @@ members = [
     "src/cli",
     "src/extractor",
     "src/stub",
+    "src/untranslated",
 ]
 
 [workspace.dependencies]
+# Dev dependencies
+pretty_assertions = { version = "1.4.1" }
+tempfile = { version = "3.27.0" }
+
+# Workspace crates
 cli = { path = "src/cli" }
 extractor = { path = "src/extractor" }
 stub = { path = "src/stub" }
+untranslated = { path = "src/untranslated" }
 
-# Dev dependencies
-pretty_assertions = { version = "1.4.1" }
+# Shared dependencies
+anyhow = { version = "1.0.102" }
+clap = { version = "4.6.0", features = ["derive"] }
+fluent = { git = "https://github.com/projectfluent/fluent-rs.git", rev = "e0b443552a9b277badc958ab533b506394aad915" }
+fluent-syntax = { git = "https://github.com/projectfluent/fluent-rs.git", rev = "e0b443552a9b277badc958ab533b506394aad915" }
+ignore = { version = "0.4.25" }
+log = { version = "0.4.29" }
+ruff_python_ast = { git = "https://github.com/astral-sh/ruff.git", tag = "0.15.7" }
+ruff_python_parser = { git = "https://github.com/astral-sh/ruff.git", tag = "0.15.7" }
+serde_json = { version = "1.0.149" }
 
 [profile.release]
 opt-level = 3

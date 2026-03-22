@@ -7,13 +7,16 @@ use extractor::ftl::ftl_extractor::{ExtractConfig, extract};
 use extractor::ftl::utils::FastHashSet;
 use log::{error, info};
 use mimalloc::MiMalloc;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use stub::{StubConfig, generate_stub};
+use untranslated::{
+    CheckUntranslatedConfig, check_untranslated, render_untranslated_json,
+    render_untranslated_terminal, render_untranslated_txt,
+};
 
 #[global_allocator]
 static GLOBAL: MiMalloc = MiMalloc;
 
-/// Fast Fluent CLI
 #[derive(Parser)]
 #[command(name = "ftl", version, about)]
 struct Cli {
@@ -105,12 +108,44 @@ enum Commands {
         #[arg(long, default_value_t = false)]
         export_tree: bool,
     },
+    Untranslated {
+        /// Path to locales directory containing locale folders (e.g. en, uk)
+        #[arg()]
+        locales_path: PathBuf,
+
+        /// Locale codes to check (if omitted, all locale directories are checked)
+        #[arg(short = 'l', long, default_values_t = Vec::<String>::new())]
+        language: Vec<String>,
+
+        /// Suggest translations from these locales
+        #[arg(long, default_values_t = Vec::<String>::new())]
+        suggest_from: Vec<String>,
+
+        /// Exit with code 1 if untranslated keys are found
+        #[arg(long, default_value_t = false)]
+        fail_on_untranslated: bool,
+
+        /// Output report path for batch processing
+        #[arg(long)]
+        output: Option<PathBuf>,
+
+        /// Output format for report file
+        #[arg(long, value_enum, default_value_t = OutputFormat::Txt)]
+        output_format: OutputFormat,
+    },
+}
+
+#[derive(PartialEq, Clone, Debug, clap::ValueEnum)]
+enum OutputFormat {
+    Txt,
+    Json,
 }
 
 fn main() {
     let cli = Cli::parse();
 
     env_logger::Builder::new()
+        .format_timestamp(None)
         .filter_level({
             if cli.verbose {
                 log::LevelFilter::Debug
@@ -214,11 +249,83 @@ fn main() {
                 }
             }
         }
+        Some(Commands::Untranslated {
+            locales_path,
+            language,
+            suggest_from,
+            fail_on_untranslated,
+            output,
+            output_format,
+        }) => {
+            info!(target: "cli", "Locales path: {}", locales_path.display());
+
+            let config = CheckUntranslatedConfig {
+                locales_path,
+                locales: language,
+                suggest_from,
+            };
+
+            match check_untranslated(config) {
+                Ok(result) => {
+                    println!("{}", render_untranslated_terminal(&result));
+
+                    if let Some(output_path) = output {
+                        let output_path = normalize_output_path(output_path, &output_format);
+                        let output_content = match output_format {
+                            OutputFormat::Txt => render_untranslated_txt(&result),
+                            OutputFormat::Json => render_untranslated_json(&result),
+                        };
+
+                        if let Err(e) = write_output_file(&output_path, output_content) {
+                            error!(
+                                target: "cli",
+                                "Failed to write output file `{}`: {}",
+                                output_path.display(),
+                                e
+                            );
+                            std::process::exit(1);
+                        }
+
+                        info!(target: "cli", "Saved report to {}", output_path.display());
+                    }
+
+                    if fail_on_untranslated && !result.untranslated.is_empty() {
+                        std::process::exit(1);
+                    }
+                }
+                Err(e) => {
+                    error!(target: "cli", "Error during untranslated check: {}", e);
+                    std::process::exit(1);
+                }
+            }
+        }
         None => {
             info!(target: "cli", "No command provided. Use --help for more information.");
         }
     }
 
-    info!(target: "cli", "[Rust] Done in {:.3?}s.", start_time.elapsed().as_secs_f64()
+    info!(target: "cli", "✅ Done in {:.3?}s.", start_time.elapsed().as_secs_f64()
     );
+}
+
+fn write_output_file(path: &Path, content: String) -> std::io::Result<()> {
+    if let Some(parent) = path.parent()
+        && !parent.as_os_str().is_empty()
+    {
+        std::fs::create_dir_all(parent)?;
+    }
+    std::fs::write(path, content)
+}
+
+fn normalize_output_path(path: PathBuf, format: &OutputFormat) -> PathBuf {
+    if path.extension().is_some() {
+        return path;
+    }
+
+    let suffix = match format {
+        OutputFormat::Txt => "txt",
+        OutputFormat::Json => "json",
+    };
+
+    path.with_extension(suffix)
 }

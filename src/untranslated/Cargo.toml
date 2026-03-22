@@ -1,5 +1,5 @@
 [package]
-name = "stub"
+name = "untranslated"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -10,17 +10,13 @@ authors.workspace = true
 license.workspace = true
 
 [lib]
-name = "stub"
+name = "untranslated"
 
 [dependencies]
 anyhow.workspace = true
 fluent-syntax.workspace = true
-log.workspace = true
+ignore.workspace = true
 serde_json.workspace = true
-
-indexmap = { version = "2.13.0", features = ["serde"] }
-serde = { version = "1.0.228", features = ["derive"] }
-walkdir = { version = "2.5.0" }
 
 [dev-dependencies]
 tempfile.workspace = true

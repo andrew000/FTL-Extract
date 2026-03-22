@@ -99,6 +99,35 @@ $ ftl stub 'project_path/locales/<locale>' 'project_path/code_path'
 - `project_path/locales/<locale>` - path to the locales directory where the `<locale>` directory (e.g. `en`) contains `.ftl` files located.
 - `project_path/code_path` - path to the directory where the `stub.pyi` will be located.
 
+***
+
+## 💁‍♂️ Explanation of the `ftl untranslated` command
+
+```shell
+$ ftl untranslated project_path/locales
+```
+
+- `project_path/locales` - path to the locales root directory that contains locale folders like `en`, `uk`, etc.
+
+### 📚 Additional arguments
+
+- `-l` or `--language` - check only selected locales. Can be passed multiple times.
+- `--suggest-from` - locale(s) used to suggest non-placeholder translations for missing items. Can be passed multiple times.
+- `--fail-on-untranslated` - return exit code `1` if untranslated keys are found.
+- `--output` - optional output file path for batch processing reports. If no extension is provided, `.txt` or `.json` is appended automatically based on `--output-format`.
+- `--output-format` - report file format: `txt` or `json` (default: `txt`).
+
+### 🙈 Ignore marker for intentional placeholders
+
+If a key is intentionally the same as its message id (for example, brand or domain terms like `balance = balance`), add a message comment marker above it:
+
+```ftl
+# ftl-extract: ignore-untranslated
+balance = balance
+```
+
+This key will be skipped by `ftl untranslated`.
+
 
 ## FAQ
 

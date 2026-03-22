@@ -14,12 +14,13 @@ name = "ftl"
 path = "src/main.rs"
 
 [dependencies]
-extractor = { path = "../extractor" }
-stub = { path = "../stub" }
+clap.workspace = true
+extractor.workspace = true
+log.workspace = true
+stub.workspace = true
+untranslated.workspace = true
 
-clap = { version = "4.6.0" }
 env_logger = { version = "0.11.9" }
-log = { version = "0.4.29" }
 mimalloc = { version = "0.1.48" }
 
 [lints.clippy]

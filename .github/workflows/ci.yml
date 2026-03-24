@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [ "dev" ]
+    branches: [ "dev", "citest" ]
   pull_request:
     branches: [ "dev" ]
 
@@ -40,34 +40,28 @@ jobs:
           version: "latest"
           activate-environment: "true"
 
-      - name: Install Just
-        uses: taiki-e/install-action@just
-
-      - name: Rust cache
-        uses: Swatinem/rust-cache@v2
-
-      - name: Prepare the project
+      - name: Prepare the project for linting and testing
         shell: bash
         run: uv sync --all-extras --no-install-project
 
-      - name: Lint
-        if: matrix.os == 'ubuntu-latest' && matrix.libc == 'manylinux'
-        shell: bash
-        run: just lint rust
+      - name: Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          cache-targets: true
 
       - name: Install cargo-llvm-cov
-        if: matrix.os == 'ubuntu-latest' && matrix.libc == 'manylinux'
+        if: matrix.os == 'ubuntu-latest' && matrix.arch == 'x86_64' && matrix.libc == 'manylinux'
         uses: taiki-e/install-action@cargo-llvm-cov
 
       - name: Test
-        if: matrix.os == 'ubuntu-latest' && matrix.libc == 'manylinux'
+        if: matrix.os == 'ubuntu-latest' && matrix.arch == 'x86_64' && matrix.libc == 'manylinux'
         shell: bash
         env:
           CARGO_TERM_COLOR: "always"
-        run: just test-cov
+        run: cargo llvm-cov --all-features --workspace --lcov --output-path lcov.info
 
       - name: Upload coverage to Codecov
-        if: matrix.os == 'ubuntu-latest' && matrix.libc == 'manylinux'
+        if: matrix.os == 'ubuntu-latest' && matrix.arch == 'x86_64' && matrix.libc == 'manylinux'
         uses: codecov/codecov-action@v5
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
@@ -80,12 +74,12 @@ jobs:
         env:
           CIBW_BUILD: "cp314-win_amd64"
         run: |
-          uv run cibuildwheel --config-file pyproject.toml --output-dir wheelhouse --platform windows
+          uv run --no-project cibuildwheel --config-file pyproject.toml --output-dir wheelhouse --platform windows
           for wheel in wheelhouse/*.whl; do
-            uv run wheel tags --python-tag py3 --abi-tag none --remove $wheel
+            uv run --no-project wheel tags --python-tag py3 --abi-tag none --remove $wheel
           done
           for wheel in wheelhouse/*.whl; do
-            uv run --verbose --with $wheel --no-project --refresh-package ftl_extract -- ftl --version
+            uv run --no-project --verbose --with $wheel --refresh-package ftl_extract -- ftl --version
           done
 
       - name: Build, fix and test wheels (macOS arm64)
@@ -94,12 +88,12 @@ jobs:
         env:
           CIBW_BUILD: "cp314-macosx_arm64"
         run: |
-          uv run cibuildwheel --config-file pyproject.toml --output-dir wheelhouse --platform macos
+          uv run --no-project cibuildwheel --config-file pyproject.toml --output-dir wheelhouse --platform macos
           for wheel in wheelhouse/*.whl; do
-            uv run wheel tags --python-tag py3 --abi-tag none --remove $wheel
+            uv run --no-project wheel tags --python-tag py3 --abi-tag none --remove $wheel
           done
           for wheel in wheelhouse/*.whl; do
-            uv run --verbose --with $wheel --no-project --refresh-package ftl_extract -- ftl --version
+            uv run --no-project --verbose --with $wheel --refresh-package ftl_extract -- ftl --version
           done
 
       - name: Build, fix and test wheels (Linux manylinux)
@@ -108,12 +102,12 @@ jobs:
         run: |
           export CIBW_MANYLINUX_$(echo ${{ matrix.arch }} | tr '[:lower:]' '[:upper:]')_IMAGE="quay.io/pypa/manylinux_2_28_${{ matrix.arch }}"
           export CIBW_BUILD="cp314-manylinux_${{ matrix.arch }}"
-          uv run cibuildwheel --config-file pyproject.toml --archs ${{ matrix.arch }} --output-dir wheelhouse --platform linux
+          uv run --no-project cibuildwheel --config-file pyproject.toml --archs ${{ matrix.arch }} --output-dir wheelhouse --platform linux
           for wheel in wheelhouse/*.whl; do
-            uv run wheel tags --python-tag py3 --abi-tag none --remove $wheel
+            uv run --no-project wheel tags --python-tag py3 --abi-tag none --remove $wheel
           done
           for wheel in wheelhouse/*.whl; do
-            uv run --verbose --with $wheel --no-project --refresh-package ftl_extract -- ftl --version
+            uv run --no-project --verbose --with $wheel --refresh-package ftl_extract -- ftl --version
           done
 
       - name: Build, fix and test wheels (Linux musllinux)
@@ -122,12 +116,12 @@ jobs:
         run: |
           export CIBW_MUSLLINUX_$(echo ${{ matrix.arch }} | tr '[:lower:]' '[:upper:]')_IMAGE="quay.io/pypa/musllinux_1_2_${{ matrix.arch }}"
           export CIBW_BUILD="cp314-musllinux_${{ matrix.arch }}"
-          uv run cibuildwheel --config-file pyproject.toml --archs ${{ matrix.arch }} --output-dir wheelhouse --platform linux
+          uv run --no-project cibuildwheel --config-file pyproject.toml --archs ${{ matrix.arch }} --output-dir wheelhouse --platform linux
           for wheel in wheelhouse/*.whl; do
-            uv run wheel tags --python-tag py3 --abi-tag none --remove $wheel
+            uv run --no-project wheel tags --python-tag py3 --abi-tag none --remove $wheel
           done
           for wheel in wheelhouse/*.whl; do
-            uv run --verbose --with $wheel --no-project --refresh-package ftl_extract -- ftl --version
+            uv run --no-project --verbose --with $wheel --refresh-package ftl_extract -- ftl --version
           done
 
       - name: Build sdist

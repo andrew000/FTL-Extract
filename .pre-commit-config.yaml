@@ -10,7 +10,6 @@ repos:
       - id: "mixed-line-ending"
         args: [ "--fix", "crlf" ]
         types:
-          - python
           - rust
           - yaml
           - toml
@@ -18,20 +17,3 @@ repos:
       - id: "check-yaml"
       - id: "check-toml"
       - id: "check-json"
-
-  - repo: https://github.com/charliermarsh/ruff-pre-commit
-    rev: v0.15.7
-    hooks:
-      - id: ruff
-        args: [ "--fix" ]
-        files: "ftl_extract"
-
-      - id: ruff-format
-        files: "ftl_extract"
-
-  - repo: https://github.com/pycqa/isort
-    rev: 8.0.1
-    hooks:
-      - id: isort
-        name: isort (python)
-        files: "ftl_extract"

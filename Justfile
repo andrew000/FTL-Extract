@@ -35,7 +35,6 @@ _format-rust:
     @echo "Running cargo fmt..."
     cargo fmt --all
 
-
 test:
     @echo "Running cargo llvm-cov..."
     cargo llvm-cov --html
@@ -49,14 +48,7 @@ outdated:
     cargo outdated -w
 
 sync:
-    uv sync --reinstall-package ftl_extract --all-extras
+    uv sync --no-install-project --all-extras
 
-[windows]
 build:
     uv build --wheel --sdist
-    uv pip install -e .
-
-[unix]
-build:
-    uv build --wheel --sdist
-    uv pip install -e .

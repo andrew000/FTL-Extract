@@ -22,9 +22,7 @@ dependencies = []
 [project.optional-dependencies]
 dev = [
     "cibuildwheel==3.4.0",
-    "isort==8.0.1",
     "pre-commit==4.5.1",
-    "ruff==0.15.7",
     "setuptools-rust==1.12.0",
     "setuptools==82.0.1",
     "wheel==0.46.3",
@@ -42,15 +40,25 @@ package = true
 requires = ["setuptools", "setuptools-rust"]
 build-backend = "setuptools.build_meta"
 
+[tool.setuptools]
+include-package-data = false
+packages = []
+py-modules = []
+
+[[tool.setuptools-rust.bins]]
+target = "ftl"
+path = "src/cli/Cargo.toml"
+debug = false
+strip = "All"
+
 [tool.cibuildwheel]
 build = "cp314-*"
 archs = ["auto64"]
 build-frontend = "build[uv]"
-build-verbosity = 1
+build-verbosity = 0
 
 [tool.cibuildwheel.linux]
 before-all = "curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal"
-before-build = "cargo build --release"
 environment = { PATH = "$HOME/.cargo/bin:$PATH" }
 
 

@@ -31,6 +31,12 @@ smallvec = { version = "2.0.0-alpha.12" }
 
 [dev-dependencies]
 pretty_assertions.workspace = true
+criterion.workspace = true
+tempfile.workspace = true
+
+[[bench]]
+name = "extract_bench"
+harness = false
 
 [lints.rust]
 dead_code = "allow"

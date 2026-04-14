@@ -52,3 +52,9 @@ opt-level = 0
 lto = "off"
 codegen-units = 128
 strip = false
+
+[profile.bench]
+opt-level = 3
+lto = "fat"
+codegen-units = 1
+strip = true

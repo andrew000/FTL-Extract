@@ -14,6 +14,7 @@ __pycache__/
 *.egg-info
 /build/
 /target/
+target/
 /wheelhouse/
 Cargo.lock
 /coverage.xml

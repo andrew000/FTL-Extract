@@ -1,5 +1,6 @@
 use crate::ftl::matcher::{FluentEntry, FluentKey, I18nMatcher};
 use crate::ftl::utils::{ExtractionStatistics, FastHashMap, FastHashSet};
+use bincode_next::{Decode, Encode};
 use globset::GlobSet;
 use ignore::WalkBuilder;
 use ignore::types::TypesBuilder;
@@ -8,7 +9,6 @@ use memchr::memmem;
 use memmap2::Mmap;
 use rayon::prelude::*;
 use ruff_python_ast::visitor::source_order::SourceOrderVisitor;
-use serde::{Deserialize, Serialize};
 use std::collections::hash_map::Entry;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -18,7 +18,7 @@ use std::time::UNIX_EPOCH;
 
 const CACHE_SCHEMA_VERSION: u32 = 1;
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Encode, Decode)]
 struct CacheOptions {
     i18n_keys: Vec<String>,
     i18n_keys_prefix: Vec<String>,
@@ -27,21 +27,21 @@ struct CacheOptions {
     default_ftl_file: PathBuf,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Encode, Decode)]
 struct CacheFile {
     schema_version: u32,
     options: CacheOptions,
     files: FastHashMap<String, CachedPyFile>,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Encode, Decode)]
 struct CachedPyFile {
     size: u64,
     modified_ns: u128,
     keys: Vec<CachedFluentKey>,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Encode, Decode)]
 struct CachedFluentKey {
     key: String,
     code_path: PathBuf,
@@ -49,8 +49,20 @@ struct CachedFluentKey {
     kwargs: Vec<String>,
 }
 
-fn find_py_files(search_path: &Path, ignore_set: &GlobSet) -> Vec<PathBuf> {
-    let mut result_paths: Vec<PathBuf> = Vec::new();
+#[derive(Clone, Debug)]
+struct PyFile {
+    path: PathBuf,
+    size: u64,
+    modified_ns: u128,
+}
+
+enum CacheUpdate {
+    Upsert(String, CachedPyFile),
+    Remove(String),
+}
+
+fn find_py_files(search_path: &Path, ignore_set: &GlobSet) -> Vec<PyFile> {
+    let mut result_paths: Vec<PyFile> = Vec::new();
 
     if search_path.is_dir() {
         let mut type_builder = TypesBuilder::new();
@@ -72,39 +84,48 @@ fn find_py_files(search_path: &Path, ignore_set: &GlobSet) -> Vec<PathBuf> {
                     let path = entry.path();
                     if entry.file_type().is_some_and(|ft| ft.is_file())
                         && !ignore_set.is_match(path)
+                        && let Ok(metadata) = entry.metadata()
                     {
-                        result_paths.push(path.to_path_buf());
+                        result_paths.push(PyFile {
+                            path: path.to_path_buf(),
+                            size: metadata.len(),
+                            modified_ns: file_modified_ns(&metadata),
+                        });
                     }
                 }
                 Err(err) => error!(target: "extractor:code", "{}", err),
             }
         }
-    } else if search_path.is_file() && search_path.extension().unwrap_or_default() == "py" {
-        result_paths.push(search_path.to_path_buf());
+    } else if search_path.is_file()
+        && search_path.extension().unwrap_or_default() == "py"
+        && let Ok(metadata) = fs::metadata(search_path)
+    {
+        result_paths.push(PyFile {
+            path: search_path.to_path_buf(),
+            size: metadata.len(),
+            modified_ns: file_modified_ns(&metadata),
+        });
     }
 
     result_paths
 }
 fn parse_file(
-    file: &PathBuf,
+    file: &Path,
+    file_size: u64,
     i18n_keys: &FastHashSet<String>,
     i18n_keys_prefix: &FastHashSet<String>,
     ignore_attributes: &FastHashSet<String>,
     ignore_kwargs: &FastHashSet<String>,
     default_ftl_file: &Path,
 ) -> FastHashMap<String, FluentKey> {
+    if file_size == 0 {
+        return FastHashMap::default();
+    }
+
     let file_handle = match fs::File::open(file) {
         Ok(f) => f,
         Err(_) => return FastHashMap::default(),
     };
-    // Mmap requires non-empty file. Handle empty files gracefully.
-    let metadata = match file_handle.metadata() {
-        Ok(m) => m,
-        Err(_) => return FastHashMap::default(),
-    };
-    if metadata.len() == 0 {
-        return FastHashMap::default();
-    }
 
     // Unsafe is required for mmap (file could change under us), but standard for tools like this.
     let mmap = unsafe {
@@ -177,10 +198,10 @@ fn cache_file_path(cache_path: Option<&Path>) -> PathBuf {
         if path.extension().is_some() {
             path.to_path_buf()
         } else {
-            path.join("extract-v1.json")
+            path.join("extract-v1.bin")
         }
     } else {
-        PathBuf::from(".ftl-extract-cache").join("extract-v1.json")
+        PathBuf::from(".ftl-extract-cache").join("extract-v1.bin")
     }
 }
 
@@ -201,7 +222,7 @@ fn load_cache(path: &Path, options: &CacheOptions, clear_cache: bool) -> CacheFi
         let _ = fs::remove_file(path);
     }
 
-    let Ok(content) = fs::read_to_string(path) else {
+    let Ok(content) = fs::read(path) else {
         return CacheFile {
             schema_version: CACHE_SCHEMA_VERSION,
             options: options.clone(),
@@ -209,8 +230,13 @@ fn load_cache(path: &Path, options: &CacheOptions, clear_cache: bool) -> CacheFi
         };
     };
 
-    match serde_json::from_str::<CacheFile>(&content) {
-        Ok(cache) if cache.schema_version == CACHE_SCHEMA_VERSION && cache.options == *options => {
+    let config = bincode_next::config::standard();
+    match bincode_next::decode_from_slice::<CacheFile, _>(&content, config) {
+        Ok((cache, len))
+            if len == content.len()
+                && cache.schema_version == CACHE_SCHEMA_VERSION
+                && cache.options == *options =>
+        {
             cache
         }
         _ => CacheFile {
@@ -229,7 +255,8 @@ fn save_cache(path: &Path, cache: &CacheFile) {
         return;
     }
 
-    match serde_json::to_string(cache) {
+    let config = bincode_next::config::standard();
+    match bincode_next::encode_to_vec(cache, config) {
         Ok(content) => {
             if let Err(err) = fs::write(path, content) {
                 error!(target: "extractor:code", "Failed to write cache {}: {}", path.display(), err);
@@ -316,13 +343,10 @@ fn cached_file_to_keys(cached: &CachedPyFile) -> FastHashMap<String, FluentKey> 
         .collect()
 }
 
-fn keys_to_cached_file(
-    metadata: &fs::Metadata,
-    keys: &FastHashMap<String, FluentKey>,
-) -> CachedPyFile {
+fn keys_to_cached_file(file: &PyFile, keys: &FastHashMap<String, FluentKey>) -> CachedPyFile {
     CachedPyFile {
-        size: metadata.len(),
-        modified_ns: file_modified_ns(metadata),
+        size: file.size,
+        modified_ns: file.modified_ns,
         keys: keys
             .values()
             .cloned()
@@ -332,43 +356,43 @@ fn keys_to_cached_file(
 }
 
 fn extract_from_file(
-    file: &PathBuf,
+    file: &PyFile,
     i18n_keys: &FastHashSet<String>,
     i18n_keys_prefix: &FastHashSet<String>,
     ignore_attributes: &FastHashSet<String>,
     ignore_kwargs: &FastHashSet<String>,
     default_ftl_file: &Path,
     cache: Option<&CacheFile>,
-) -> (
-    FastHashMap<String, FluentKey>,
-    Option<(String, CachedPyFile)>,
-) {
-    let metadata = match fs::metadata(file) {
-        Ok(metadata) => metadata,
-        Err(_) => return (FastHashMap::default(), None),
-    };
+) -> (FastHashMap<String, FluentKey>, Option<CacheUpdate>) {
+    let cache_key = file_cache_key(&file.path);
+    let cached_file = cache.and_then(|cache| cache.files.get(&cache_key));
 
-    let cache_key = file_cache_key(file);
-    let modified_ns = file_modified_ns(&metadata);
-
-    if let Some(cached) = cache
-        .and_then(|cache| cache.files.get(&cache_key))
-        .filter(|cached| cached.size == metadata.len() && cached.modified_ns == modified_ns)
+    if let Some(cached) = cached_file
+        .filter(|cached| cached.size == file.size && cached.modified_ns == file.modified_ns)
     {
         return (cached_file_to_keys(cached), None);
     }
 
     let keys = parse_file(
-        file,
+        &file.path,
+        file.size,
         i18n_keys,
         i18n_keys_prefix,
         ignore_attributes,
         ignore_kwargs,
         default_ftl_file,
     );
-    let cached_file = keys_to_cached_file(&metadata, &keys);
 
-    (keys, Some((cache_key, cached_file)))
+    if keys.is_empty() {
+        let update = cached_file
+            .is_some()
+            .then_some(CacheUpdate::Remove(cache_key));
+        return (keys, update);
+    }
+
+    let cached_file = keys_to_cached_file(file, &keys);
+
+    (keys, Some(CacheUpdate::Upsert(cache_key, cached_file)))
 }
 
 fn merge_fluent_keys(target: &mut FastHashMap<String, FluentKey>, key: String, val: FluentKey) {
@@ -411,10 +435,7 @@ pub(crate) fn extract_fluent_keys<'a>(
     let cache = use_cache.then(|| load_cache(&cache_file_path, &options, clear_cache));
 
     // Parallel Map-Reduce
-    let (fluent_keys, cache_updates): (
-        FastHashMap<String, FluentKey>,
-        Vec<(String, CachedPyFile)>,
-    ) = py_files
+    let (fluent_keys, cache_updates): (FastHashMap<String, FluentKey>, Vec<CacheUpdate>) = py_files
         .par_iter()
         .fold(
             || (FastHashMap::default(), Vec::new()),
@@ -509,7 +530,16 @@ pub(crate) fn extract_fluent_keys<'a>(
     if let Some(mut cache) = cache
         && !cache_updates.is_empty()
     {
-        cache.files.extend(cache_updates);
+        for update in cache_updates {
+            match update {
+                CacheUpdate::Upsert(path, cached_file) => {
+                    cache.files.insert(path, cached_file);
+                }
+                CacheUpdate::Remove(path) => {
+                    cache.files.remove(&path);
+                }
+            }
+        }
         save_cache(&cache_file_path, &cache);
     }
 
@@ -564,7 +594,7 @@ mod tests {
         let ignore_set = GlobSet::empty();
         let py_files = super::find_py_files(&code_path, &ignore_set);
         assert_eq!(py_files.len(), 1);
-        assert_eq!(py_files[0], code_path);
+        assert_eq!(py_files[0].path, code_path);
     }
 
     #[test]

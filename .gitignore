@@ -1,6 +1,7 @@
 *.mo
 *.pyc
 /.env
+/.ftl-extract-cache/
 /.idea/
 /.ruff_cache/
 /.venv/

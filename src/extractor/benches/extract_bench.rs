@@ -2,7 +2,7 @@ mod gen_fixtures;
 
 use criterion::{Criterion, criterion_group, criterion_main};
 use extractor::ftl::consts::{
-    CommentsKeyModes, LineEndings, DEFAULT_I18N_KEYS, DEFAULT_IGNORE_KWARGS,
+    CommentsKeyModes, DEFAULT_I18N_KEYS, DEFAULT_IGNORE_KWARGS, LineEndings,
 };
 use extractor::ftl::ftl_extractor::{ExtractConfig, extract};
 use extractor::ftl::utils::FastHashSet;
@@ -29,6 +29,9 @@ fn make_config(code_path: PathBuf, output_path: PathBuf, languages: Vec<&str>) -
         comment_keys_mode: CommentsKeyModes::Comment,
         line_endings: LineEndings::LF,
         dry_run: true, // dry_run to avoid I/O noise
+        cache: false,
+        cache_path: None,
+        clear_cache: false,
     }
 }
 

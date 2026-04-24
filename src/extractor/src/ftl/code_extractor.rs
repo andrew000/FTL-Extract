@@ -8,11 +8,46 @@ use memchr::memmem;
 use memmap2::Mmap;
 use rayon::prelude::*;
 use ruff_python_ast::visitor::source_order::SourceOrderVisitor;
+use serde::{Deserialize, Serialize};
 use std::collections::hash_map::Entry;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
+use std::time::UNIX_EPOCH;
+
+const CACHE_SCHEMA_VERSION: u32 = 1;
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+struct CacheOptions {
+    i18n_keys: Vec<String>,
+    i18n_keys_prefix: Vec<String>,
+    ignore_attributes: Vec<String>,
+    ignore_kwargs: Vec<String>,
+    default_ftl_file: PathBuf,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+struct CacheFile {
+    schema_version: u32,
+    options: CacheOptions,
+    files: FastHashMap<String, CachedPyFile>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+struct CachedPyFile {
+    size: u64,
+    modified_ns: u128,
+    keys: Vec<CachedFluentKey>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+struct CachedFluentKey {
+    key: String,
+    code_path: PathBuf,
+    ftl_path: PathBuf,
+    kwargs: Vec<String>,
+}
 
 fn find_py_files(search_path: &Path, ignore_set: &GlobSet) -> Vec<PathBuf> {
     let mut result_paths: Vec<PathBuf> = Vec::new();
@@ -114,6 +149,242 @@ fn parse_file(
 
     matcher.fluent_keys
 }
+
+fn sorted_values(values: &FastHashSet<String>) -> Vec<String> {
+    let mut values = values.iter().cloned().collect::<Vec<_>>();
+    values.sort_unstable();
+    values
+}
+
+fn cache_options(
+    i18n_keys: &FastHashSet<String>,
+    i18n_keys_prefix: &FastHashSet<String>,
+    ignore_attributes: &FastHashSet<String>,
+    ignore_kwargs: &FastHashSet<String>,
+    default_ftl_file: &Path,
+) -> CacheOptions {
+    CacheOptions {
+        i18n_keys: sorted_values(i18n_keys),
+        i18n_keys_prefix: sorted_values(i18n_keys_prefix),
+        ignore_attributes: sorted_values(ignore_attributes),
+        ignore_kwargs: sorted_values(ignore_kwargs),
+        default_ftl_file: default_ftl_file.to_path_buf(),
+    }
+}
+
+fn cache_file_path(cache_path: Option<&Path>) -> PathBuf {
+    if let Some(path) = cache_path {
+        if path.extension().is_some() {
+            path.to_path_buf()
+        } else {
+            path.join("extract-v1.json")
+        }
+    } else {
+        PathBuf::from(".ftl-extract-cache").join("extract-v1.json")
+    }
+}
+
+fn file_cache_key(path: &Path) -> String {
+    path.to_string_lossy().replace('\\', "/")
+}
+
+fn file_modified_ns(metadata: &fs::Metadata) -> u128 {
+    metadata
+        .modified()
+        .ok()
+        .and_then(|modified| modified.duration_since(UNIX_EPOCH).ok())
+        .map_or(0, |duration| duration.as_nanos())
+}
+
+fn load_cache(path: &Path, options: &CacheOptions, clear_cache: bool) -> CacheFile {
+    if clear_cache {
+        let _ = fs::remove_file(path);
+    }
+
+    let Ok(content) = fs::read_to_string(path) else {
+        return CacheFile {
+            schema_version: CACHE_SCHEMA_VERSION,
+            options: options.clone(),
+            files: FastHashMap::default(),
+        };
+    };
+
+    match serde_json::from_str::<CacheFile>(&content) {
+        Ok(cache) if cache.schema_version == CACHE_SCHEMA_VERSION && cache.options == *options => {
+            cache
+        }
+        _ => CacheFile {
+            schema_version: CACHE_SCHEMA_VERSION,
+            options: options.clone(),
+            files: FastHashMap::default(),
+        },
+    }
+}
+
+fn save_cache(path: &Path, cache: &CacheFile) {
+    if let Some(parent) = path.parent()
+        && let Err(err) = fs::create_dir_all(parent)
+    {
+        error!(target: "extractor:code", "Failed to create cache directory {}: {}", parent.display(), err);
+        return;
+    }
+
+    match serde_json::to_string(cache) {
+        Ok(content) => {
+            if let Err(err) = fs::write(path, content) {
+                error!(target: "extractor:code", "Failed to write cache {}: {}", path.display(), err);
+            }
+        }
+        Err(err) => {
+            error!(target: "extractor:code", "Failed to serialize extraction cache: {}", err)
+        }
+    }
+}
+
+fn cached_key_to_fluent_key(cached: CachedFluentKey) -> FluentKey {
+    let mut elements = vec![fluent_syntax::ast::PatternElement::TextElement {
+        value: cached.key.clone(),
+    }];
+
+    for kwarg in &cached.kwargs {
+        elements.push(fluent_syntax::ast::PatternElement::Placeable {
+            expression: fluent_syntax::ast::Expression::Inline(
+                fluent_syntax::ast::InlineExpression::VariableReference {
+                    id: fluent_syntax::ast::Identifier {
+                        name: kwarg.clone(),
+                    },
+                },
+            ),
+        });
+    }
+
+    FluentKey::new(
+        Arc::new(cached.code_path),
+        cached.key.clone(),
+        FluentEntry::Message(fluent_syntax::ast::Message {
+            id: fluent_syntax::ast::Identifier { name: cached.key },
+            value: Some(fluent_syntax::ast::Pattern { elements }),
+            attributes: vec![],
+            comment: None,
+        }),
+        Arc::new(cached.ftl_path),
+        None,
+        None,
+        FastHashSet::default(),
+    )
+}
+
+fn fluent_key_to_cached_key(fluent_key: FluentKey) -> CachedFluentKey {
+    let kwargs = match fluent_key.entry.as_ref() {
+        FluentEntry::Message(message) => message
+            .value
+            .as_ref()
+            .map(|pattern| {
+                pattern
+                    .elements
+                    .iter()
+                    .filter_map(|element| match element {
+                        fluent_syntax::ast::PatternElement::Placeable {
+                            expression:
+                                fluent_syntax::ast::Expression::Inline(
+                                    fluent_syntax::ast::InlineExpression::VariableReference { id },
+                                ),
+                        } => Some(id.name.clone()),
+                        _ => None,
+                    })
+                    .collect()
+            })
+            .unwrap_or_default(),
+        _ => Vec::new(),
+    };
+
+    CachedFluentKey {
+        key: fluent_key.key,
+        code_path: fluent_key.code_path.as_ref().clone(),
+        ftl_path: fluent_key.path.as_ref().clone(),
+        kwargs,
+    }
+}
+
+fn cached_file_to_keys(cached: &CachedPyFile) -> FastHashMap<String, FluentKey> {
+    cached
+        .keys
+        .iter()
+        .cloned()
+        .map(cached_key_to_fluent_key)
+        .map(|key| (key.key.clone(), key))
+        .collect()
+}
+
+fn keys_to_cached_file(
+    metadata: &fs::Metadata,
+    keys: &FastHashMap<String, FluentKey>,
+) -> CachedPyFile {
+    CachedPyFile {
+        size: metadata.len(),
+        modified_ns: file_modified_ns(metadata),
+        keys: keys
+            .values()
+            .cloned()
+            .map(fluent_key_to_cached_key)
+            .collect(),
+    }
+}
+
+fn extract_from_file(
+    file: &PathBuf,
+    i18n_keys: &FastHashSet<String>,
+    i18n_keys_prefix: &FastHashSet<String>,
+    ignore_attributes: &FastHashSet<String>,
+    ignore_kwargs: &FastHashSet<String>,
+    default_ftl_file: &Path,
+    cache: Option<&CacheFile>,
+) -> (
+    FastHashMap<String, FluentKey>,
+    Option<(String, CachedPyFile)>,
+) {
+    let metadata = match fs::metadata(file) {
+        Ok(metadata) => metadata,
+        Err(_) => return (FastHashMap::default(), None),
+    };
+
+    let cache_key = file_cache_key(file);
+    let modified_ns = file_modified_ns(&metadata);
+
+    if let Some(cached) = cache
+        .and_then(|cache| cache.files.get(&cache_key))
+        .filter(|cached| cached.size == metadata.len() && cached.modified_ns == modified_ns)
+    {
+        return (cached_file_to_keys(cached), None);
+    }
+
+    let keys = parse_file(
+        file,
+        i18n_keys,
+        i18n_keys_prefix,
+        ignore_attributes,
+        ignore_kwargs,
+        default_ftl_file,
+    );
+    let cached_file = keys_to_cached_file(&metadata, &keys);
+
+    (keys, Some((cache_key, cached_file)))
+}
+
+fn merge_fluent_keys(target: &mut FastHashMap<String, FluentKey>, key: String, val: FluentKey) {
+    match target.entry(key) {
+        Entry::Occupied(entry) => {
+            let existing_key: &FluentKey = entry.get();
+            if existing_key.path != val.path {
+                panic!("FluentKey conflict during merge: {}", entry.key());
+            }
+        }
+        Entry::Vacant(entry) => {
+            entry.insert(val);
+        }
+    }
+}
+
 pub(crate) fn extract_fluent_keys<'a>(
     path: &'a Path,
     i18n_keys: FastHashSet<String>,
@@ -122,28 +393,48 @@ pub(crate) fn extract_fluent_keys<'a>(
     ignore_attributes: FastHashSet<String>,
     ignore_kwargs: FastHashSet<String>,
     default_ftl_file: &'a Path,
+    use_cache: bool,
+    cache_path: Option<&Path>,
+    clear_cache: bool,
     statistics: &mut ExtractionStatistics,
 ) -> FastHashMap<String, FluentKey> {
     let py_files = find_py_files(path, exclude_dirs);
     let py_files_count = AtomicUsize::new(0);
+    let options = cache_options(
+        &i18n_keys,
+        &i18n_keys_prefix,
+        &ignore_attributes,
+        &ignore_kwargs,
+        default_ftl_file,
+    );
+    let cache_file_path = cache_file_path(cache_path);
+    let cache = use_cache.then(|| load_cache(&cache_file_path, &options, clear_cache));
 
     // Parallel Map-Reduce
-    let fluent_keys: FastHashMap<String, FluentKey> = py_files
+    let (fluent_keys, cache_updates): (
+        FastHashMap<String, FluentKey>,
+        Vec<(String, CachedPyFile)>,
+    ) = py_files
         .par_iter()
         .fold(
-            FastHashMap::default, // Init local accumulator
-            |mut acc, file| {
-                let keys = parse_file(
+            || (FastHashMap::default(), Vec::new()),
+            |(mut acc, mut updates), file| {
+                let (keys, cache_update) = extract_from_file(
                     file,
                     &i18n_keys,
                     &i18n_keys_prefix,
                     &ignore_attributes,
                     &ignore_kwargs,
                     default_ftl_file,
+                    cache.as_ref(),
                 );
 
                 if !keys.is_empty() {
                     py_files_count.fetch_add(1, Ordering::Relaxed);
+                }
+
+                if let Some(update) = cache_update {
+                    updates.push(update);
                 }
 
                 // Merge found keys into local accumulator
@@ -187,38 +478,40 @@ pub(crate) fn extract_fluent_keys<'a>(
                         }
                     }
                 }
-                acc
+                (acc, updates)
             },
         )
         .reduce(
-            FastHashMap::default, // Init reducer
+            || (FastHashMap::default(), Vec::new()),
             |a, b| {
                 // Merge two Maps (a and b)
                 // We iterate over the smaller map and insert into the larger one for efficiency
-                let (mut target, source) = if a.len() > b.len() { (a, b) } else { (b, a) };
+                let ((mut target, mut target_updates), (source, source_updates)) =
+                    if a.0.len() > b.0.len() {
+                        (a, b)
+                    } else {
+                        (b, a)
+                    };
 
                 for (key, val) in source {
                     // Same conflict logic as above needed here strictly speaking,
                     // but if keys are unique per file or conflicts handled in fold,
                     // we just insert. To be safe, we use the same check:
-                    match target.entry(key) {
-                        Entry::Occupied(entry) => {
-                            let existing_key: &FluentKey = entry.get();
-                            if existing_key.path != val.path {
-                                panic!("FluentKey conflict during merge: {}", entry.key());
-                            }
-                            // Additional checks omitted for brevity, but should be mirrored
-                        }
-                        Entry::Vacant(entry) => {
-                            entry.insert(val);
-                        }
-                    }
+                    merge_fluent_keys(&mut target, key, val);
                 }
-                target
+                target_updates.extend(source_updates);
+                (target, target_updates)
             },
         );
 
     statistics.py_files_count += py_files_count.load(Ordering::Relaxed);
+
+    if let Some(mut cache) = cache
+        && !cache_updates.is_empty()
+    {
+        cache.files.extend(cache_updates);
+        save_cache(&cache_file_path, &cache);
+    }
 
     fluent_keys
 }
@@ -292,6 +585,9 @@ mod tests {
             FastHashSet::default(),
             FastHashSet::default(),
             &PathBuf::from("locales/en.ftl"),
+            false,
+            None,
+            false,
             &mut statistics,
         );
 

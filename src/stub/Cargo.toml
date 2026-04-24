@@ -18,7 +18,7 @@ fluent-syntax.workspace = true
 log.workspace = true
 serde_json.workspace = true
 
-indexmap = { version = "2.13.0", features = ["serde"] }
+indexmap = { version = "2.14.0", features = ["serde"] }
 serde = { version = "1.0.228", features = ["derive"] }
 walkdir = { version = "2.5.0" }
 

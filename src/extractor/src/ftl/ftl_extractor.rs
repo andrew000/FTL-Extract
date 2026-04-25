@@ -29,6 +29,9 @@ pub struct ExtractConfig {
     pub comment_keys_mode: CommentsKeyModes,
     pub line_endings: LineEndings,
     pub dry_run: bool,
+    pub cache: bool,
+    pub cache_path: Option<PathBuf>,
+    pub clear_cache: bool,
 }
 
 pub fn extract(config: ExtractConfig) -> Result<ExtractionStatistics> {
@@ -55,6 +58,9 @@ pub fn extract(config: ExtractConfig) -> Result<ExtractionStatistics> {
         config.ignore_attributes.clone(),
         config.ignore_kwargs.clone(),
         &config.default_ftl_file,
+        config.cache,
+        config.cache_path.as_deref(),
+        config.clear_cache,
         &mut statistics,
     );
     statistics.ftl_in_code_keys_count = in_code_fluent_keys.len();
@@ -68,12 +74,7 @@ pub fn extract(config: ExtractConfig) -> Result<ExtractionStatistics> {
             let mut thread_local_stats = ExtractionStatistics::new();
             thread_local_stats.init_lang(lang);
 
-            process_language(
-                lang,
-                &in_code_fluent_keys,
-                &config,
-                &mut thread_local_stats,
-            )?;
+            process_language(lang, &in_code_fluent_keys, &config, &mut thread_local_stats)?;
 
             Ok(thread_local_stats)
         })

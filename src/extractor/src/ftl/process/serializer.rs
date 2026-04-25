@@ -10,7 +10,7 @@ pub(crate) fn generate_ftl(fluent_keys: &Vec<FluentKey>, leave_as_is: &[FluentKe
     listed_fluent_keys.extend_from_slice(leave_as_is);
 
     // Sort fluent keys by position
-    listed_fluent_keys.sort_by(|a, b| a.position.cmp(&b.position));
+    listed_fluent_keys.sort_by_key(|key| key.position);
 
     for fluent_key in listed_fluent_keys {
         match fluent_key.entry.as_ref() {

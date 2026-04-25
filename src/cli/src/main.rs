@@ -94,6 +94,18 @@ enum Commands {
         /// Dry run, do not write to files
         #[arg(long, default_value_t = false)]
         dry_run: bool,
+
+        /// Cache Python extraction results between runs
+        #[arg(long, default_value_t = false)]
+        cache: bool,
+
+        /// Directory or file path for the extraction cache
+        #[arg(long)]
+        cache_path: Option<PathBuf>,
+
+        /// Clear the extraction cache before running
+        #[arg(long, default_value_t = false)]
+        clear_cache: bool,
     },
     Stub {
         /// Path to the FTL files directory
@@ -178,6 +190,9 @@ fn main() {
             comment_keys_mode,
             line_endings,
             dry_run,
+            cache,
+            cache_path,
+            clear_cache,
         }) => {
             info!(target: "cli", "Code path: {}", code_path.display());
             info!(target: "cli", "Output path: {}", output_path.display());
@@ -206,6 +221,9 @@ fn main() {
                 comment_keys_mode,
                 line_endings,
                 dry_run,
+                cache: cache || cache_path.is_some() || clear_cache,
+                cache_path,
+                clear_cache,
             };
 
             match extract(config) {

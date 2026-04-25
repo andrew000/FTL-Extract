@@ -1,3 +1,7 @@
+use crate::ftl::cache::{
+    CacheFile, CacheUpdate, cache_file_path, cache_options, cached_file_to_keys, file_cache_key,
+    file_modified_ns, keys_to_cached_file, load_cache, save_cache,
+};
 use crate::ftl::matcher::{FluentEntry, FluentKey, I18nMatcher};
 use crate::ftl::utils::{ExtractionStatistics, FastHashMap, FastHashSet};
 use globset::GlobSet;
@@ -14,8 +18,15 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
-fn find_py_files(search_path: &Path, ignore_set: &GlobSet) -> Vec<PathBuf> {
-    let mut result_paths: Vec<PathBuf> = Vec::new();
+#[derive(Clone, Debug)]
+struct PyFile {
+    path: PathBuf,
+    size: u64,
+    modified_ns: u128,
+}
+
+fn find_py_files(search_path: &Path, ignore_set: &GlobSet) -> Vec<PyFile> {
+    let mut result_paths: Vec<PyFile> = Vec::new();
 
     if search_path.is_dir() {
         let mut type_builder = TypesBuilder::new();
@@ -37,39 +48,48 @@ fn find_py_files(search_path: &Path, ignore_set: &GlobSet) -> Vec<PathBuf> {
                     let path = entry.path();
                     if entry.file_type().is_some_and(|ft| ft.is_file())
                         && !ignore_set.is_match(path)
+                        && let Ok(metadata) = entry.metadata()
                     {
-                        result_paths.push(path.to_path_buf());
+                        result_paths.push(PyFile {
+                            path: path.to_path_buf(),
+                            size: metadata.len(),
+                            modified_ns: file_modified_ns(&metadata),
+                        });
                     }
                 }
                 Err(err) => error!(target: "extractor:code", "{}", err),
             }
         }
-    } else if search_path.is_file() && search_path.extension().unwrap_or_default() == "py" {
-        result_paths.push(search_path.to_path_buf());
+    } else if search_path.is_file()
+        && search_path.extension().unwrap_or_default() == "py"
+        && let Ok(metadata) = fs::metadata(search_path)
+    {
+        result_paths.push(PyFile {
+            path: search_path.to_path_buf(),
+            size: metadata.len(),
+            modified_ns: file_modified_ns(&metadata),
+        });
     }
 
     result_paths
 }
 fn parse_file(
-    file: &PathBuf,
+    file: &Path,
+    file_size: u64,
     i18n_keys: &FastHashSet<String>,
     i18n_keys_prefix: &FastHashSet<String>,
     ignore_attributes: &FastHashSet<String>,
     ignore_kwargs: &FastHashSet<String>,
     default_ftl_file: &Path,
 ) -> FastHashMap<String, FluentKey> {
+    if file_size == 0 {
+        return FastHashMap::default();
+    }
+
     let file_handle = match fs::File::open(file) {
         Ok(f) => f,
         Err(_) => return FastHashMap::default(),
     };
-    // Mmap requires non-empty file. Handle empty files gracefully.
-    let metadata = match file_handle.metadata() {
-        Ok(m) => m,
-        Err(_) => return FastHashMap::default(),
-    };
-    if metadata.len() == 0 {
-        return FastHashMap::default();
-    }
 
     // Unsafe is required for mmap (file could change under us), but standard for tools like this.
     let mmap = unsafe {
@@ -114,6 +134,61 @@ fn parse_file(
 
     matcher.fluent_keys
 }
+
+fn extract_from_file(
+    file: &PyFile,
+    i18n_keys: &FastHashSet<String>,
+    i18n_keys_prefix: &FastHashSet<String>,
+    ignore_attributes: &FastHashSet<String>,
+    ignore_kwargs: &FastHashSet<String>,
+    default_ftl_file: &Path,
+    cache: Option<&CacheFile>,
+) -> (FastHashMap<String, FluentKey>, Option<CacheUpdate>) {
+    let cache_key = file_cache_key(&file.path);
+    let cached_file = cache.and_then(|cache| cache.files.get(&cache_key));
+
+    if let Some(cached) = cached_file
+        .filter(|cached| cached.size == file.size && cached.modified_ns == file.modified_ns)
+    {
+        return (cached_file_to_keys(cached), None);
+    }
+
+    let keys = parse_file(
+        &file.path,
+        file.size,
+        i18n_keys,
+        i18n_keys_prefix,
+        ignore_attributes,
+        ignore_kwargs,
+        default_ftl_file,
+    );
+
+    if keys.is_empty() {
+        let update = cached_file
+            .is_some()
+            .then_some(CacheUpdate::Remove(cache_key));
+        return (keys, update);
+    }
+
+    let cached_file = keys_to_cached_file(file.size, file.modified_ns, &keys);
+
+    (keys, Some(CacheUpdate::Upsert(cache_key, cached_file)))
+}
+
+fn merge_fluent_keys(target: &mut FastHashMap<String, FluentKey>, key: String, val: FluentKey) {
+    match target.entry(key) {
+        Entry::Occupied(entry) => {
+            let existing_key: &FluentKey = entry.get();
+            if existing_key.path != val.path {
+                panic!("FluentKey conflict during merge: {}", entry.key());
+            }
+        }
+        Entry::Vacant(entry) => {
+            entry.insert(val);
+        }
+    }
+}
+
 pub(crate) fn extract_fluent_keys<'a>(
     path: &'a Path,
     i18n_keys: FastHashSet<String>,
@@ -122,28 +197,45 @@ pub(crate) fn extract_fluent_keys<'a>(
     ignore_attributes: FastHashSet<String>,
     ignore_kwargs: FastHashSet<String>,
     default_ftl_file: &'a Path,
+    use_cache: bool,
+    cache_path: Option<&Path>,
+    clear_cache: bool,
     statistics: &mut ExtractionStatistics,
 ) -> FastHashMap<String, FluentKey> {
     let py_files = find_py_files(path, exclude_dirs);
     let py_files_count = AtomicUsize::new(0);
+    let options = cache_options(
+        &i18n_keys,
+        &i18n_keys_prefix,
+        &ignore_attributes,
+        &ignore_kwargs,
+        default_ftl_file,
+    );
+    let cache_file_path = cache_file_path(cache_path);
+    let cache = use_cache.then(|| load_cache(&cache_file_path, &options, clear_cache));
 
     // Parallel Map-Reduce
-    let fluent_keys: FastHashMap<String, FluentKey> = py_files
+    let (fluent_keys, cache_updates): (FastHashMap<String, FluentKey>, Vec<CacheUpdate>) = py_files
         .par_iter()
         .fold(
-            FastHashMap::default, // Init local accumulator
-            |mut acc, file| {
-                let keys = parse_file(
+            || (FastHashMap::default(), Vec::new()),
+            |(mut acc, mut updates), file| {
+                let (keys, cache_update) = extract_from_file(
                     file,
                     &i18n_keys,
                     &i18n_keys_prefix,
                     &ignore_attributes,
                     &ignore_kwargs,
                     default_ftl_file,
+                    cache.as_ref(),
                 );
 
                 if !keys.is_empty() {
                     py_files_count.fetch_add(1, Ordering::Relaxed);
+                }
+
+                if let Some(update) = cache_update {
+                    updates.push(update);
                 }
 
                 // Merge found keys into local accumulator
@@ -187,38 +279,49 @@ pub(crate) fn extract_fluent_keys<'a>(
                         }
                     }
                 }
-                acc
+                (acc, updates)
             },
         )
         .reduce(
-            FastHashMap::default, // Init reducer
+            || (FastHashMap::default(), Vec::new()),
             |a, b| {
                 // Merge two Maps (a and b)
                 // We iterate over the smaller map and insert into the larger one for efficiency
-                let (mut target, source) = if a.len() > b.len() { (a, b) } else { (b, a) };
+                let ((mut target, mut target_updates), (source, source_updates)) =
+                    if a.0.len() > b.0.len() {
+                        (a, b)
+                    } else {
+                        (b, a)
+                    };
 
                 for (key, val) in source {
                     // Same conflict logic as above needed here strictly speaking,
                     // but if keys are unique per file or conflicts handled in fold,
                     // we just insert. To be safe, we use the same check:
-                    match target.entry(key) {
-                        Entry::Occupied(entry) => {
-                            let existing_key: &FluentKey = entry.get();
-                            if existing_key.path != val.path {
-                                panic!("FluentKey conflict during merge: {}", entry.key());
-                            }
-                            // Additional checks omitted for brevity, but should be mirrored
-                        }
-                        Entry::Vacant(entry) => {
-                            entry.insert(val);
-                        }
-                    }
+                    merge_fluent_keys(&mut target, key, val);
                 }
-                target
+                target_updates.extend(source_updates);
+                (target, target_updates)
             },
         );
 
     statistics.py_files_count += py_files_count.load(Ordering::Relaxed);
+
+    if let Some(mut cache) = cache
+        && !cache_updates.is_empty()
+    {
+        for update in cache_updates {
+            match update {
+                CacheUpdate::Upsert(path, cached_file) => {
+                    cache.files.insert(path, cached_file);
+                }
+                CacheUpdate::Remove(path) => {
+                    cache.files.remove(&path);
+                }
+            }
+        }
+        save_cache(&cache_file_path, &cache);
+    }
 
     fluent_keys
 }
@@ -271,7 +374,7 @@ mod tests {
         let ignore_set = GlobSet::empty();
         let py_files = super::find_py_files(&code_path, &ignore_set);
         assert_eq!(py_files.len(), 1);
-        assert_eq!(py_files[0], code_path);
+        assert_eq!(py_files[0].path, code_path);
     }
 
     #[test]
@@ -292,6 +395,9 @@ mod tests {
             FastHashSet::default(),
             FastHashSet::default(),
             &PathBuf::from("locales/en.ftl"),
+            false,
+            None,
+            false,
             &mut statistics,
         );
 

@@ -1,7 +1,6 @@
 *.mo
 *.pyc
 /.env
-/.claude/
 /.idea/
 /.ruff_cache/
 /.venv/

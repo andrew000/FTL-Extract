@@ -88,9 +88,10 @@ $ ftl extract project_path/code_path project_path/locales
 - `-v` or `--verbose` - print additional information about the process.
 - `--dry-run` - run the command without making any changes to the files.
 - `--cache` - cache extracted Python keys between runs and reuse them when source file metadata and extractor options
-  are unchanged. By default, the cache is stored in `.ftl-extract-cache/extract-v1.bin`.
-- `--cache-path` - custom cache directory or file path. Directory paths store the cache as `extract-v1.bin`. Passing
-  this option enables the cache.
+  are unchanged. By default, the cache is stored in
+  `.ftl-extract-cache/extract-<package-version>-v<schema-version>.bin`.
+- `--cache-path` - custom cache directory or file path. Directory paths store the cache as
+  `extract-<package-version>-v<schema-version>.bin`. Passing this option enables the cache.
 - `--clear-cache` - delete the existing extraction cache before running.
 
 ***

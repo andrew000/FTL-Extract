@@ -194,14 +194,19 @@ fn cache_options(
 }
 
 fn cache_file_path(cache_path: Option<&Path>) -> PathBuf {
+    let file_name = format!(
+        "extract-{}-v{CACHE_SCHEMA_VERSION}.bin",
+        env!("CARGO_PKG_VERSION")
+    );
+
     if let Some(path) = cache_path {
         if path.extension().is_some() {
             path.to_path_buf()
         } else {
-            path.join("extract-v1.bin")
+            path.join(file_name)
         }
     } else {
-        PathBuf::from(".ftl-extract-cache").join("extract-v1.bin")
+        PathBuf::from(".ftl-extract-cache").join(file_name)
     }
 }
 

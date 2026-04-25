@@ -65,13 +65,12 @@ pub fn extract(config: ExtractConfig) -> Result<ExtractionStatistics> {
         .languages
         .par_iter()
         .map(|lang| {
-            let mut thread_local_keys = in_code_fluent_keys.clone();
             let mut thread_local_stats = ExtractionStatistics::new();
             thread_local_stats.init_lang(lang);
 
             process_language(
                 lang,
-                &mut thread_local_keys,
+                &in_code_fluent_keys,
                 &config,
                 &mut thread_local_stats,
             )?;
@@ -94,7 +93,7 @@ pub fn extract(config: ExtractConfig) -> Result<ExtractionStatistics> {
 
 fn process_language(
     lang: &String,
-    in_code_fluent_keys: &mut FastHashMap<String, FluentKey>,
+    in_code_fluent_keys: &FastHashMap<String, FluentKey>,
     config: &ExtractConfig,
     statistics: &mut ExtractionStatistics,
 ) -> Result<()> {
@@ -132,11 +131,10 @@ fn process_language(
     }
 
     // Compare Key Kwargs
-    let in_code_fluent_keys_ref = in_code_fluent_keys.clone();
     let stored_fluent_keys_ref = stored_fluent_keys.clone();
     let mut depend_keys: FastHashSet<String> = FastHashSet::default();
 
-    for (key, fluent_key) in in_code_fluent_keys.iter_mut() {
+    for (key, fluent_key) in in_code_fluent_keys.iter() {
         if !stored_fluent_keys.contains_key(key) {
             continue;
         }
@@ -144,12 +142,12 @@ fn process_language(
         let code_args = extract_kwargs(
             fluent_key,
             &mut stored_terms,
-            &in_code_fluent_keys_ref,
+            in_code_fluent_keys,
             &mut depend_keys,
         );
 
         let stored_args = extract_kwargs(
-            stored_fluent_keys.get_mut(key).unwrap(),
+            stored_fluent_keys.get(key).unwrap(),
             &mut stored_terms,
             &stored_fluent_keys_ref,
             &mut depend_keys,

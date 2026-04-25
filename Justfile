@@ -43,6 +43,18 @@ test-cov:
     @echo "Running cargo llvm-cov for lcov report..."
     cargo llvm-cov --all-features --workspace --lcov --output-path lcov.info
 
+bench name="":
+    @echo "Running extractor benchmarks..."
+    cargo bench -p extractor --bench extract_bench -- {{ name }}
+
+bench-save name="baseline":
+    @echo "Saving benchmark baseline '{{ name }}'..."
+    cargo bench -p extractor --bench extract_bench -- --save-baseline {{ name }}
+
+bench-cmp name="baseline":
+    @echo "Comparing against benchmark baseline '{{ name }}'..."
+    cargo bench -p extractor --bench extract_bench -- --baseline {{ name }}
+
 outdated:
     uv tree --universal --outdated --no-cache --depth=1
     cargo outdated -w

@@ -6,7 +6,7 @@ use anyhow::{Result, bail};
 use fluent_syntax::ast::{CallArguments, Identifier};
 
 pub(crate) fn extract_kwargs(
-    key: &mut FluentKey,
+    key: &FluentKey,
     terms: &mut FastHashMap<String, FluentKey>,
     all_fluent_keys: &FastHashMap<String, FluentKey>,
     depend_keys: &mut FastHashSet<String>,
@@ -31,7 +31,7 @@ pub(crate) fn extract_kwargs(
 }
 
 fn extract_kwargs_from_placeable(
-    key: &mut FluentKey,
+    key: &FluentKey,
     placeable: &fluent_syntax::ast::PatternElement<String>,
     kwargs: &mut FastHashSet<String>,
     terms: &mut FastHashMap<String, FluentKey>,
@@ -45,8 +45,6 @@ fn extract_kwargs_from_placeable(
             } else if let fluent_syntax::ast::InlineExpression::MessageReference { id, attribute } =
                 inline_expr
             {
-                // Add `ast.MessageReference.id.name` to depends_on_keys to avoid key to be removed
-                key.depends_on_keys.insert(id.name.clone());
                 depend_keys.insert(id.name.clone());
 
                 // Extract kwargs
@@ -99,7 +97,7 @@ fn extract_kwargs_from_variable_reference(
 }
 
 fn extract_kwargs_from_message_reference(
-    key: &mut FluentKey,
+    key: &FluentKey,
     id: &Identifier<String>,
     attribute: &Option<Identifier<String>>,
     kwargs: &mut FastHashSet<String>,
@@ -107,7 +105,7 @@ fn extract_kwargs_from_message_reference(
     all_fluent_keys: &FastHashMap<String, FluentKey>,
     depend_keys: &mut FastHashSet<String>,
 ) -> Result<()> {
-    let mut reference_key = match all_fluent_keys.get(&id.name) {
+    let reference_key = match all_fluent_keys.get(&id.name) {
         Some(key) => key.clone(),
         None => {
             bail!(
@@ -119,7 +117,7 @@ fn extract_kwargs_from_message_reference(
     };
 
     kwargs.extend(extract_kwargs(
-        &mut reference_key,
+        &reference_key,
         terms,
         all_fluent_keys,
         depend_keys,
@@ -129,7 +127,7 @@ fn extract_kwargs_from_message_reference(
 }
 
 fn extract_kwargs_from_term_reference(
-    key: &mut FluentKey,
+    key: &FluentKey,
     id: &Identifier<String>,
     attribute: &Option<Identifier<String>>,
     arguments: &Option<CallArguments<String>>,
@@ -137,7 +135,7 @@ fn extract_kwargs_from_term_reference(
     terms: &mut FastHashMap<String, FluentKey>,
     all_fluent_keys: &FastHashMap<String, FluentKey>,
 ) -> Result<()> {
-    let mut term = match terms.get(&id.name) {
+    let term = match terms.get(&id.name) {
         Some(term) => term.clone(),
         None => {
             bail!(
@@ -149,7 +147,7 @@ fn extract_kwargs_from_term_reference(
     };
 
     kwargs.extend(extract_kwargs(
-        &mut term,
+        &term,
         terms,
         all_fluent_keys,
         &mut FastHashSet::default(),
@@ -159,7 +157,7 @@ fn extract_kwargs_from_term_reference(
 }
 
 fn extract_kwargs_from_selector_expression(
-    key: &mut FluentKey,
+    key: &FluentKey,
     selector: &fluent_syntax::ast::InlineExpression<String>,
     variants: &Vec<fluent_syntax::ast::Variant<String>>,
     kwargs: &mut FastHashSet<String>,
@@ -188,7 +186,7 @@ fn extract_kwargs_from_selector_expression(
 }
 
 fn extract_kwargs_from_message(
-    key: &mut FluentKey,
+    key: &FluentKey,
     kwargs: &mut FastHashSet<String>,
     terms: &mut FastHashMap<String, FluentKey>,
     all_fluent_keys: &FastHashMap<String, FluentKey>,
@@ -215,7 +213,7 @@ fn extract_kwargs_from_message(
 }
 
 fn extract_kwargs_from_term(
-    key: &mut FluentKey,
+    key: &FluentKey,
     kwargs: &mut FastHashSet<String>,
     terms: &mut FastHashMap<String, FluentKey>,
     all_fluent_keys: &FastHashMap<String, FluentKey>,
@@ -250,7 +248,7 @@ mod tests {
 
     #[test]
     fn test_extract_kwargs_message() {
-        let mut key = FluentKey::new(
+        let key = FluentKey::new(
             Arc::new(PathBuf::from("tmp.py")), // code_path
             String::from("msg"),               // key
             FluentEntry::Message(fluent_syntax::ast::Message {
@@ -279,7 +277,7 @@ mod tests {
         let mut kwargs: FastHashSet<String> = FastHashSet::default();
 
         super::extract_kwargs_from_message(
-            &mut key,
+            &key,
             &mut kwargs,
             &mut FastHashMap::<String, FluentKey>::default(),
             &FastHashMap::<String, FluentKey>::default(),
@@ -291,7 +289,7 @@ mod tests {
 
     #[test]
     fn test_extract_kwargs_term() {
-        let mut key = FluentKey::new(
+        let key = FluentKey::new(
             Arc::new(PathBuf::from("tmp.py")), // code_path
             String::from("term"),              // key
             FluentEntry::Term(fluent_syntax::ast::Term {
@@ -320,7 +318,7 @@ mod tests {
         let mut kwargs: FastHashSet<String> = FastHashSet::default();
 
         super::extract_kwargs_from_term(
-            &mut key,
+            &key,
             &mut kwargs,
             &mut FastHashMap::<String, FluentKey>::default(),
             &FastHashMap::<String, FluentKey>::default(),
@@ -332,7 +330,7 @@ mod tests {
 
     #[test]
     fn test_extract_kwargs_from_placeable_variable_reference() {
-        let mut key = FluentKey::new(
+        let key = FluentKey::new(
             Arc::new(PathBuf::from("tmp.py")), // code_path
             String::from("msg"),               // key
             FluentEntry::Message(fluent_syntax::ast::Message {
@@ -370,7 +368,7 @@ mod tests {
         let mut kwargs: FastHashSet<String> = FastHashSet::default();
 
         super::extract_kwargs_from_placeable(
-            &mut key,
+            &key,
             &placeable,
             &mut kwargs,
             &mut FastHashMap::<String, FluentKey>::default(),
@@ -383,7 +381,7 @@ mod tests {
 
     #[test]
     fn test_extract_kwargs_from_placeable_message_reference() {
-        let mut key = FluentKey::new(
+        let key = FluentKey::new(
             Arc::new(PathBuf::from("tmp.py")), // code_path
             String::from("msg"),               // key
             FluentEntry::Message(fluent_syntax::ast::Message {
@@ -443,7 +441,7 @@ mod tests {
         );
 
         super::extract_kwargs_from_placeable(
-            &mut key,
+            &key,
             &placeable,
             &mut kwargs,
             &mut FastHashMap::<String, FluentKey>::default(),
@@ -457,7 +455,7 @@ mod tests {
 
     #[test]
     fn test_extract_kwargs_from_placeable_term_reference() {
-        let mut key = FluentKey::new(
+        let key = FluentKey::new(
             Arc::new(PathBuf::from("tmp.py")), // code_path
             String::from("msg"),               // key
             FluentEntry::Message(fluent_syntax::ast::Message {
@@ -519,7 +517,7 @@ mod tests {
         );
 
         super::extract_kwargs_from_placeable(
-            &mut key,
+            &key,
             &placeable,
             &mut kwargs,
             &mut terms,
@@ -546,7 +544,7 @@ mod tests {
 
     #[test]
     fn test_extract_kwargs_from_placeable_select() {
-        let mut key = FluentKey::new(
+        let key = FluentKey::new(
             Arc::new(PathBuf::from("tmp.py")), // code_path
             String::from("msg"),               // key
             FluentEntry::Message(fluent_syntax::ast::Message {
@@ -586,7 +584,7 @@ mod tests {
         let mut kwargs: FastHashSet<String> = FastHashSet::default();
 
         super::extract_kwargs_from_placeable(
-            &mut key,
+            &key,
             &placeable,
             &mut kwargs,
             &mut FastHashMap::<String, FluentKey>::default(),
@@ -599,7 +597,7 @@ mod tests {
 
     #[test]
     fn test_extract_kwargs_from_message_reference() {
-        let mut key = FluentKey::new(
+        let key = FluentKey::new(
             Arc::new(PathBuf::from("tmp.py")), // code_path
             String::from("msg"),               // key
             FluentEntry::Message(fluent_syntax::ast::Message {
@@ -659,7 +657,7 @@ mod tests {
         );
 
         super::extract_kwargs_from_message_reference(
-            &mut key,
+            &key,
             &fluent_syntax::ast::Identifier {
                 name: "ref_msg".to_string(),
             },
@@ -677,7 +675,7 @@ mod tests {
     #[test]
     #[should_panic(expected = "Can't find reference key ref_msg in tmp.ftl")]
     fn test_extract_kwargs_from_message_reference_panic_when_no_message() {
-        let mut key = FluentKey::new(
+        let key = FluentKey::new(
             Arc::new(PathBuf::from("tmp.py")), // code_path
             String::from("msg"),               // key
             FluentEntry::Message(fluent_syntax::ast::Message {
@@ -709,7 +707,7 @@ mod tests {
         };
 
         super::extract_kwargs_from_message_reference(
-            &mut key,
+            &key,
             &id,
             &None,
             &mut FastHashSet::<String>::default(),
@@ -722,7 +720,7 @@ mod tests {
 
     #[test]
     fn test_extract_kwargs_from_term_reference() {
-        let mut key = FluentKey::new(
+        let key = FluentKey::new(
             Arc::new(PathBuf::from("tmp.py")), // code_path
             String::from("msg"),               // key
             FluentEntry::Message(fluent_syntax::ast::Message {
@@ -783,7 +781,7 @@ mod tests {
         );
 
         super::extract_kwargs_from_term_reference(
-            &mut key,
+            &key,
             &fluent_syntax::ast::Identifier {
                 name: "term".to_string(),
             },
@@ -801,7 +799,7 @@ mod tests {
     #[test]
     #[should_panic(expected = "Can't find reference key term in tmp.ftl")]
     fn test_extract_kwargs_from_term_reference_panic_when_no_term() {
-        let mut key = FluentKey::new(
+        let key = FluentKey::new(
             Arc::new(PathBuf::from("tmp.py")), // code_path
             String::from("msg"),               // key
             FluentEntry::Message(fluent_syntax::ast::Message {
@@ -831,7 +829,7 @@ mod tests {
         );
 
         super::extract_kwargs_from_term_reference(
-            &mut key,
+            &key,
             &fluent_syntax::ast::Identifier {
                 name: "term".to_string(),
             },
@@ -846,7 +844,7 @@ mod tests {
 
     #[test]
     fn test_extract_kwargs_from_selector_expression() {
-        let mut key = FluentKey::new(
+        let key = FluentKey::new(
             Arc::new(PathBuf::from("tmp.py")), // code_path
             String::from("msg"),               // key
             FluentEntry::Message(fluent_syntax::ast::Message {
@@ -922,7 +920,7 @@ mod tests {
         let mut kwargs: FastHashSet<String> = FastHashSet::default();
 
         super::extract_kwargs_from_selector_expression(
-            &mut key,
+            &key,
             &selector,
             &variants,
             &mut kwargs,
@@ -936,7 +934,7 @@ mod tests {
 
     #[test]
     fn test_extract_kwargs_from_message() {
-        let mut key = FluentKey::new(
+        let key = FluentKey::new(
             Arc::new(PathBuf::from("tmp.py")), // code_path
             String::from("msg"),               // key
             FluentEntry::Message(fluent_syntax::ast::Message {
@@ -965,7 +963,7 @@ mod tests {
         let mut kwargs: FastHashSet<String> = FastHashSet::default();
 
         super::extract_kwargs_from_message(
-            &mut key,
+            &key,
             &mut kwargs,
             &mut FastHashMap::<String, FluentKey>::default(),
             &FastHashMap::<String, FluentKey>::default(),
@@ -978,7 +976,7 @@ mod tests {
     #[test]
     #[should_panic(expected = "Expected a Message entry")]
     fn test_extract_kwargs_from_message_panics_on_term() {
-        let mut key = FluentKey::new(
+        let key = FluentKey::new(
             Arc::new(PathBuf::from("tmp.py")), // code_path
             String::from("term"),              // key
             FluentEntry::Term(fluent_syntax::ast::Term {
@@ -996,7 +994,7 @@ mod tests {
         );
 
         super::extract_kwargs_from_message(
-            &mut key,
+            &key,
             &mut FastHashSet::<String>::default(),
             &mut FastHashMap::<String, FluentKey>::default(),
             &FastHashMap::<String, FluentKey>::default(),
@@ -1006,7 +1004,7 @@ mod tests {
 
     #[test]
     fn test_extract_kwargs_from_term() {
-        let mut key = FluentKey::new(
+        let key = FluentKey::new(
             Arc::new(PathBuf::from("tmp.py")), // code_path
             String::from("term"),              // key
             FluentEntry::Term(fluent_syntax::ast::Term {
@@ -1035,7 +1033,7 @@ mod tests {
         let mut kwargs: FastHashSet<String> = FastHashSet::default();
 
         super::extract_kwargs_from_term(
-            &mut key,
+            &key,
             &mut kwargs,
             &mut FastHashMap::<String, FluentKey>::default(),
             &FastHashMap::<String, FluentKey>::default(),
@@ -1048,7 +1046,7 @@ mod tests {
     #[test]
     #[should_panic(expected = "Expected a Term entry")]
     fn test_extract_kwargs_from_term_panics_on_message() {
-        let mut key = FluentKey::new(
+        let key = FluentKey::new(
             Arc::new(PathBuf::from("tmp.py")), // code_path
             String::from("msg"),               // key
             FluentEntry::Message(fluent_syntax::ast::Message {
@@ -1066,7 +1064,7 @@ mod tests {
         );
 
         super::extract_kwargs_from_term(
-            &mut key,
+            &key,
             &mut FastHashSet::<String>::default(),
             &mut FastHashMap::<String, FluentKey>::default(),
             &FastHashMap::<String, FluentKey>::default(),

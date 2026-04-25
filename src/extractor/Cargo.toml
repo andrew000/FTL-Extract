@@ -25,12 +25,18 @@ ruff_python_parser.workspace = true
 globset = { version = "0.4.18" }
 memchr = { version = "2.8.0" }
 memmap2 = { version = "0.9.10" }
-rayon = { version = "1.11.0" }
-rustc-hash = { version = "2.1.1" }
+rayon = { version = "1.12.0" }
+rustc-hash = { version = "2.1.2" }
 smallvec = { version = "2.0.0-alpha.12" }
 
 [dev-dependencies]
 pretty_assertions.workspace = true
+criterion.workspace = true
+tempfile.workspace = true
+
+[[bench]]
+name = "extract_bench"
+harness = false
 
 [lints.rust]
 dead_code = "allow"

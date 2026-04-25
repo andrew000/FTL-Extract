@@ -59,9 +59,8 @@ fn read_ftl_messages(path: &Path, locale: &str) -> Result<Vec<MessageEntry>> {
         anyhow::anyhow!("Failed to parse FTL file {}: {:?}", path.display(), err.1)
     })?;
 
-    let mut line = 1usize;
     let mut messages = Vec::new();
-    for node in &resource.body {
+    for (line, node) in (1usize..).zip(resource.body.iter()) {
         if let Entry::Message(message) = node {
             messages.push(MessageEntry {
                 locale: locale.to_string(),
@@ -72,7 +71,6 @@ fn read_ftl_messages(path: &Path, locale: &str) -> Result<Vec<MessageEntry>> {
                 ignore_untranslated: has_ignore_untranslated_marker(message.comment.as_ref()),
             });
         }
-        line += 1;
     }
 
     Ok(messages)

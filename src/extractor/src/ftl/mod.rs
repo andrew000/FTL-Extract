@@ -1,3 +1,4 @@
+mod cache;
 mod code_extractor;
 pub mod consts;
 pub mod ftl_extractor;

@@ -121,4 +121,37 @@ mod tests {
             "message = Test message.\n-term = Test term.\n\n# This is a comment.\n\n";
         assert_eq!(ftl_output, expected_output);
     }
+
+    #[test]
+    fn test_generate_ftl_group_and_resource_comments() {
+        let fluent_keys: Vec<FluentKey> = vec![
+            FluentKey::new(
+                Arc::new(PathBuf::from("tmp.py")),
+                String::new(),
+                FluentEntry::GroupComment(fluent_syntax::ast::Comment {
+                    content: vec!["Group".to_string()],
+                }),
+                Arc::new(PathBuf::from("tmp.ftl")),
+                Some("en".to_string()),
+                Some(0),
+                FastHashSet::default(),
+            ),
+            FluentKey::new(
+                Arc::new(PathBuf::from("tmp.py")),
+                String::new(),
+                FluentEntry::ResourceComment(fluent_syntax::ast::Comment {
+                    content: vec!["Resource".to_string()],
+                }),
+                Arc::new(PathBuf::from("tmp.ftl")),
+                Some("en".to_string()),
+                Some(1),
+                FastHashSet::default(),
+            ),
+        ];
+
+        let ftl_output = super::generate_ftl(&fluent_keys, &[]);
+
+        assert!(ftl_output.contains("## Group"));
+        assert!(ftl_output.contains("### Resource"));
+    }
 }

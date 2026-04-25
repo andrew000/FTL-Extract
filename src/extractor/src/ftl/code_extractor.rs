@@ -354,6 +354,7 @@ mod tests {
     use pretty_assertions::assert_eq;
     use std::path::PathBuf;
     use std::sync::Arc;
+    use tempfile::TempDir;
 
     #[test]
     fn test_find_py_files_dir() {
@@ -415,6 +416,182 @@ mod tests {
         assert!(fluent_keys.contains_key("text-selector-kwargs"));
         assert!(fluent_keys.contains_key("text-selector-reference-selector-kwargs-terms"));
         assert_eq!(statistics.py_files_count, 2);
+    }
+
+    #[test]
+    fn test_extract_fluent_keys_matcher_edges() {
+        let temp = TempDir::new().unwrap();
+        let code_path = temp.path().join("app.py");
+        std::fs::write(
+            &code_path,
+            r#"
+L("named-key", kwarg="value", when=True)
+i18n.get()
+i18n.get(dynamic_key)
+i18n.get("folder-key", _path="nested")
+i18n.get("file-key", _path="custom.ftl")
+i18n.set_locale("uk")
+self.i18n.get("prefixed-get")
+self.i18n.menu.open()
+unknown("ignored")
+"#,
+        )
+        .unwrap();
+
+        let mut i18n_keys = FastHashSet::default();
+        i18n_keys.insert("i18n".to_string());
+        i18n_keys.insert("L".to_string());
+
+        let mut prefixes = FastHashSet::default();
+        prefixes.insert("self".to_string());
+
+        let mut ignore_attributes = FastHashSet::default();
+        ignore_attributes.insert("set_locale".to_string());
+
+        let mut ignore_kwargs = FastHashSet::default();
+        ignore_kwargs.insert("when".to_string());
+
+        let mut statistics = super::ExtractionStatistics::new();
+        let fluent_keys = super::extract_fluent_keys(
+            &code_path,
+            i18n_keys,
+            prefixes,
+            &globset::GlobSet::empty(),
+            ignore_attributes,
+            ignore_kwargs,
+            &PathBuf::from("_default.ftl"),
+            false,
+            None,
+            false,
+            &mut statistics,
+        );
+
+        assert_eq!(statistics.py_files_count, 1);
+        assert!(fluent_keys.contains_key("named-key"));
+        assert!(fluent_keys.contains_key("folder-key"));
+        assert!(fluent_keys.contains_key("file-key"));
+        assert!(fluent_keys.contains_key("prefixed-get"));
+        assert!(fluent_keys.contains_key("menu-open"));
+        assert!(!fluent_keys.contains_key("set-locale"));
+
+        assert_eq!(
+            fluent_keys["folder-key"].path.as_ref(),
+            &PathBuf::from("nested").join("_default.ftl")
+        );
+        assert_eq!(
+            fluent_keys["file-key"].path.as_ref(),
+            &PathBuf::from("custom.ftl")
+        );
+
+        let FluentEntry::Message(message) = fluent_keys["named-key"].entry.as_ref() else {
+            panic!("expected message")
+        };
+        let elements = &message.value.as_ref().unwrap().elements;
+        assert_eq!(elements.len(), 2);
+    }
+
+    #[test]
+    fn test_parse_file_empty_no_key_invalid_utf8_and_invalid_python() {
+        let temp = TempDir::new().unwrap();
+        let empty = temp.path().join("empty.py");
+        let no_key = temp.path().join("no_key.py");
+        let invalid_utf8 = temp.path().join("invalid_utf8.py");
+        let invalid_python = temp.path().join("invalid_python.py");
+        std::fs::write(&empty, "").unwrap();
+        std::fs::write(&no_key, "print('hello')").unwrap();
+        std::fs::write(&invalid_utf8, b"i18n.get('\xFF')").unwrap();
+        std::fs::write(&invalid_python, "i18n.get(").unwrap();
+
+        let mut i18n_keys = FastHashSet::default();
+        i18n_keys.insert("i18n".to_string());
+
+        for path in [&empty, &no_key, &invalid_utf8, &invalid_python] {
+            let keys = super::parse_file(
+                path,
+                std::fs::metadata(path).unwrap().len(),
+                &i18n_keys,
+                &FastHashSet::default(),
+                &FastHashSet::default(),
+                &FastHashSet::default(),
+                &PathBuf::from("_default.ftl"),
+            );
+            assert!(keys.is_empty());
+        }
+    }
+
+    #[test]
+    fn test_extract_from_file_cache_hit_and_stale_remove() {
+        let temp = TempDir::new().unwrap();
+        let path = temp.path().join("app.py");
+        std::fs::write(&path, r#"i18n.get("hello")"#).unwrap();
+        let metadata = std::fs::metadata(&path).unwrap();
+        let py_file = super::PyFile {
+            path: path.clone(),
+            size: metadata.len(),
+            modified_ns: super::file_modified_ns(&metadata),
+        };
+
+        let mut i18n_keys = FastHashSet::default();
+        i18n_keys.insert("i18n".to_string());
+
+        let (keys, update) = super::extract_from_file(
+            &py_file,
+            &i18n_keys,
+            &FastHashSet::default(),
+            &FastHashSet::default(),
+            &FastHashSet::default(),
+            &PathBuf::from("_default.ftl"),
+            None,
+        );
+        assert!(keys.contains_key("hello"));
+        assert!(matches!(update, Some(super::CacheUpdate::Upsert(_, _))));
+
+        let mut cache = super::CacheFile {
+            schema_version: 1,
+            options: super::cache_options(
+                &i18n_keys,
+                &FastHashSet::default(),
+                &FastHashSet::default(),
+                &FastHashSet::default(),
+                &PathBuf::from("_default.ftl"),
+            ),
+            files: FastHashMap::default(),
+        };
+        let Some(super::CacheUpdate::Upsert(cache_key, cached_file)) = update else {
+            panic!("expected cache upsert")
+        };
+        cache.files.insert(cache_key, cached_file);
+
+        let (cached_keys, cached_update) = super::extract_from_file(
+            &py_file,
+            &i18n_keys,
+            &FastHashSet::default(),
+            &FastHashSet::default(),
+            &FastHashSet::default(),
+            &PathBuf::from("_default.ftl"),
+            Some(&cache),
+        );
+        assert!(cached_keys.contains_key("hello"));
+        assert!(cached_update.is_none());
+
+        std::fs::write(&path, "print('hello')").unwrap();
+        let metadata = std::fs::metadata(&path).unwrap();
+        let changed = super::PyFile {
+            path,
+            size: metadata.len(),
+            modified_ns: super::file_modified_ns(&metadata),
+        };
+        let (empty_keys, remove_update) = super::extract_from_file(
+            &changed,
+            &i18n_keys,
+            &FastHashSet::default(),
+            &FastHashSet::default(),
+            &FastHashSet::default(),
+            &PathBuf::from("_default.ftl"),
+            Some(&cache),
+        );
+        assert!(empty_keys.is_empty());
+        assert!(matches!(remove_update, Some(super::CacheUpdate::Remove(_))));
     }
 
     #[test]

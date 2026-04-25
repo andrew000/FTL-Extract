@@ -148,4 +148,30 @@ mod tests {
         ));
         assert_eq!(original_key.entry, copied_key.entry);
     }
+
+    #[test]
+    fn test_comment_ftl_key_group_and_resource_comments() {
+        for entry in [
+            FluentEntry::GroupComment(fluent_syntax::ast::Comment {
+                content: vec!["Group".to_string()],
+            }),
+            FluentEntry::ResourceComment(fluent_syntax::ast::Comment {
+                content: vec!["Resource".to_string()],
+            }),
+        ] {
+            let mut key = FluentKey::new(
+                Arc::new(PathBuf::from("tmp.py")),
+                String::new(),
+                entry,
+                Arc::new(PathBuf::from("tmp.ftl")),
+                Some("en".to_string()),
+                Some(0),
+                FastHashSet::default(),
+            );
+
+            super::comment_ftl_key(&mut key);
+
+            assert!(matches!(key.entry.as_ref(), FluentEntry::Comment(_)));
+        }
+    }
 }

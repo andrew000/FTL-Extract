@@ -323,3 +323,225 @@ fn write(path: PathBuf, ftl: String, line_endings: &LineEndings) {
     let ftl_with_line_endings = normalize_line_endings(ftl, line_endings);
     fs::write(path, ftl_with_line_endings).expect("Unable to write file");
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::ftl::consts::{
+        DEFAULT_EXCLUDE_DIRS, DEFAULT_FTL_FILENAME, DEFAULT_I18N_KEYS, DEFAULT_IGNORE_ATTRIBUTES,
+        DEFAULT_IGNORE_KWARGS,
+    };
+    use pretty_assertions::assert_eq;
+    use tempfile::TempDir;
+
+    fn config(code_path: PathBuf, output_path: PathBuf) -> ExtractConfig {
+        ExtractConfig {
+            code_path,
+            output_path,
+            languages: vec!["en".to_string()],
+            i18n_keys: DEFAULT_I18N_KEYS.clone(),
+            i18n_keys_prefix: FastHashSet::default(),
+            exclude_dirs: DEFAULT_EXCLUDE_DIRS.clone(),
+            ignore_attributes: DEFAULT_IGNORE_ATTRIBUTES.clone(),
+            ignore_kwargs: DEFAULT_IGNORE_KWARGS.clone(),
+            default_ftl_file: PathBuf::from(DEFAULT_FTL_FILENAME),
+            comment_junks: false,
+            comment_keys_mode: CommentsKeyModes::Comment,
+            line_endings: LineEndings::Default,
+            dry_run: false,
+            cache: false,
+            cache_path: None,
+            clear_cache: false,
+        }
+    }
+
+    #[test]
+    fn test_extract_writes_new_keys_and_reuses_cache() {
+        let temp = TempDir::new().unwrap();
+        let code_path = temp.path().join("code");
+        let output_path = temp.path().join("locales");
+        let cache_path = temp.path().join("cache");
+        fs::create_dir_all(&code_path).unwrap();
+
+        fs::write(
+            code_path.join("app.py"),
+            r#"
+i18n.get("hello", name=user.name)
+i18n.page.title(_path="pages/main.ftl")
+"#,
+        )
+        .unwrap();
+
+        let mut first = config(code_path.clone(), output_path.clone());
+        first.cache = true;
+        first.cache_path = Some(cache_path.clone());
+        first.clear_cache = true;
+        first.line_endings = LineEndings::CRLF;
+
+        let first_stats = extract(first).unwrap();
+
+        assert_eq!(first_stats.py_files_count, 1);
+        assert_eq!(first_stats.ftl_in_code_keys_count, 2);
+        assert_eq!(first_stats.ftl_keys_added["en"], 2);
+        assert!(cache_path.join("extract-0.11.0-v1.bin").exists());
+
+        let default_content =
+            fs::read_to_string(output_path.join("en").join("_default.ftl")).unwrap();
+        assert!(default_content.contains("hello = hello"));
+        assert!(default_content.contains("{ $name }"));
+        assert!(default_content.contains("\r\n"));
+
+        let nested_content =
+            fs::read_to_string(output_path.join("en").join("pages").join("main.ftl")).unwrap();
+        assert!(nested_content.contains("page-title = page-title"));
+
+        let mut second = config(code_path, output_path);
+        second.cache = true;
+        second.cache_path = Some(cache_path);
+
+        let second_stats = extract(second).unwrap();
+
+        assert_eq!(second_stats.py_files_count, 1);
+        assert_eq!(second_stats.ftl_in_code_keys_count, 2);
+        assert_eq!(second_stats.ftl_keys_added["en"], 0);
+        assert_eq!(second_stats.ftl_keys_updated["en"], 0);
+    }
+
+    #[test]
+    fn test_extract_updates_kwargs_and_comments_obsolete_keys() {
+        let temp = TempDir::new().unwrap();
+        let code_path = temp.path().join("code");
+        let output_path = temp.path().join("locales");
+        let locale_path = output_path.join("en");
+        fs::create_dir_all(&code_path).unwrap();
+        fs::create_dir_all(&locale_path).unwrap();
+
+        fs::write(
+            code_path.join("app.py"),
+            r#"i18n.get("hello", name=user.name)"#,
+        )
+        .unwrap();
+        fs::write(
+            locale_path.join("_default.ftl"),
+            "hello = Hello\nobsolete = Obsolete\n",
+        )
+        .unwrap();
+
+        let stats = extract(config(code_path, output_path.clone())).unwrap();
+
+        assert_eq!(stats.ftl_keys_updated["en"], 1);
+        assert_eq!(stats.ftl_keys_commented["en"], 2);
+
+        let output = fs::read_to_string(output_path.join("en").join("_default.ftl")).unwrap();
+        assert!(output.contains("# hello = Hello"));
+        assert!(output.contains("hello = hello"));
+        assert!(output.contains("{ $name }"));
+        assert!(output.contains("# obsolete = Obsolete"));
+    }
+
+    #[test]
+    fn test_extract_updates_key_when_path_changes() {
+        let temp = TempDir::new().unwrap();
+        let code_path = temp.path().join("code");
+        let output_path = temp.path().join("locales");
+        let locale_path = output_path.join("en");
+        fs::create_dir_all(&code_path).unwrap();
+        fs::create_dir_all(&locale_path).unwrap();
+
+        fs::write(
+            code_path.join("app.py"),
+            r#"i18n.get("moved", _path="new.ftl")"#,
+        )
+        .unwrap();
+        fs::write(locale_path.join("_default.ftl"), "moved = Old path\n").unwrap();
+
+        let stats = extract(config(code_path, output_path.clone())).unwrap();
+
+        assert_eq!(stats.ftl_keys_updated["en"], 1);
+        assert_eq!(stats.ftl_keys_commented["en"], 1);
+        assert!(
+            fs::read_to_string(locale_path.join("_default.ftl"))
+                .unwrap()
+                .contains("# moved = Old path")
+        );
+        assert!(
+            fs::read_to_string(locale_path.join("new.ftl"))
+                .unwrap()
+                .contains("moved = moved")
+        );
+    }
+
+    #[test]
+    fn test_handle_comments_and_junk_comments_junk_entries() {
+        let mut config = config(PathBuf::from("code"), PathBuf::from("locales"));
+        config.comment_junks = true;
+        let mut statistics = ExtractionStatistics::new();
+        statistics.init_lang("en");
+        let mut leave_as_is = vec![FluentKey::new(
+            Arc::new(PathBuf::new()),
+            String::new(),
+            FluentEntry::Junk("bad = {".to_string()),
+            Arc::new(PathBuf::from("_default.ftl")),
+            Some("en".to_string()),
+            Some(0),
+            FastHashSet::default(),
+        )];
+
+        handle_comments_and_junk(
+            &mut FastHashMap::default(),
+            &mut FastHashMap::default(),
+            &mut leave_as_is,
+            Path::new("locales/en"),
+            &config,
+            &mut statistics,
+            "en",
+        );
+
+        assert!(matches!(
+            leave_as_is[0].entry.as_ref(),
+            FluentEntry::Comment(_)
+        ));
+        assert_eq!(statistics.ftl_keys_commented["en"], 1);
+    }
+
+    #[test]
+    fn test_extract_warn_mode_dry_run_does_not_rewrite_file() {
+        let temp = TempDir::new().unwrap();
+        let code_path = temp.path().join("code");
+        let output_path = temp.path().join("locales");
+        let locale_path = output_path.join("en");
+        fs::create_dir_all(&code_path).unwrap();
+        fs::create_dir_all(&locale_path).unwrap();
+
+        fs::write(code_path.join("app.py"), "print('no translations')").unwrap();
+        let ftl_path = locale_path.join("_default.ftl");
+        fs::write(&ftl_path, "obsolete = Obsolete\n").unwrap();
+
+        let mut cfg = config(code_path, output_path);
+        cfg.comment_keys_mode = CommentsKeyModes::Warn;
+        cfg.dry_run = true;
+
+        let stats = extract(cfg).unwrap();
+
+        assert_eq!(stats.py_files_count, 0);
+        assert_eq!(stats.ftl_keys_commented["en"], 1);
+        assert_eq!(
+            fs::read_to_string(ftl_path).unwrap(),
+            "obsolete = Obsolete\n"
+        );
+    }
+
+    #[test]
+    fn test_normalize_line_endings() {
+        assert_eq!(
+            normalize_line_endings("a\r\nb\rc\n".to_string(), &LineEndings::LF),
+            "a\nb\nc\n"
+        );
+        let cr = normalize_line_endings("a\r\nb\n".to_string(), &LineEndings::CR);
+        assert_eq!(cr.as_bytes(), b"a\rb\r");
+        assert_eq!(
+            normalize_line_endings("a\rb\n".to_string(), &LineEndings::CRLF),
+            "ab\r\n"
+        );
+    }
+}

@@ -199,7 +199,7 @@ pub(crate) fn import_ftl_from_dir(
 #[cfg(test)]
 mod tests {
     use crate::ftl::utils::FastHashMap;
-    use fluent_syntax::ast::Entry::Junk;
+    use fluent_syntax::ast::{Comment, Entry, Entry::Junk, Identifier, Message, Pattern, Term};
     use std::path::PathBuf;
 
     #[test]
@@ -215,6 +215,58 @@ mod tests {
         assert_eq!(ftl_keys.len(), 13);
         assert_eq!(terms.len(), 5);
         assert_eq!(leave_as_is_keys.len(), 3);
+    }
+
+    #[test]
+    fn test_process_raw_ftl_supported_entries() {
+        let path = PathBuf::from("messages.ftl");
+        let locale = "en".to_string();
+        let body: Vec<Entry<String>> = vec![
+            Entry::Message(Message {
+                id: Identifier {
+                    name: "hello".to_string(),
+                },
+                value: Some(Pattern { elements: vec![] }),
+                attributes: vec![],
+                comment: None,
+            }),
+            Entry::Term(Term {
+                id: Identifier {
+                    name: "brand".to_string(),
+                },
+                value: Pattern { elements: vec![] },
+                attributes: vec![],
+                comment: None,
+            }),
+            Entry::Comment(Comment {
+                content: vec!["Comment".to_string()],
+            }),
+            Entry::GroupComment(Comment {
+                content: vec!["Group".to_string()],
+            }),
+            Entry::ResourceComment(Comment {
+                content: vec!["Resource".to_string()],
+            }),
+        ];
+        let mut ftl_keys: FastHashMap<String, super::FluentKey> = FastHashMap::default();
+        let mut terms: FastHashMap<String, super::FluentKey> = FastHashMap::default();
+        let mut leave_as_is_keys: Vec<super::FluentKey> = Vec::new();
+
+        super::process_raw_ftl(
+            &body,
+            &path,
+            &locale,
+            &mut ftl_keys,
+            &mut terms,
+            &mut leave_as_is_keys,
+        )
+        .unwrap();
+
+        assert_eq!(ftl_keys.len(), 1);
+        assert_eq!(terms.len(), 1);
+        assert_eq!(leave_as_is_keys.len(), 3);
+        assert_eq!(ftl_keys["hello"].position, 0);
+        assert_eq!(terms["brand"].position, 1);
     }
 
     #[test]

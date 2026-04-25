@@ -20,8 +20,8 @@ pub(super) struct CacheOptions {
 
 #[derive(Clone, Debug, Encode, Decode)]
 pub(super) struct CacheFile {
-    schema_version: u32,
-    options: CacheOptions,
+    pub(super) schema_version: u32,
+    pub(super) options: CacheOptions,
     pub(super) files: FastHashMap<String, CachedPyFile>,
 }
 
@@ -235,5 +235,158 @@ pub(super) fn keys_to_cached_file(
             .cloned()
             .map(fluent_key_to_cached_key)
             .collect(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use pretty_assertions::assert_eq;
+    use tempfile::TempDir;
+
+    fn options(default_ftl_file: &str) -> CacheOptions {
+        let keys = FastHashSet::from_iter(["i18n".to_string()]);
+        cache_options(
+            &keys,
+            &FastHashSet::default(),
+            &FastHashSet::default(),
+            &FastHashSet::default(),
+            &PathBuf::from(default_ftl_file),
+        )
+    }
+
+    fn fluent_key() -> FluentKey {
+        FluentKey::new(
+            Arc::new(PathBuf::from("app.py")),
+            "hello".to_string(),
+            FluentEntry::Message(fluent_syntax::ast::Message {
+                id: fluent_syntax::ast::Identifier {
+                    name: "hello".to_string(),
+                },
+                value: Some(fluent_syntax::ast::Pattern {
+                    elements: vec![
+                        fluent_syntax::ast::PatternElement::TextElement {
+                            value: "hello".to_string(),
+                        },
+                        fluent_syntax::ast::PatternElement::Placeable {
+                            expression: fluent_syntax::ast::Expression::Inline(
+                                fluent_syntax::ast::InlineExpression::VariableReference {
+                                    id: fluent_syntax::ast::Identifier {
+                                        name: "name".to_string(),
+                                    },
+                                },
+                            ),
+                        },
+                    ],
+                }),
+                attributes: vec![],
+                comment: None,
+            }),
+            Arc::new(PathBuf::from("_default.ftl")),
+            None,
+            None,
+            FastHashSet::default(),
+        )
+    }
+
+    fn term_key() -> FluentKey {
+        FluentKey::new(
+            Arc::new(PathBuf::from("app.py")),
+            "brand".to_string(),
+            FluentEntry::Term(fluent_syntax::ast::Term {
+                id: fluent_syntax::ast::Identifier {
+                    name: "brand".to_string(),
+                },
+                value: fluent_syntax::ast::Pattern { elements: vec![] },
+                attributes: vec![],
+                comment: None,
+            }),
+            Arc::new(PathBuf::from("_default.ftl")),
+            None,
+            None,
+            FastHashSet::default(),
+        )
+    }
+
+    #[test]
+    fn test_cache_file_path_uses_versioned_name_for_directories() {
+        assert_eq!(
+            cache_file_path(None),
+            PathBuf::from(".ftl-extract-cache").join("extract-0.11.0-v1.bin")
+        );
+        assert_eq!(
+            cache_file_path(Some(Path::new("cache-dir"))),
+            PathBuf::from("cache-dir").join("extract-0.11.0-v1.bin")
+        );
+        assert_eq!(
+            cache_file_path(Some(Path::new("custom.bin"))),
+            PathBuf::from("custom.bin")
+        );
+    }
+
+    #[test]
+    fn test_file_cache_key_normalizes_windows_separators() {
+        assert_eq!(file_cache_key(Path::new("src\\app.py")), "src/app.py");
+    }
+
+    #[test]
+    fn test_cache_roundtrip_and_option_mismatch() {
+        let temp = TempDir::new().unwrap();
+        let path = temp.path().join("cache.bin");
+        let opts = options("_default.ftl");
+
+        let mut keys = FastHashMap::default();
+        let key = fluent_key();
+        keys.insert(key.key.clone(), key);
+
+        let cached_file = keys_to_cached_file(123, 456, &keys);
+        let mut cache = CacheFile {
+            schema_version: CACHE_SCHEMA_VERSION,
+            options: opts.clone(),
+            files: FastHashMap::default(),
+        };
+        cache.files.insert("app.py".to_string(), cached_file);
+
+        save_cache(&path, &cache);
+
+        let loaded = load_cache(&path, &opts, false);
+        let loaded_file = loaded.files.get("app.py").unwrap();
+        assert_eq!(loaded_file.size, 123);
+        assert_eq!(loaded_file.modified_ns, 456);
+
+        let loaded_keys = cached_file_to_keys(loaded_file);
+        let loaded_key = loaded_keys.get("hello").unwrap();
+        assert_eq!(loaded_key.path.as_ref(), &PathBuf::from("_default.ftl"));
+
+        let mismatched = load_cache(&path, &options("other.ftl"), false);
+        assert!(mismatched.files.is_empty());
+    }
+
+    #[test]
+    fn test_non_message_cache_key_has_no_kwargs() {
+        let mut keys = FastHashMap::default();
+        let key = term_key();
+        keys.insert(key.key.clone(), key);
+
+        let cached_file = keys_to_cached_file(1, 2, &keys);
+        let loaded_keys = cached_file_to_keys(&cached_file);
+
+        let loaded = loaded_keys.get("brand").unwrap();
+        let FluentEntry::Message(message) = loaded.entry.as_ref() else {
+            panic!("cached keys are reconstructed as messages")
+        };
+        assert_eq!(message.value.as_ref().unwrap().elements.len(), 1);
+    }
+
+    #[test]
+    fn test_load_cache_clear_cache_removes_existing_file() {
+        let temp = TempDir::new().unwrap();
+        let path = temp.path().join("cache.bin");
+        fs::write(&path, b"bad cache").unwrap();
+
+        let loaded = load_cache(&path, &options("_default.ftl"), true);
+
+        assert!(loaded.files.is_empty());
+        assert!(!path.exists());
     }
 }

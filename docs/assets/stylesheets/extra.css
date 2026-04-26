@@ -1,0 +1,122 @@
+:root {
+  --md-primary-fg-color: #14161f;
+  --md-primary-fg-color--light: #252a37;
+  --md-primary-fg-color--dark: #0d0f16;
+  --md-accent-fg-color: #2fb67d;
+  --ftl-surface: #f7f8fb;
+  --ftl-border: #dfe4ec;
+  --ftl-text-soft: #5b6472;
+}
+
+[data-md-color-scheme="slate"] {
+  --md-primary-fg-color: #0d0f16;
+  --md-accent-fg-color: #42d392;
+  --ftl-surface: #151923;
+  --ftl-border: #293140;
+  --ftl-text-soft: #a4adba;
+}
+
+.md-header {
+  box-shadow: none;
+  border-bottom: 1px solid color-mix(in srgb, var(--ftl-border) 65%, transparent);
+}
+
+.md-tabs {
+  border-bottom: 1px solid color-mix(in srgb, var(--ftl-border) 65%, transparent);
+}
+
+.md-typeset h1 {
+  font-weight: 780;
+  letter-spacing: 0;
+}
+
+.md-typeset h2,
+.md-typeset h3 {
+  font-weight: 700;
+  letter-spacing: 0;
+}
+
+.md-typeset code {
+  border-radius: 5px;
+}
+
+.md-typeset pre > code {
+  border-radius: 8px;
+}
+
+.hero {
+  margin: 1.5rem 0 1.5rem;
+  max-width: 44rem;
+}
+
+.hero__eyebrow {
+  color: var(--md-accent-fg-color);
+  font-size: 0.75rem;
+  font-weight: 760;
+  letter-spacing: 0.08em;
+  margin-bottom: 0.75rem;
+  text-transform: uppercase;
+}
+
+.hero h1 {
+  font-size: clamp(1.8rem, 5vw, 3rem);
+  line-height: 1.08;
+  margin: 0;
+}
+
+.hero__lead {
+  color: var(--ftl-text-soft);
+  font-size: 0.95rem;
+  line-height: 1.6;
+  margin: 1rem 0 0;
+  max-width: 36rem;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin: 1.25rem 0 0;
+}
+
+.actions .md-button {
+  border-radius: 8px;
+}
+
+.cards {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr));
+  margin: 2rem 0;
+}
+
+.card {
+  background: var(--ftl-surface);
+  border: 1px solid var(--ftl-border);
+  border-radius: 8px;
+  color: var(--md-typeset-color) !important;
+  display: block;
+  padding: 1rem;
+  transition:
+    border-color 120ms ease,
+    transform 120ms ease;
+}
+
+.card:hover {
+  border-color: var(--md-accent-fg-color);
+  transform: translateY(-1px);
+}
+
+.card strong {
+  color: var(--md-typeset-color);
+  display: block;
+  font-size: 0.95rem;
+  margin-bottom: 0.35rem;
+}
+
+.card span {
+  color: var(--ftl-text-soft);
+  display: block;
+  font-size: 0.82rem;
+  line-height: 1.5;
+}

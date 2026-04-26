@@ -8,7 +8,7 @@
 __pycache__/
 /.coverage
 /dist/
-/docs/
+/site/
 /reports/
 /htmlcov/
 *.egg-info

@@ -356,11 +356,68 @@ mod tests {
     use std::sync::Arc;
     use tempfile::TempDir;
 
+    const DEFAULT_PY: &str = r#"
+from .stub import I18nContext
+
+i18n = I18nContext()
+
+i18n.text()
+i18n.text.kwargs(kwarg1="value1", kwarg2="value2")
+i18n.text.args.term()
+i18n.text.args.term.args(kwarg1="value1", kwarg2="value2")
+i18n.text.message_reference()
+i18n.text.message_reference.args(kwarg1="value1", kwarg2="value2")
+i18n.text.selector(selector=1)
+i18n.text.selector.selectors(selector=1)
+i18n.text.selector.kwargs(selector=1, kwarg1="value1", kwarg2="value2")
+i18n.text.selector.reference.selector.kwargs.terms(
+    selector=1,
+    kwarg1="value1",
+    kwarg2="value2",
+)
+"#;
+
+    const CLASSLIKE_PY: &str = r#"
+from typing import Any
+
+
+class I18nContext:
+    def get(self, *_, **__) -> None: ...
+
+    def __getattr__(self, item: str) -> Any: ...
+
+    def __call__(self, *_, **__) -> None: ...
+
+
+class Mock:
+    cls_i18n: I18nContext
+
+    def __init__(self, i18n: I18nContext) -> None:
+        self.i18n = i18n
+
+    def self_i18n(self) -> None:
+        self.i18n.self.key(some_kwarg="...", _path="classlike.ftl")
+        self.i18n.get("self-get-key", some_kwarg="...", _path="classlike.ftl")
+
+    @classmethod
+    def cls_i18n(cls) -> None:
+        cls.cls_i18n.cls.key(some_kwarg="...", _path="classlike.ftl")
+        cls.cls_i18n.get("cls-get-key", some_kwarg="...", _path="classlike.ftl")
+"#;
+
+    fn write_python_fixture(dir: &std::path::Path) {
+        std::fs::write(dir.join("__init__.py"), "").unwrap();
+        std::fs::write(dir.join("default.py"), DEFAULT_PY).unwrap();
+        std::fs::write(dir.join("classlike.py"), CLASSLIKE_PY).unwrap();
+    }
+
     #[test]
     fn test_find_py_files_dir() {
-        let code_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("tests")
-            .join("py");
+        let temp = TempDir::new().unwrap();
+        let code_path = temp.path().join("py");
+        std::fs::create_dir_all(&code_path).unwrap();
+        write_python_fixture(&code_path);
+
         let ignore_set = GlobSet::empty();
         let py_files = super::find_py_files(&code_path, &ignore_set);
         assert_eq!(py_files.len(), 3);
@@ -368,10 +425,12 @@ mod tests {
 
     #[test]
     fn test_find_py_files_file() {
-        let code_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("tests")
-            .join("py")
-            .join("default.py");
+        let temp = TempDir::new().unwrap();
+        let code_dir = temp.path().join("py");
+        std::fs::create_dir_all(&code_dir).unwrap();
+        write_python_fixture(&code_dir);
+
+        let code_path = code_dir.join("default.py");
         let ignore_set = GlobSet::empty();
         let py_files = super::find_py_files(&code_path, &ignore_set);
         assert_eq!(py_files.len(), 1);
@@ -380,9 +439,11 @@ mod tests {
 
     #[test]
     fn test_extract_fluent_keys() {
-        let code_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("tests")
-            .join("py");
+        let temp = TempDir::new().unwrap();
+        let code_path = temp.path().join("py");
+        std::fs::create_dir_all(&code_path).unwrap();
+        write_python_fixture(&code_path);
+
         let mut key_prefixes = consts::DEFAULT_I18N_KEYS.clone();
         key_prefixes.insert("self".to_string());
         key_prefixes.insert("cls".to_string());

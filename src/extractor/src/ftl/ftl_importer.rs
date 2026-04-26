@@ -201,14 +201,80 @@ mod tests {
     use crate::ftl::utils::FastHashMap;
     use fluent_syntax::ast::{Comment, Entry, Entry::Junk, Identifier, Message, Pattern, Term};
     use std::path::PathBuf;
+    use tempfile::TempDir;
+
+    const DEFAULT_FTL: &str = r#"text = This is text
+text-kwargs = This is text with args { $kwarg1 } { $kwarg2 }
+-term1 = This is term1
+-term2 = This is term2
+text-args-term = This is text with args as term { -term1 } { -term2 }
+-term1-with-args = This is term1 with args { $kwarg1 } { $kwarg2 }
+-term2-with-args = This is term2 with args { $kwarg1 } { $kwarg2 }
+message_reference = This is message_reference, uses as variable for `text-message_reference`
+text-message_reference = This is text with another text { message_reference }
+message_reference-args = This is message_reference with args { $kwarg1 } { $kwarg2 }, uses as variable for `text-message_reference-args`
+text-message_reference-args = This is text with another text { message_reference-args }
+text-args-term-args = This is text with args as term { -term1-with-args } { -term2-with-args }
+text-selector =
+    This is text with selector { $selector ->
+        [1] Ok
+        [2] Ok
+       *[other] { $selector }, 🤔
+    }
+text-selector-selectors =
+    This is text with selectors { $selector ->
+        [1] Ok, { $selector }
+        [2] Ok, { $selector }
+       *[other] { $selector }, 🤔
+    }
+text-selector-kwargs =
+    This is text with selector args { $selector ->
+        [1] Ok, { $kwarg1 }
+        [2] Ok, { $kwarg2 }
+       *[other] 🤔
+    }
+-text-selector-reference-selector-kwargs-terms-term1 = This is term1 with args { $kwarg1 } { $kwarg2 }
+text-selector-reference-selector-kwargs-terms-reference =
+    This is text with selector args { $selector ->
+        [1] Ok, { -text-selector-reference-selector-kwargs-terms-term1 }
+        [2] Ok, { $kwarg2 }
+       *[other] 🤔
+    }
+text-selector-reference-selector-kwargs-terms =
+    This is text with selector args { $selector ->
+        [1] Ok, { text-selector-reference-selector-kwargs-terms-reference }
+        [2] Ok, { $kwarg1 }
+       *[other] 🤔
+    }
+
+# Lease as is 1 comment
+
+## Group Comment
+## Group Comment
+## Group Comment
+
+### Resource Comment
+"#;
+
+    const JUNK_FTL: &str = r#"text = This is text
+-term1 = This is term1
+
+# Lease as is 1
+
+JUNK!!!
+"#;
+
+    fn write_locale_fixture(root: &std::path::Path) -> PathBuf {
+        let path = root.join("locales").join("en").join("_default.ftl");
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(&path, DEFAULT_FTL).unwrap();
+        path
+    }
 
     #[test]
     fn test_import_from_ftl() {
-        let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("tests")
-            .join("locales")
-            .join("en")
-            .join("_default.ftl");
+        let temp = TempDir::new().unwrap();
+        let path = write_locale_fixture(temp.path());
         let locale = "en".to_string();
         let (ftl_keys, terms, leave_as_is_keys) = super::import_from_ftl(&path, &locale).unwrap();
 
@@ -272,9 +338,7 @@ mod tests {
     #[test]
     #[should_panic = "Unsupported FTL entry type in file"]
     fn test_process_raw_ftl_with_junk() {
-        let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("tests")
-            .join("_junk.ftl");
+        let path = PathBuf::from("_junk.ftl");
         let locale = "en".to_string();
         let body: Vec<fluent_syntax::ast::Entry<String>> = vec![Junk {
             content: "This is junk".to_string(),
@@ -297,9 +361,9 @@ mod tests {
     #[test]
     #[should_panic = "Failed to parse FTL file"]
     fn test_import_from_ftl_with_junk() {
-        let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("tests")
-            .join("_junk.ftl");
+        let temp = TempDir::new().unwrap();
+        let path = temp.path().join("_junk.ftl");
+        std::fs::write(&path, JUNK_FTL).unwrap();
         let locale = "en".to_string();
         let (_ftl_keys, _terms, _leave_as_is_keys) =
             super::import_from_ftl(&path, &locale).unwrap();
@@ -307,9 +371,9 @@ mod tests {
 
     #[test]
     fn test_import_ftl_from_dir() {
-        let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("tests")
-            .join("locales");
+        let temp = TempDir::new().unwrap();
+        let path = temp.path().join("locales");
+        write_locale_fixture(temp.path());
         let locale = "en".to_string();
         let mut statistics = super::ExtractionStatistics::new();
         statistics.ftl_files_count.insert(locale.clone(), 0);

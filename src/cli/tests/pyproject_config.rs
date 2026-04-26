@@ -13,7 +13,7 @@ fn write(path: &Path, content: &str) {
     std::fs::write(path, content).unwrap();
 }
 
-fn assert_success(output: Output) {
+fn assert_success(output: &Output) {
     assert!(
         output.status.success(),
         "command failed\nstatus: {}\nstdout:\n{}\nstderr:\n{}",
@@ -25,6 +25,49 @@ fn assert_success(output: Output) {
 
 fn pyproject(temp: &TempDir) -> PathBuf {
     temp.path().join("pyproject.toml")
+}
+
+#[test]
+fn config_sample_prints_all_command_sections() {
+    let output = ftl().arg("config").arg("sample").output().unwrap();
+
+    assert_success(&output);
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("[tool.ftl-extract.extract]"));
+    assert!(stdout.contains("[tool.ftl-extract.stub]"));
+    assert!(stdout.contains("[tool.ftl-extract.untranslated]"));
+}
+
+#[test]
+fn config_sample_can_print_one_command_section() {
+    let output = ftl()
+        .arg("config")
+        .arg("sample")
+        .arg("--command")
+        .arg("stub")
+        .output()
+        .unwrap();
+
+    assert_success(&output);
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(!stdout.contains("[tool.ftl-extract.extract]"));
+    assert!(stdout.contains("[tool.ftl-extract.stub]"));
+    assert!(!stdout.contains("[tool.ftl-extract.untranslated]"));
+}
+
+#[test]
+fn config_sample_help_does_not_show_config_option() {
+    let output = ftl()
+        .arg("config")
+        .arg("sample")
+        .arg("--help")
+        .output()
+        .unwrap();
+
+    assert_success(&output);
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("--command <COMMAND>"));
+    assert!(!stdout.contains("--config <CONFIG>"));
 }
 
 #[test]
@@ -52,7 +95,7 @@ line-endings = "lf"
         .output()
         .unwrap();
 
-    assert_success(output);
+    assert_success(&output);
     for locale in ["en", "uk"] {
         let content = std::fs::read_to_string(
             temp.path()
@@ -89,7 +132,7 @@ languages = ["en"]
         .output()
         .unwrap();
 
-    assert_success(output);
+    assert_success(&output);
     assert!(temp.path().join("locales/uk/_default.ftl").exists());
     assert!(!temp.path().join("locales/en/_default.ftl").exists());
 }
@@ -118,7 +161,7 @@ output-path = "code/stub.pyi"
         .output()
         .unwrap();
 
-    assert_success(output);
+    assert_success(&output);
     let stub = std::fs::read_to_string(temp.path().join("code/stub.pyi")).unwrap();
     assert!(stub.contains("class __Hello"));
     assert!(stub.contains("def user"));
@@ -155,7 +198,7 @@ output-format = "json"
         .output()
         .unwrap();
 
-    assert_success(output);
+    assert_success(&output);
     let report = std::fs::read_to_string(temp.path().join("reports/untranslated.json")).unwrap();
     assert!(report.contains(r#""locale": "uk""#));
     assert!(report.contains(r#""key": "hello""#));

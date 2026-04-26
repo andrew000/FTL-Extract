@@ -88,6 +88,13 @@ $ ftl --config ./pyproject.toml extract
 
 CLI arguments override values from `pyproject.toml`; built-in defaults are used when neither is provided.
 
+To print a ready-to-edit configuration sample, use:
+
+```shell
+$ ftl config sample
+$ ftl config sample --command extract
+```
+
 In some cases, you may want to extract keys to specific `.ftl` files.
 So, there is new keyword argument `_path` in `i18n.get` and `i18n.<key>`.
 

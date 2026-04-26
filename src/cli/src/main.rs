@@ -1,6 +1,8 @@
 mod config;
 
-use crate::config::{load_pyproject_config, resolve_config_path};
+use crate::config::{
+    ConfigSampleCommand, load_pyproject_config, render_config_sample, resolve_config_path,
+};
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand, ValueEnum};
 use extractor::ftl::consts::{
@@ -25,7 +27,7 @@ static GLOBAL: MiMalloc = MiMalloc;
 #[command(name = "ftl", version, about)]
 struct Cli {
     /// Path to pyproject.toml with [tool.ftl-extract.<command>] config
-    #[arg(long, global = true)]
+    #[arg(long)]
     config: Option<PathBuf>,
 
     #[command(subcommand)]
@@ -38,6 +40,10 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
+    Config {
+        #[command(subcommand)]
+        command: ConfigCommands,
+    },
     Extract {
         /// Path to the code directory
         #[arg()]
@@ -155,6 +161,15 @@ enum Commands {
     },
 }
 
+#[derive(Subcommand)]
+enum ConfigCommands {
+    Sample {
+        /// Print only one command-specific pyproject.toml section
+        #[arg(long, value_enum)]
+        command: Option<ConfigSampleCommand>,
+    },
+}
+
 #[derive(PartialEq, Clone, Debug, clap::ValueEnum)]
 enum OutputFormat {
     Txt,
@@ -178,15 +193,27 @@ fn main() {
         .filter_module("globset", log::LevelFilter::Warn)
         .init();
 
-    let project_config = match load_pyproject_config(cli.config) {
-        Ok(config) => config,
-        Err(e) => {
-            error!(target: "cli", "Error loading config: {}", e);
-            std::process::exit(1);
+    let project_config = if matches!(cli.command, Some(Commands::Config { .. }) | None) {
+        None
+    } else {
+        match load_pyproject_config(cli.config) {
+            Ok(config) => config,
+            Err(e) => {
+                error!(target: "cli", "Error loading config: {}", e);
+                std::process::exit(1);
+            }
         }
     };
 
     let elapsed = match cli.command {
+        Some(Commands::Config {
+            command: ConfigCommands::Sample {
+                command: sample_command,
+            },
+        }) => {
+            println!("{}", render_config_sample(sample_command));
+            None
+        }
         Some(Commands::Extract {
             code_path,
             output_path,

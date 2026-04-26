@@ -1,6 +1,8 @@
 use anyhow::{Context, Result, bail};
+use clap::ValueEnum;
 use serde::Deserialize;
 use std::path::{Path, PathBuf};
+use std::sync::LazyLock;
 
 #[derive(Debug, Clone, Default, Deserialize)]
 #[serde(rename_all = "kebab-case")]
@@ -108,6 +110,54 @@ pub fn resolve_config_path(path: Option<PathBuf>, base_dir: &Path) -> Option<Pat
     })
 }
 
+#[derive(Debug, Copy, Clone, PartialEq, Eq, ValueEnum)]
+pub enum ConfigSampleCommand {
+    Extract,
+    Stub,
+    Untranslated,
+}
+
+pub fn render_config_sample(command: Option<ConfigSampleCommand>) -> &'static str {
+    match command {
+        Some(ConfigSampleCommand::Extract) => EXTRACT_SAMPLE,
+        Some(ConfigSampleCommand::Stub) => STUB_SAMPLE,
+        Some(ConfigSampleCommand::Untranslated) => UNTRANSLATED_SAMPLE,
+        None => FULL_SAMPLE.as_str(),
+    }
+}
+
+static FULL_SAMPLE: LazyLock<String> =
+    LazyLock::new(|| [EXTRACT_SAMPLE, STUB_SAMPLE, UNTRANSLATED_SAMPLE].join("\n"));
+
+const EXTRACT_SAMPLE: &str = r#"[tool.ftl-extract.extract]
+code-path = "app/bot"
+output-path = "app/bot/locales"
+languages = ["en", "uk"]
+i18n-keys-append = ["LF", "LazyProxy"]
+ignore-attributes-append = ["core"]
+exclude-dirs-append = ["./tests/*"]
+ignore-kwargs = ["when"]
+comment-junks = true
+comment-keys-mode = "comment"
+line-endings = "lf"
+cache = true
+"#;
+
+const STUB_SAMPLE: &str = r#"[tool.ftl-extract.stub]
+ftl-path = "app/bot/locales/en"
+output-path = "app/bot/stub.pyi"
+export-tree = false
+"#;
+
+const UNTRANSLATED_SAMPLE: &str = r#"[tool.ftl-extract.untranslated]
+locales-path = "app/bot/locales"
+languages = ["uk"]
+suggest-from = ["en"]
+fail-on-untranslated = true
+output = "reports/untranslated"
+output-format = "json"
+"#;
+
 fn find_pyproject() -> Option<PathBuf> {
     let mut current = std::env::current_dir().ok()?;
 
@@ -181,5 +231,23 @@ output-format = "json"
             resolve_config_path(Some(PathBuf::from("locales")), base),
             Some(PathBuf::from("project").join("locales"))
         );
+    }
+
+    #[test]
+    fn render_full_config_sample_contains_all_command_sections() {
+        let sample = render_config_sample(None);
+
+        assert!(sample.contains("[tool.ftl-extract.extract]"));
+        assert!(sample.contains("[tool.ftl-extract.stub]"));
+        assert!(sample.contains("[tool.ftl-extract.untranslated]"));
+    }
+
+    #[test]
+    fn render_command_config_sample_contains_only_selected_section() {
+        let sample = render_config_sample(Some(ConfigSampleCommand::Extract));
+
+        assert!(sample.contains("[tool.ftl-extract.extract]"));
+        assert!(!sample.contains("[tool.ftl-extract.stub]"));
+        assert!(!sample.contains("[tool.ftl-extract.untranslated]"));
     }
 }

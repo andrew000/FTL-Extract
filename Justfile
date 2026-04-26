@@ -43,6 +43,10 @@ test-cov:
     @echo "Running cargo llvm-cov for lcov report..."
     cargo llvm-cov --all-features --workspace --lcov --output-path lcov.info
 
+docs:
+    @echo "Building documentation..."
+    uv run --extra docs mkdocs build --strict
+
 bench name="":
     @echo "Running extractor benchmarks..."
     cargo bench -p extractor --bench extract_bench -- {{ name }}

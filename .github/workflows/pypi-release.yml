@@ -40,7 +40,7 @@ jobs:
 
       - name: Prepare the project for linting and testing
         shell: bash
-        run: uv sync --all-extras --no-install-project
+        run: uv sync --extra dev --no-install-project
 
       - name: Rust cache
         uses: Swatinem/rust-cache@v2

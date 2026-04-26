@@ -41,6 +41,60 @@ $ ftl extract project_path/code_path project_path/locales
 
 By default, FTL-Extract will create a directory named `en` and put all keys into `_default.ftl` file.
 
+You can also keep command defaults in `pyproject.toml`:
+
+```toml
+[tool.ftl-extract.extract]
+code-path = "project_path/code_path"
+output-path = "project_path/locales"
+languages = ["en", "uk"]
+i18n-keys-append = ["LF", "LazyProxy"]
+ignore-attributes-append = ["core"]
+exclude-dirs-append = ["./tests/*"]
+ignore-kwargs = ["when"]
+comment-junks = true
+comment-keys-mode = "comment"
+line-endings = "lf"
+cache = true
+
+[tool.ftl-extract.stub]
+ftl-path = "project_path/locales/en"
+output-path = "project_path/code_path/stub.pyi"
+export-tree = false
+
+[tool.ftl-extract.untranslated]
+locales-path = "project_path/locales"
+languages = ["uk"]
+suggest-from = ["en"]
+fail-on-untranslated = true
+output = "reports/untranslated"
+output-format = "json"
+```
+
+Then run commands without repeating the configured paths:
+
+```shell
+$ ftl extract
+$ ftl stub
+$ ftl untranslated
+```
+
+By default, `ftl` searches for `pyproject.toml` from the current directory upward. Use `--config` to select a specific
+file:
+
+```shell
+$ ftl --config ./pyproject.toml extract
+```
+
+CLI arguments override values from `pyproject.toml`; built-in defaults are used when neither is provided.
+
+To print a ready-to-edit configuration sample, use:
+
+```shell
+$ ftl config sample
+$ ftl config sample --command extract
+```
+
 In some cases, you may want to extract keys to specific `.ftl` files.
 So, there is new keyword argument `_path` in `i18n.get` and `i18n.<key>`.
 

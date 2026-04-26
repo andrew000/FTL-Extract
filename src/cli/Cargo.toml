@@ -14,14 +14,20 @@ name = "ftl"
 path = "src/main.rs"
 
 [dependencies]
+anyhow.workspace = true
 clap.workspace = true
 extractor.workspace = true
 log.workspace = true
+serde.workspace = true
 stub.workspace = true
+toml.workspace = true
 untranslated.workspace = true
 
 env_logger = { version = "0.11.9" }
 mimalloc = { version = "0.1.48" }
+
+[dev-dependencies]
+tempfile.workspace = true
 
 [lints.clippy]
 large_enum_variant = "allow"

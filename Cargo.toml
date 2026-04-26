@@ -37,9 +37,11 @@ fluent = { git = "https://github.com/projectfluent/fluent-rs.git", rev = "e0b443
 fluent-syntax = { git = "https://github.com/projectfluent/fluent-rs.git", rev = "e0b443552a9b277badc958ab533b506394aad915" }
 ignore = { version = "0.4" }
 log = { version = "0.4" }
-ruff_python_ast = { git = "https://github.com/astral-sh/ruff.git", tag = "0.15.11" }
-ruff_python_parser = { git = "https://github.com/astral-sh/ruff.git", tag = "0.15.11" }
+ruff_python_ast = { git = "https://github.com/astral-sh/ruff.git", tag = "0.15.12" }
+ruff_python_parser = { git = "https://github.com/astral-sh/ruff.git", tag = "0.15.12" }
 serde_json = { version = "1.0" }
+serde = { version = "1.0", features = ["derive"] }
+toml = { version = "1.1" }
 
 [profile.release]
 opt-level = 3

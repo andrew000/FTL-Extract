@@ -21,11 +21,11 @@ dependencies = []
 
 [project.optional-dependencies]
 dev = [
-    "cibuildwheel==3.4.0",
-    "pre-commit==4.5.1",
-    "setuptools-rust==1.12.0",
+    "cibuildwheel>=3.4,<3.5",
+    "pre-commit>=4.6,<4.7",
+    "setuptools-rust>=1.12,<1.13",
     "setuptools==82.0.1",
-    "wheel==0.46.3",
+    "wheel>=0.47,<0.48",
 ]
 
 [project.urls]

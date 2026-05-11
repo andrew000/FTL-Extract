@@ -20,8 +20,8 @@ log.workspace = true
 stub.workspace = true
 untranslated.workspace = true
 
-env_logger = { version = "0.11.9" }
-mimalloc = { version = "0.1.48" }
+env_logger = { version = "0.11.10" }
+mimalloc = { version = "0.1.50" }
 
 [lints.clippy]
 large_enum_variant = "allow"

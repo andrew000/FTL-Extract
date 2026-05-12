@@ -40,7 +40,7 @@ jobs:
 
       - name: Prepare the project for linting and testing
         shell: bash
-        run: uv sync --all-extras --no-install-project
+        run: uv sync --no-install-project --group dev
 
       - name: Rust cache
         uses: Swatinem/rust-cache@v2
@@ -109,7 +109,7 @@ jobs:
         run: uv build --sdist --out-dir wheelhouse
 
       - name: Store artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ftl_extract-${{ matrix.os }}-${{ matrix.arch }}-${{ matrix.libc }}-${{ github.run_id }}
           if-no-files-found: error
@@ -123,7 +123,7 @@ jobs:
       id-token: write  # IMPORTANT: this permission is mandatory for trusted publishing
     steps:
       - name: Download artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           path: dist
           merge-multiple: true

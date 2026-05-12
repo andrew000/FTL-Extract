@@ -60,7 +60,7 @@ outdated:
     cargo outdated -w
 
 sync:
-    uv sync --no-install-project --all-extras
+    uv sync --no-install-project --group dev
 
 build:
     uv build --wheel --sdist

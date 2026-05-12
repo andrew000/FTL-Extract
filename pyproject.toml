@@ -17,9 +17,12 @@ classifiers = [
     "Programming Language :: Python :: 3.14",
 ]
 
-dependencies = []
+[project.urls]
+Homepage = "https://github.com/andrew000/FTL-Extract"
+Issues = "https://github.com/andrew000/FTL-Extract/issues"
+Repository = "https://github.com/andrew000/FTL-Extract"
 
-[project.optional-dependencies]
+[dependency-groups]
 dev = [
     "cibuildwheel>=3.4,<3.5",
     "pre-commit>=4.6,<4.7",
@@ -27,11 +30,6 @@ dev = [
     "setuptools==82.0.1",
     "wheel>=0.47,<0.48",
 ]
-
-[project.urls]
-Homepage = "https://github.com/andrew000/FTL-Extract"
-Issues = "https://github.com/andrew000/FTL-Extract/issues"
-Repository = "https://github.com/andrew000/FTL-Extract"
 
 [tool.uv]
 package = true

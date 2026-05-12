@@ -1,5 +1,8 @@
 include Cargo.toml
 graft src
 prune tests
+prune src/cli/tests
 prune src/extractor/tests
+prune src/extractor/benches
+prune src/stub/tests
 global-exclude *.py[cod]

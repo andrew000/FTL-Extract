@@ -221,6 +221,7 @@ $ ftl extract \
   --ignore-kwargs 'when' \
   --comment-junks \
   --comment-keys-mode 'comment' \
+  --cache \
   --verbose
 ```
 

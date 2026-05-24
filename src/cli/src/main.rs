@@ -4,6 +4,12 @@ use crate::config::{
     ConfigSampleCommand, load_pyproject_config, render_config_sample, resolve_config_path,
 };
 use anyhow::{Context, Result};
+use check::{
+    CheckKwargsConfig, CheckMissingConfig, CheckReferencesConfig, CheckResult, CheckStaleConfig,
+    CheckSyntaxConfig, CheckUntranslatedConfig, Diagnostic, DiagnosticKind, Severity, check_kwargs,
+    check_missing, check_references, check_stale, check_syntax, check_untranslated,
+    has_failing_diagnostics, render_check_json, render_check_terminal,
+};
 use clap::{Parser, Subcommand, ValueEnum};
 use extractor::ftl::consts::{
     CommentsKeyModes, DEFAULT_EXCLUDE_DIRS, DEFAULT_FTL_FILENAME, DEFAULT_I18N_KEYS,
@@ -15,10 +21,6 @@ use log::{error, info};
 use mimalloc::MiMalloc;
 use std::path::{Path, PathBuf};
 use stub::{StubConfig, generate_stub};
-use untranslated::{
-    CheckUntranslatedConfig, check_untranslated, render_untranslated_json,
-    render_untranslated_terminal, render_untranslated_txt,
-};
 
 #[global_allocator]
 static GLOBAL: MiMalloc = MiMalloc;
@@ -134,22 +136,30 @@ enum Commands {
         #[arg(long, default_value_t = false)]
         export_tree: bool,
     },
-    Untranslated {
+    Check {
         /// Path to locales directory containing locale folders (e.g. en, uk)
         #[arg()]
         locales_path: Option<PathBuf>,
 
-        /// Locale codes to check (if omitted, all locale directories are checked)
-        #[arg(short = 'l', long, default_values_t = Vec::<String>::new())]
+        /// Path to Python code for checks that inspect source usage
+        #[arg(long)]
+        code_path: Option<PathBuf>,
+
+        /// Checks to run
+        #[arg(long = "check", value_enum)]
+        checks: Vec<CheckKind>,
+
+        /// Locale codes to check
+        #[arg(short = 'l', long = "language", default_values_t = Vec::<String>::new())]
         language: Vec<String>,
 
         /// Suggest translations from these locales
         #[arg(long, default_values_t = Vec::<String>::new())]
         suggest_from: Vec<String>,
 
-        /// Exit with code 1 if untranslated keys are found
-        #[arg(long, default_value_t = false)]
-        fail_on_untranslated: bool,
+        /// Diagnostic severities that should fail the command
+        #[arg(long, value_enum, default_values_t = Vec::<FailSeverity>::new())]
+        fail_on: Vec<FailSeverity>,
 
         /// Output report path for batch processing
         #[arg(long)]
@@ -157,7 +167,7 @@ enum Commands {
 
         /// Output format for report file
         #[arg(long, value_enum)]
-        output_format: Option<OutputFormat>,
+        output_format: Option<CheckOutputFormat>,
     },
 }
 
@@ -170,10 +180,27 @@ enum ConfigCommands {
     },
 }
 
+#[derive(PartialEq, Eq, Clone, Debug, clap::ValueEnum)]
+enum CheckKind {
+    All,
+    Kwargs,
+    Missing,
+    References,
+    Stale,
+    Syntax,
+    Untranslated,
+}
+
 #[derive(PartialEq, Clone, Debug, clap::ValueEnum)]
-enum OutputFormat {
-    Txt,
+enum CheckOutputFormat {
+    Terminal,
     Json,
+}
+
+#[derive(PartialEq, Clone, Debug, clap::ValueEnum)]
+enum FailSeverity {
+    Error,
+    Warn,
 }
 
 fn main() {
@@ -421,17 +448,22 @@ fn main() {
             }
             Some(start_time.elapsed())
         }
-        Some(Commands::Untranslated {
+        Some(Commands::Check {
             locales_path,
+            code_path,
+            checks,
             language,
             suggest_from,
-            fail_on_untranslated,
+            fail_on,
             output,
             output_format,
         }) => {
             let config_source = project_config.as_ref();
             let pyproject = config_source
-                .and_then(|loaded| loaded.config.untranslated.clone())
+                .and_then(|loaded| loaded.config.check.clone())
+                .unwrap_or_default();
+            let extract_pyproject = config_source
+                .and_then(|loaded| loaded.config.extract.clone())
                 .unwrap_or_default();
             let base_dir = config_source
                 .map(|loaded| loaded.base_dir.as_path())
@@ -440,37 +472,103 @@ fn main() {
                 locales_path,
                 pyproject.locales_path,
                 base_dir,
-                "Missing locales path. Pass it as an argument or set tool.ftl-extract.untranslated.locales-path",
+                "Missing locales path. Pass it as an argument or set tool.ftl-extract.check.locales-path",
             ) {
                 Ok(path) => path,
                 Err(e) => exit_config_error(e),
             };
+            let checks =
+                match cli_or_config_enum_vec(checks, pyproject.checks, "checks", Vec::new()) {
+                    Ok(checks) => checks,
+                    Err(e) => exit_config_error(e),
+                };
+            let checks = expand_check_kinds(checks);
+            let code_path = cli_or_config_path(
+                code_path,
+                pyproject
+                    .code_path
+                    .clone()
+                    .or_else(|| extract_pyproject.code_path.clone()),
+                base_dir,
+            );
             let output_format =
                 match cli_or_config_enum(output_format, pyproject.output_format, "output-format") {
                     Ok(output_format) => output_format,
                     Err(e) => exit_config_error(e),
                 };
-            let output_format = output_format.unwrap_or(OutputFormat::Txt);
+            let output_format = output_format.unwrap_or(CheckOutputFormat::Json);
             let output = cli_or_config_path(output, pyproject.output, base_dir);
+            let fail_on = match cli_or_config_enum_vec(
+                fail_on,
+                pyproject.fail_on,
+                "fail-on",
+                vec![FailSeverity::Error],
+            ) {
+                Ok(fail_on) => fail_on.into_iter().map(Into::into).collect::<Vec<_>>(),
+                Err(e) => exit_config_error(e),
+            };
 
             info!(target: "cli", "Locales path: {}", locales_path.display());
+            if let Some(code_path) = &code_path {
+                info!(target: "cli", "Code path: {}", code_path.display());
+            }
 
-            let config = CheckUntranslatedConfig {
+            let mut i18n_keys_set: FastHashSet<String> = FastHashSet::from_iter(
+                extract_pyproject
+                    .i18n_keys
+                    .unwrap_or_else(|| DEFAULT_I18N_KEYS.iter().cloned().collect()),
+            );
+            i18n_keys_set.extend(extract_pyproject.i18n_keys_append.unwrap_or_default());
+
+            let mut exclude_dirs_set: FastHashSet<String> = FastHashSet::from_iter(
+                extract_pyproject
+                    .exclude_dirs
+                    .unwrap_or_else(|| DEFAULT_EXCLUDE_DIRS.iter().cloned().collect()),
+            );
+            exclude_dirs_set.extend(extract_pyproject.exclude_dirs_append.unwrap_or_default());
+
+            let mut ignore_attributes_set: FastHashSet<String> = FastHashSet::from_iter(
+                extract_pyproject
+                    .ignore_attributes
+                    .unwrap_or_else(|| DEFAULT_IGNORE_ATTRIBUTES.iter().cloned().collect()),
+            );
+            ignore_attributes_set.extend(
+                extract_pyproject
+                    .ignore_attributes_append
+                    .unwrap_or_default(),
+            );
+
+            let config = CheckRunConfig {
                 locales_path,
+                code_path,
                 locales: cli_or_config_vec(language, pyproject.languages, Vec::new()),
                 suggest_from: cli_or_config_vec(suggest_from, pyproject.suggest_from, Vec::new()),
+                i18n_keys: i18n_keys_set,
+                i18n_keys_prefix: FastHashSet::from_iter(
+                    extract_pyproject.i18n_keys_prefix.unwrap_or_default(),
+                ),
+                exclude_dirs: exclude_dirs_set,
+                ignore_attributes: ignore_attributes_set,
+                ignore_kwargs: FastHashSet::from_iter(
+                    extract_pyproject
+                        .ignore_kwargs
+                        .unwrap_or_else(|| DEFAULT_IGNORE_KWARGS.iter().cloned().collect()),
+                ),
+                default_ftl_file: extract_pyproject
+                    .default_ftl_file
+                    .unwrap_or_else(|| PathBuf::from(DEFAULT_FTL_FILENAME)),
             };
 
             let start_time = std::time::Instant::now();
-            match check_untranslated(config) {
+            match run_check(checks, config) {
                 Ok(result) => {
-                    println!("{}", render_untranslated_terminal(&result));
+                    println!("{}", render_check_terminal(&result));
 
                     if let Some(output_path) = output {
                         let output_path = normalize_output_path(output_path, &output_format);
                         let output_content = match output_format {
-                            OutputFormat::Txt => render_untranslated_txt(&result),
-                            OutputFormat::Json => render_untranslated_json(&result),
+                            CheckOutputFormat::Terminal => render_check_terminal(&result),
+                            CheckOutputFormat::Json => render_check_json(&result),
                         };
 
                         if let Err(e) = write_output_file(&output_path, output_content) {
@@ -486,15 +584,13 @@ fn main() {
                         info!(target: "cli", "Saved report to {}", output_path.display());
                     }
 
-                    if (fail_on_untranslated || pyproject.fail_on_untranslated.unwrap_or(false))
-                        && !result.untranslated.is_empty()
-                    {
+                    if has_failing_diagnostics(&result, &fail_on) {
                         std::process::exit(1);
                     }
                 }
                 Err(e) => {
-                    error!(target: "cli", "Error during untranslated check: {}", e);
-                    std::process::exit(1);
+                    error!(target: "cli", "Error during check: {}", e);
+                    std::process::exit(2);
                 }
             }
             Some(start_time.elapsed())
@@ -519,14 +615,219 @@ fn write_output_file(path: &Path, content: String) -> std::io::Result<()> {
     std::fs::write(path, content)
 }
 
-fn normalize_output_path(path: PathBuf, format: &OutputFormat) -> PathBuf {
+#[derive(Clone)]
+struct CheckRunConfig {
+    locales_path: PathBuf,
+    code_path: Option<PathBuf>,
+    locales: Vec<String>,
+    suggest_from: Vec<String>,
+    i18n_keys: FastHashSet<String>,
+    i18n_keys_prefix: FastHashSet<String>,
+    exclude_dirs: FastHashSet<String>,
+    ignore_attributes: FastHashSet<String>,
+    ignore_kwargs: FastHashSet<String>,
+    default_ftl_file: PathBuf,
+}
+
+fn run_check(expanded_checks: ExpandedChecks, config: CheckRunConfig) -> Result<CheckResult> {
+    let mut result = CheckResult {
+        checked_kinds: Vec::new(),
+        diagnostics: Vec::new(),
+    };
+
+    for check in expanded_checks.checks {
+        match check {
+            CheckKind::All => unreachable!("check expansion removes `all`"),
+            CheckKind::Kwargs => {
+                let code_path = config.code_path.clone().context(
+                    "Missing code path. Pass --code-path or set tool.ftl-extract.check.code-path",
+                )?;
+                extend_check_result(
+                    &mut result,
+                    CheckResult::from(check_kwargs(CheckKwargsConfig {
+                        locales_path: config.locales_path.clone(),
+                        code_path,
+                        locales: config.locales.clone(),
+                        i18n_keys: config.i18n_keys.clone(),
+                        i18n_keys_prefix: config.i18n_keys_prefix.clone(),
+                        exclude_dirs: config.exclude_dirs.clone(),
+                        ignore_attributes: config.ignore_attributes.clone(),
+                        ignore_kwargs: config.ignore_kwargs.clone(),
+                        default_ftl_file: config.default_ftl_file.clone(),
+                    })?),
+                );
+            }
+            CheckKind::Missing => {
+                let code_path = config.code_path.clone().context(
+                    "Missing code path. Pass --code-path or set tool.ftl-extract.check.code-path",
+                )?;
+                extend_check_result(
+                    &mut result,
+                    CheckResult::from(check_missing(CheckMissingConfig {
+                        locales_path: config.locales_path.clone(),
+                        code_path,
+                        locales: config.locales.clone(),
+                        i18n_keys: config.i18n_keys.clone(),
+                        i18n_keys_prefix: config.i18n_keys_prefix.clone(),
+                        exclude_dirs: config.exclude_dirs.clone(),
+                        ignore_attributes: config.ignore_attributes.clone(),
+                        ignore_kwargs: config.ignore_kwargs.clone(),
+                        default_ftl_file: config.default_ftl_file.clone(),
+                    })?),
+                );
+            }
+            CheckKind::References => {
+                extend_check_result(
+                    &mut result,
+                    CheckResult::from(check_references(CheckReferencesConfig {
+                        locales_path: config.locales_path.clone(),
+                        locales: config.locales.clone(),
+                    })?),
+                );
+            }
+            CheckKind::Stale => {
+                let code_path = config.code_path.clone().context(
+                    "Missing code path. Pass --code-path or set tool.ftl-extract.check.code-path",
+                )?;
+                extend_check_result(
+                    &mut result,
+                    CheckResult::from(check_stale(CheckStaleConfig {
+                        locales_path: config.locales_path.clone(),
+                        code_path,
+                        locales: config.locales.clone(),
+                        i18n_keys: config.i18n_keys.clone(),
+                        i18n_keys_prefix: config.i18n_keys_prefix.clone(),
+                        exclude_dirs: config.exclude_dirs.clone(),
+                        ignore_attributes: config.ignore_attributes.clone(),
+                        ignore_kwargs: config.ignore_kwargs.clone(),
+                        default_ftl_file: config.default_ftl_file.clone(),
+                    })?),
+                );
+            }
+            CheckKind::Syntax => {
+                extend_check_result(
+                    &mut result,
+                    CheckResult::from(check_syntax(CheckSyntaxConfig {
+                        locales_path: config.locales_path.clone(),
+                        locales: config.locales.clone(),
+                    })?),
+                );
+                if expanded_checks.is_default_or_all && has_fatal_syntax_diagnostics(&result) {
+                    break;
+                }
+            }
+            CheckKind::Untranslated => {
+                extend_check_result(
+                    &mut result,
+                    CheckResult::from(check_untranslated(CheckUntranslatedConfig {
+                        locales_path: config.locales_path.clone(),
+                        locales: config.locales.clone(),
+                        suggest_from: config.suggest_from.clone(),
+                    })?),
+                );
+            }
+        }
+    }
+
+    dedup_diagnostics(&mut result);
+
+    Ok(result)
+}
+
+fn extend_check_result(target: &mut CheckResult, source: CheckResult) {
+    target.checked_kinds.extend(source.checked_kinds);
+    target.diagnostics.extend(source.diagnostics);
+}
+
+#[derive(Debug, Clone)]
+struct ExpandedChecks {
+    checks: Vec<CheckKind>,
+    is_default_or_all: bool,
+}
+
+fn expand_check_kinds(checks: Vec<CheckKind>) -> ExpandedChecks {
+    let defaults = vec![
+        CheckKind::Syntax,
+        CheckKind::References,
+        CheckKind::Untranslated,
+        CheckKind::Missing,
+        CheckKind::Stale,
+        CheckKind::Kwargs,
+    ];
+
+    let is_default_or_all = checks.is_empty() || checks.contains(&CheckKind::All);
+    let checks = if is_default_or_all { defaults } else { checks };
+
+    let mut expanded = Vec::new();
+    for check in checks {
+        if !expanded.contains(&check) {
+            expanded.push(check);
+        }
+    }
+    ExpandedChecks {
+        checks: expanded,
+        is_default_or_all,
+    }
+}
+
+fn has_fatal_syntax_diagnostics(result: &CheckResult) -> bool {
+    result.diagnostics.iter().any(|diagnostic| {
+        diagnostic.kind == DiagnosticKind::Syntax && diagnostic.severity == Severity::Error
+    })
+}
+
+fn dedup_diagnostics(result: &mut CheckResult) {
+    let mut seen = FastHashSet::default();
+    result.diagnostics.retain(|diagnostic| {
+        diagnostic.kind != DiagnosticKind::Extraction || seen.insert(diagnostic_key(diagnostic))
+    });
+}
+
+fn diagnostic_key(diagnostic: &Diagnostic) -> String {
+    format!(
+        "{}|{}|{}|{}|{}|{}|{}|{}|{}",
+        diagnostic.kind.as_str(),
+        diagnostic.severity.as_str(),
+        diagnostic.locale.as_deref().unwrap_or(""),
+        diagnostic.key.as_deref().unwrap_or(""),
+        diagnostic.message,
+        location_key(diagnostic.ftl_location.as_ref()),
+        location_key(diagnostic.code_location.as_ref()),
+        diagnostic.missing_kwargs.join(","),
+        diagnostic.unused_kwargs.join(","),
+    )
+}
+
+fn location_key(location: Option<&check::SourceLocation>) -> String {
+    let Some(location) = location else {
+        return String::new();
+    };
+
+    let line = location.line.map_or(String::new(), |line| line.to_string());
+    let column = location
+        .column
+        .map_or(String::new(), |column| column.to_string());
+
+    format!("{}:{line}:{column}", location.path.display())
+}
+
+impl From<FailSeverity> for Severity {
+    fn from(value: FailSeverity) -> Self {
+        match value {
+            FailSeverity::Error => Self::Error,
+            FailSeverity::Warn => Self::Warn,
+        }
+    }
+}
+
+fn normalize_output_path(path: PathBuf, format: &CheckOutputFormat) -> PathBuf {
     if path.extension().is_some() {
         return path;
     }
 
     let suffix = match format {
-        OutputFormat::Txt => "txt",
-        OutputFormat::Json => "json",
+        CheckOutputFormat::Terminal => "txt",
+        CheckOutputFormat::Json => "json",
     };
 
     path.with_extension(suffix)
@@ -582,7 +883,72 @@ where
     })
 }
 
+fn cli_or_config_enum_vec<T>(
+    cli: Vec<T>,
+    config: Option<Vec<String>>,
+    field: &str,
+    default: Vec<T>,
+) -> Result<Vec<T>>
+where
+    T: ValueEnum,
+{
+    if !cli.is_empty() {
+        return Ok(cli);
+    }
+
+    let Some(config) = config else {
+        return Ok(default);
+    };
+
+    config
+        .into_iter()
+        .map(|value| {
+            T::from_str(&value, true).map_err(|_| {
+                let values = T::value_variants()
+                    .iter()
+                    .filter_map(|variant| variant.to_possible_value())
+                    .map(|value| value.get_name().to_string())
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                anyhow::anyhow!("Invalid `{field}` value `{value}`. Expected one of: {values}")
+            })
+        })
+        .collect()
+}
+
 fn exit_config_error(error: anyhow::Error) -> ! {
     error!(target: "cli", "Configuration error: {}", error);
-    std::process::exit(1);
+    std::process::exit(2);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn check_all_runs_syntax_first() {
+        let expanded = expand_check_kinds(vec![CheckKind::All]);
+
+        assert!(expanded.is_default_or_all);
+        assert_eq!(expanded.checks.first(), Some(&CheckKind::Syntax));
+        assert_eq!(
+            expanded.checks,
+            vec![
+                CheckKind::Syntax,
+                CheckKind::References,
+                CheckKind::Untranslated,
+                CheckKind::Missing,
+                CheckKind::Stale,
+                CheckKind::Kwargs,
+            ]
+        );
+    }
+
+    #[test]
+    fn check_custom_list_is_not_default_or_all() {
+        let expanded = expand_check_kinds(vec![CheckKind::Missing, CheckKind::Syntax]);
+
+        assert!(!expanded.is_default_or_all);
+        assert_eq!(expanded.checks, vec![CheckKind::Missing, CheckKind::Syntax]);
+    }
 }

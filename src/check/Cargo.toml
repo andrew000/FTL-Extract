@@ -1,5 +1,5 @@
 [package]
-name = "untranslated"
+name = "check"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -10,11 +10,13 @@ authors.workspace = true
 license.workspace = true
 
 [lib]
-name = "untranslated"
+name = "check"
 
 [dependencies]
 anyhow.workspace = true
+extractor = { path = "../extractor" }
 fluent-syntax.workspace = true
+globset.workspace = true
 ignore.workspace = true
 serde_json.workspace = true
 

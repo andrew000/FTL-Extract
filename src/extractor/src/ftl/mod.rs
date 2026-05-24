@@ -1,8 +1,9 @@
 mod cache;
-mod code_extractor;
+pub mod code_extractor;
 pub mod consts;
+pub mod diagnostics;
 pub mod ftl_extractor;
 mod ftl_importer;
-mod matcher;
+pub mod matcher;
 mod process;
 pub mod utils;

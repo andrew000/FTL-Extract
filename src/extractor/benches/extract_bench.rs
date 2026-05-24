@@ -60,11 +60,11 @@ fn bench_500keys_5langs(c: &mut Criterion) {
         b.iter_with_setup(
             || {
                 let tmp = TempDir::new().unwrap();
-                setup_large_fixtures(tmp.path(), 500, &["en", "uk", "ru", "de", "fr"]);
+                setup_large_fixtures(tmp.path(), 500, &["en", "uk", "pl", "de", "fr"]);
                 let config = make_config(
                     tmp.path().join("code"),
                     tmp.path().join("locales"),
-                    vec!["en", "uk", "ru", "de", "fr"],
+                    vec!["en", "uk", "pl", "de", "fr"],
                 );
                 (config, tmp)
             },
@@ -83,12 +83,12 @@ fn bench_500keys_10langs(c: &mut Criterion) {
                 setup_large_fixtures(
                     tmp.path(),
                     500,
-                    &["en", "uk", "ru", "de", "fr", "es", "it", "pt", "ja", "zh"],
+                    &["en", "uk", "pl", "de", "fr", "es", "it", "pt", "ja", "zh"],
                 );
                 let config = make_config(
                     tmp.path().join("code"),
                     tmp.path().join("locales"),
-                    vec!["en", "uk", "ru", "de", "fr", "es", "it", "pt", "ja", "zh"],
+                    vec!["en", "uk", "pl", "de", "fr", "es", "it", "pt", "ja", "zh"],
                 );
                 (config, tmp)
             },
@@ -107,12 +107,12 @@ fn bench_2000keys_10langs(c: &mut Criterion) {
                 setup_large_fixtures(
                     tmp.path(),
                     2000,
-                    &["en", "uk", "ru", "de", "fr", "es", "it", "pt", "ja", "zh"],
+                    &["en", "uk", "pl", "de", "fr", "es", "it", "pt", "ja", "zh"],
                 );
                 let config = make_config(
                     tmp.path().join("code"),
                     tmp.path().join("locales"),
-                    vec!["en", "uk", "ru", "de", "fr", "es", "it", "pt", "ja", "zh"],
+                    vec!["en", "uk", "pl", "de", "fr", "es", "it", "pt", "ja", "zh"],
                 );
                 (config, tmp)
             },

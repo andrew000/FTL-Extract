@@ -1,34 +1,11 @@
 set shell := ["bash", "-c"]
 set windows-shell := ["pwsh.exe", "-NoLogo", "-Command"]
 
-py_code_dir := "src/ftl_extract"
-tests_dir := "tests"
-
-lint target="rust":
-    @{{ if target == "py" { "just _lint-py" } else if target == "rust" { "just _lint-rust" } else { "echo \"Unknown target: " + target + ". Please specify 'py' or 'rust'.\"" } }}
-
-_lint-py:
-    @echo "Running ruff..."
-    uv run ruff check --config pyproject.toml --diff --unsafe-fixes {{ py_code_dir }} {{ tests_dir }}
-
-_lint-rust:
+lint:
     @echo "Running cargo clippy..."
     cargo clippy --all-targets --all-features
 
-format target="rust":
-    @{{ if target == "py" { "just _format-py" } else if target == "rust" { "just _format-rust" } else { "echo \"Unknown target: " + target + ". Please specify 'py' or 'rust'.\"" } }}
-
-_format-py:
-    @echo "Running ruff check with --fix"
-    uv run ruff check --config pyproject.toml --fix --unsafe-fixes {{ py_code_dir }} {{ tests_dir }}
-
-    @echo "Running ruff..."
-    uv run ruff format --config pyproject.toml {{ py_code_dir }} {{ tests_dir }}
-
-    @echo "Running isort..."
-    uv run isort --settings-path pyproject.toml {{ py_code_dir }} {{ tests_dir }}
-
-_format-rust:
+format:
     @echo "Running cargo fix..."
     cargo fix --allow-dirty --all
 
@@ -62,5 +39,16 @@ outdated:
 sync:
     uv sync --no-install-project --group dev
 
-build:
+[windows]
+clean:
+    @echo "Removing build artifacts..."
+    Remove-Item -LiteralPath build, dist -Recurse -Force -ErrorAction Ignore; exit 0
+    Get-ChildItem -Path . -Directory -Filter "*.egg-info" -Force | ForEach-Object { Remove-Item -LiteralPath $_.FullName -Recurse -Force }
+
+[unix]
+clean:
+    @echo "Removing build artifacts..."
+    rm -rf build dist ./*.egg-info
+
+build: clean
     uv build --wheel --sdist

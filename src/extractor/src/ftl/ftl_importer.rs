@@ -340,7 +340,7 @@ JUNK!!!
     fn test_process_raw_ftl_with_junk() {
         let path = PathBuf::from("_junk.ftl");
         let locale = "en".to_string();
-        let body: Vec<fluent_syntax::ast::Entry<String>> = vec![Junk {
+        let body: Vec<Entry<String>> = vec![Junk {
             content: "This is junk".to_string(),
         }];
         let mut ftl_keys: FastHashMap<String, super::FluentKey> = FastHashMap::default();

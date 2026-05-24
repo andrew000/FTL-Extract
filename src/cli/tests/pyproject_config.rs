@@ -23,6 +23,10 @@ fn assert_success(output: &Output) {
     );
 }
 
+fn count_occurrences(haystack: &str, needle: &str) -> usize {
+    haystack.match_indices(needle).count()
+}
+
 fn pyproject(temp: &TempDir) -> PathBuf {
     temp.path().join("pyproject.toml")
 }
@@ -35,7 +39,7 @@ fn config_sample_prints_all_command_sections() {
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(stdout.contains("[tool.ftl-extract.extract]"));
     assert!(stdout.contains("[tool.ftl-extract.stub]"));
-    assert!(stdout.contains("[tool.ftl-extract.untranslated]"));
+    assert!(stdout.contains("[tool.ftl-extract.check]"));
 }
 
 #[test]
@@ -52,7 +56,7 @@ fn config_sample_can_print_one_command_section() {
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(!stdout.contains("[tool.ftl-extract.extract]"));
     assert!(stdout.contains("[tool.ftl-extract.stub]"));
-    assert!(!stdout.contains("[tool.ftl-extract.untranslated]"));
+    assert!(!stdout.contains("[tool.ftl-extract.check]"));
 }
 
 #[test]
@@ -169,7 +173,7 @@ output-path = "code/stub.pyi"
 }
 
 #[test]
-fn untranslated_reads_command_config_from_pyproject() {
+fn check_untranslated_reads_command_config_from_pyproject() {
     let temp = TempDir::new().unwrap();
     write(
         &temp.path().join("locales/en/_default.ftl"),
@@ -182,11 +186,13 @@ fn untranslated_reads_command_config_from_pyproject() {
     write(
         &pyproject(&temp),
         r#"
-[tool.ftl-extract.untranslated]
+[tool.ftl-extract.check]
 locales-path = "locales"
 languages = ["uk"]
+checks = ["untranslated"]
 suggest-from = ["en"]
-output = "reports/untranslated"
+fail-on = []
+output = "reports/ftl-check"
 output-format = "json"
 "#,
     );
@@ -194,13 +200,499 @@ output-format = "json"
     let output = ftl()
         .arg("--config")
         .arg(pyproject(&temp))
-        .arg("untranslated")
+        .arg("check")
         .output()
         .unwrap();
 
     assert_success(&output);
-    let report = std::fs::read_to_string(temp.path().join("reports/untranslated.json")).unwrap();
+    let report = std::fs::read_to_string(temp.path().join("reports/ftl-check.json")).unwrap();
     assert!(report.contains(r#""locale": "uk""#));
     assert!(report.contains(r#""key": "hello""#));
     assert!(report.contains(r#""locale": "en""#));
+}
+
+#[test]
+fn check_syntax_reads_command_config_from_pyproject() {
+    let temp = TempDir::new().unwrap();
+    write(
+        &temp.path().join("locales/en/_default.ftl"),
+        "valid = Valid\nbroken = {\n",
+    );
+    write(
+        &pyproject(&temp),
+        r#"
+[tool.ftl-extract.check]
+locales-path = "locales"
+languages = ["en"]
+checks = ["syntax"]
+fail-on = []
+output = "reports/ftl-check"
+output-format = "json"
+"#,
+    );
+
+    let output = ftl()
+        .arg("--config")
+        .arg(pyproject(&temp))
+        .arg("check")
+        .output()
+        .unwrap();
+
+    assert_success(&output);
+    let report = std::fs::read_to_string(temp.path().join("reports/ftl-check.json")).unwrap();
+    assert!(report.contains(r#""kind": "syntax""#));
+    assert!(report.contains(r#""locale": "en""#));
+    assert!(report.contains("_default.ftl"));
+}
+
+#[test]
+fn check_references_reads_command_config_from_pyproject() {
+    let temp = TempDir::new().unwrap();
+    write(
+        &temp.path().join("locales/en/_default.ftl"),
+        "welcome = { missing-message }\n",
+    );
+    write(
+        &pyproject(&temp),
+        r#"
+[tool.ftl-extract.check]
+locales-path = "locales"
+languages = ["en"]
+checks = ["references"]
+fail-on = []
+output = "reports/ftl-check"
+output-format = "json"
+"#,
+    );
+
+    let output = ftl()
+        .arg("--config")
+        .arg(pyproject(&temp))
+        .arg("check")
+        .output()
+        .unwrap();
+
+    assert_success(&output);
+    let report = std::fs::read_to_string(temp.path().join("reports/ftl-check.json")).unwrap();
+    assert!(report.contains(r#""kind": "references""#));
+    assert!(report.contains(r#""locale": "en""#));
+    assert!(report.contains("missing-message"));
+}
+
+#[test]
+fn check_missing_reads_command_config_from_pyproject() {
+    let temp = TempDir::new().unwrap();
+    write(
+        &temp.path().join("code/app.py"),
+        r#"def handler():
+    i18n.get("hello")
+"#,
+    );
+    write(
+        &temp.path().join("locales/uk/_default.ftl"),
+        "other = Other\n",
+    );
+    write(
+        &pyproject(&temp),
+        r#"
+[tool.ftl-extract.check]
+locales-path = "locales"
+code-path = "code"
+languages = ["uk"]
+checks = ["missing"]
+fail-on = []
+output = "reports/ftl-check"
+output-format = "json"
+"#,
+    );
+
+    let output = ftl()
+        .arg("--config")
+        .arg(pyproject(&temp))
+        .arg("check")
+        .output()
+        .unwrap();
+
+    assert_success(&output);
+    let report = std::fs::read_to_string(temp.path().join("reports/ftl-check.json")).unwrap();
+    assert!(report.contains(r#""kind": "missing""#));
+    assert!(report.contains(r#""locale": "uk""#));
+    assert!(report.contains(r#""key": "hello""#));
+    assert!(report.contains(r#""code_location""#));
+    assert!(report.contains("app.py"));
+}
+
+#[test]
+fn check_missing_requires_code_path() {
+    let temp = TempDir::new().unwrap();
+    write(
+        &temp.path().join("locales/uk/_default.ftl"),
+        "hello = Hello\n",
+    );
+
+    let output = ftl()
+        .arg("check")
+        .arg(temp.path().join("locales"))
+        .arg("--check")
+        .arg("missing")
+        .arg("--language")
+        .arg("uk")
+        .output()
+        .unwrap();
+
+    assert_eq!(output.status.code(), Some(2));
+    assert!(String::from_utf8_lossy(&output.stderr).contains("Missing code path"));
+}
+
+#[test]
+fn check_stale_reads_command_config_from_pyproject() {
+    let temp = TempDir::new().unwrap();
+    write(&temp.path().join("code/app.py"), r#"i18n.get("hello")"#);
+    write(
+        &temp.path().join("locales/uk/_default.ftl"),
+        "hello = Hello\nold = Old\n",
+    );
+    write(
+        &pyproject(&temp),
+        r#"
+[tool.ftl-extract.check]
+locales-path = "locales"
+code-path = "code"
+languages = ["uk"]
+checks = ["stale"]
+fail-on = []
+output = "reports/ftl-check"
+output-format = "json"
+"#,
+    );
+
+    let output = ftl()
+        .arg("--config")
+        .arg(pyproject(&temp))
+        .arg("check")
+        .output()
+        .unwrap();
+
+    assert_success(&output);
+    let report = std::fs::read_to_string(temp.path().join("reports/ftl-check.json")).unwrap();
+    assert!(report.contains(r#""kind": "stale""#));
+    assert!(report.contains(r#""locale": "uk""#));
+    assert!(report.contains(r#""key": "old""#));
+    assert!(report.contains("_default.ftl"));
+}
+
+#[test]
+fn check_stale_requires_code_path() {
+    let temp = TempDir::new().unwrap();
+    write(
+        &temp.path().join("locales/uk/_default.ftl"),
+        "hello = Hello\n",
+    );
+
+    let output = ftl()
+        .arg("check")
+        .arg(temp.path().join("locales"))
+        .arg("--check")
+        .arg("stale")
+        .arg("--language")
+        .arg("uk")
+        .output()
+        .unwrap();
+
+    assert_eq!(output.status.code(), Some(2));
+    assert!(String::from_utf8_lossy(&output.stderr).contains("Missing code path"));
+}
+
+#[test]
+fn check_kwargs_reads_command_config_from_pyproject() {
+    let temp = TempDir::new().unwrap();
+    write(
+        &temp.path().join("code/app.py"),
+        r#"i18n.get("hello", name=user.name)"#,
+    );
+    write(
+        &temp.path().join("locales/uk/_default.ftl"),
+        "hello = Hello { $username }\n",
+    );
+    write(
+        &pyproject(&temp),
+        r#"
+[tool.ftl-extract.check]
+locales-path = "locales"
+code-path = "code"
+languages = ["uk"]
+checks = ["kwargs"]
+fail-on = []
+output = "reports/ftl-check"
+output-format = "json"
+"#,
+    );
+
+    let output = ftl()
+        .arg("--config")
+        .arg(pyproject(&temp))
+        .arg("check")
+        .output()
+        .unwrap();
+
+    assert_success(&output);
+    let report = std::fs::read_to_string(temp.path().join("reports/ftl-check.json")).unwrap();
+    assert!(report.contains(r#""kind": "kwargs""#));
+    assert!(report.contains(r#""key": "hello""#));
+    assert!(report.contains(r#""username""#));
+    assert!(report.contains(r#""name""#));
+    assert!(report.contains(r#""code_location""#));
+}
+
+#[test]
+fn check_kwargs_requires_code_path() {
+    let temp = TempDir::new().unwrap();
+    write(
+        &temp.path().join("locales/uk/_default.ftl"),
+        "hello = Hello { $name }\n",
+    );
+
+    let output = ftl()
+        .arg("check")
+        .arg(temp.path().join("locales"))
+        .arg("--check")
+        .arg("kwargs")
+        .arg("--language")
+        .arg("uk")
+        .output()
+        .unwrap();
+
+    assert_eq!(output.status.code(), Some(2));
+    assert!(String::from_utf8_lossy(&output.stderr).contains("Missing code path"));
+}
+
+#[test]
+fn check_defaults_to_all_checks_from_pyproject() {
+    let temp = TempDir::new().unwrap();
+    write(
+        &temp.path().join("code/app.py"),
+        r#"i18n.get("hello", name=user.name)"#,
+    );
+    write(
+        &temp.path().join("locales/uk/_default.ftl"),
+        "hello = Hello { $name }\n",
+    );
+    write(
+        &pyproject(&temp),
+        r#"
+[tool.ftl-extract.check]
+locales-path = "locales"
+code-path = "code"
+languages = ["uk"]
+fail-on = []
+output = "reports/ftl-check"
+output-format = "json"
+"#,
+    );
+
+    let output = ftl()
+        .arg("--config")
+        .arg(pyproject(&temp))
+        .arg("check")
+        .output()
+        .unwrap();
+
+    assert_success(&output);
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("FTL check passed"));
+    assert!(stdout.contains("kwargs: passed"));
+    assert!(stdout.contains("missing: passed"));
+    assert!(stdout.contains("references: passed"));
+    assert!(stdout.contains("stale: passed"));
+    assert!(stdout.contains("syntax: passed"));
+    assert!(stdout.contains("untranslated: passed"));
+
+    let report = std::fs::read_to_string(temp.path().join("reports/ftl-check.json")).unwrap();
+    assert!(report.contains(r#""kind": "kwargs""#));
+    assert!(report.contains(r#""kind": "missing""#));
+    assert!(report.contains(r#""kind": "references""#));
+    assert!(report.contains(r#""kind": "stale""#));
+    assert!(report.contains(r#""kind": "syntax""#));
+    assert!(report.contains(r#""kind": "untranslated""#));
+}
+
+#[test]
+fn check_all_shortcut_runs_every_check() {
+    let temp = TempDir::new().unwrap();
+    write(
+        &temp.path().join("code/app.py"),
+        r#"i18n.get("hello", name=user.name)"#,
+    );
+    write(
+        &temp.path().join("locales/uk/_default.ftl"),
+        "hello = Hello { $name }\n",
+    );
+
+    let output = ftl()
+        .arg("check")
+        .arg(temp.path().join("locales"))
+        .arg("--code-path")
+        .arg(temp.path().join("code"))
+        .arg("--check")
+        .arg("all")
+        .arg("--language")
+        .arg("uk")
+        .output()
+        .unwrap();
+
+    assert_success(&output);
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("kwargs: passed"));
+    assert!(stdout.contains("untranslated: passed"));
+}
+
+#[test]
+fn check_all_stops_after_syntax_errors() {
+    let temp = TempDir::new().unwrap();
+    write(
+        &temp.path().join("locales/en/_default.ftl"),
+        "valid = Valid\nbroken = {\n",
+    );
+
+    let output = ftl()
+        .arg("check")
+        .arg(temp.path().join("locales"))
+        .arg("--check")
+        .arg("all")
+        .arg("--language")
+        .arg("en")
+        .output()
+        .unwrap();
+
+    assert_eq!(output.status.code(), Some(1));
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stdout.contains("error[syntax]"));
+    assert!(stdout.contains("syntax: failed"));
+    assert!(!stdout.contains("references:"));
+    assert!(!stdout.contains("untranslated:"));
+    assert!(!stdout.contains("missing:"));
+    assert!(!stdout.contains("stale:"));
+    assert!(!stdout.contains("kwargs:"));
+    assert!(!stderr.contains("Error during check"));
+    assert!(!stderr.contains("Missing code path"));
+}
+
+#[test]
+fn check_all_with_valid_syntax_runs_remaining_checks() {
+    let temp = TempDir::new().unwrap();
+    write(
+        &temp.path().join("code/app.py"),
+        r#"i18n.get("hello", name=user.name)"#,
+    );
+    write(
+        &temp.path().join("locales/uk/_default.ftl"),
+        "hello = Hello { $name }\n",
+    );
+
+    let output = ftl()
+        .arg("check")
+        .arg(temp.path().join("locales"))
+        .arg("--code-path")
+        .arg(temp.path().join("code"))
+        .arg("--check")
+        .arg("all")
+        .arg("--language")
+        .arg("uk")
+        .output()
+        .unwrap();
+
+    assert_success(&output);
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("syntax: passed"));
+    assert!(stdout.contains("references: passed"));
+    assert!(stdout.contains("untranslated: passed"));
+    assert!(stdout.contains("missing: passed"));
+    assert!(stdout.contains("stale: passed"));
+    assert!(stdout.contains("kwargs: passed"));
+}
+
+#[test]
+fn check_all_deduplicates_extraction_diagnostics() {
+    let temp = TempDir::new().unwrap();
+    write(
+        &temp.path().join("code/app.py"),
+        r#"i18n.get("hello", _path="one.ftl")
+i18n.get("hello", _path="two.ftl")
+"#,
+    );
+    write(&temp.path().join("locales/uk/one.ftl"), "hello = Hello\n");
+    write(
+        &pyproject(&temp),
+        r#"
+[tool.ftl-extract.check]
+locales-path = "locales"
+code-path = "code"
+languages = ["uk"]
+checks = ["all"]
+fail-on = []
+output = "reports/ftl-check"
+output-format = "json"
+"#,
+    );
+
+    let output = ftl()
+        .arg("--config")
+        .arg(pyproject(&temp))
+        .arg("check")
+        .output()
+        .unwrap();
+
+    assert_success(&output);
+    let report = std::fs::read_to_string(temp.path().join("reports/ftl-check.json")).unwrap();
+    assert_eq!(
+        count_occurrences(&report, "Fluent key hello has different paths"),
+        1
+    );
+}
+
+#[test]
+fn check_multiple_code_aware_checks_extract_once_or_report_once() {
+    let temp = TempDir::new().unwrap();
+    write(
+        &temp.path().join("code/app.py"),
+        r#"i18n.get("hello", _path="one.ftl")
+i18n.get("hello", _path="two.ftl")
+"#,
+    );
+    write(&temp.path().join("locales/uk/one.ftl"), "hello = Hello\n");
+    write(
+        &pyproject(&temp),
+        r#"
+[tool.ftl-extract.check]
+locales-path = "locales"
+code-path = "code"
+languages = ["uk"]
+checks = ["missing", "stale", "kwargs"]
+fail-on = []
+output = "reports/ftl-check"
+output-format = "json"
+"#,
+    );
+
+    let output = ftl()
+        .arg("--config")
+        .arg(pyproject(&temp))
+        .arg("check")
+        .output()
+        .unwrap();
+
+    assert_success(&output);
+    let report = std::fs::read_to_string(temp.path().join("reports/ftl-check.json")).unwrap();
+    assert_eq!(
+        count_occurrences(&report, "Fluent key hello has different paths"),
+        1
+    );
+}
+
+#[test]
+fn old_untranslated_command_is_removed() {
+    let output = ftl().arg("untranslated").output().unwrap();
+
+    assert!(!output.status.success());
 }

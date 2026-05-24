@@ -62,12 +62,14 @@ ftl-path = "project_path/locales/en"
 output-path = "project_path/code_path/stub.pyi"
 export-tree = false
 
-[tool.ftl-extract.untranslated]
+[tool.ftl-extract.check]
 locales-path = "project_path/locales"
+code-path = "project_path/code_path"
 languages = ["uk"]
+checks = ["all"]
 suggest-from = ["en"]
-fail-on-untranslated = true
-output = "reports/untranslated"
+fail-on = ["error"]
+output = "reports/ftl-check"
 output-format = "json"
 ```
 
@@ -76,7 +78,7 @@ Then run commands without repeating the configured paths:
 ```shell
 $ ftl extract
 $ ftl stub
-$ ftl untranslated
+$ ftl check
 ```
 
 By default, `ftl` searches for `pyproject.toml` from the current directory upward. Use `--config` to select a specific
@@ -161,21 +163,133 @@ $ ftl stub 'project_path/locales/<locale>' 'project_path/code_path'
 
 ***
 
-## 💁‍♂️ Explanation of the `ftl untranslated` command
+## 💁‍♂️ Explanation of the `ftl check` command
 
 ```shell
-$ ftl untranslated project_path/locales
+$ ftl check project_path/locales --code-path project_path/code_path -l uk --suggest-from en
 ```
 
 - `project_path/locales` - path to the locales root directory that contains locale folders like `en`, `uk`, etc.
 
 ### 📚 Additional arguments
 
+- `--check` - validation to run. Supported checks: `all`, `untranslated`, `syntax`, `references`, `missing`, `stale`, `kwargs`. If omitted, all checks run.
+- `--code-path` - path to Python code. Required for `--check missing`, `--check stale`, and `--check kwargs`.
 - `-l` or `--language` - check only selected locales. Can be passed multiple times.
 - `--suggest-from` - locale(s) used to suggest non-placeholder translations for missing items. Can be passed multiple times.
-- `--fail-on-untranslated` - return exit code `1` if untranslated keys are found.
+- `--fail-on` - diagnostic severities that should return exit code `1`, for example `--fail-on error`.
 - `--output` - optional output file path for batch processing reports. If no extension is provided, `.txt` or `.json` is appended automatically based on `--output-format`.
-- `--output-format` - report file format: `txt` or `json` (default: `txt`).
+- `--output-format` - report file format: `terminal` or `json` (default: `json`).
+
+In default/all mode, `ftl check` runs syntax validation first. If syntax errors are found, the remaining checks are
+skipped until the Fluent files are fixed, and the command still returns a normal check report. The process exit code is
+controlled by `fail-on`.
+
+The `stale` check treats a message referenced by another `.ftl` message as used, even when Python code does not call it
+directly.
+
+Breaking change: `ftl untranslated` has been removed. Use `ftl check --check untranslated` instead.
+
+### Config examples for each check
+
+Run every available check. This is also the default when `checks` is omitted:
+
+```toml
+[tool.ftl-extract.check]
+locales-path = "app/bot/locales"
+code-path = "app/bot"
+languages = ["uk", "pl"]
+checks = ["all"]
+suggest-from = ["en"]
+fail-on = ["error"]
+output = "reports/ftl-check"
+output-format = "json"
+```
+
+Check only untranslated placeholders. This check does not need `code-path`:
+
+```toml
+[tool.ftl-extract.check]
+locales-path = "app/bot/locales"
+languages = ["uk", "pl"]
+checks = ["untranslated"]
+suggest-from = ["en"]
+fail-on = ["error"]
+output-format = "terminal"
+```
+
+Check only Fluent syntax errors. This check does not need `code-path`:
+
+```toml
+[tool.ftl-extract.check]
+locales-path = "app/bot/locales"
+languages = ["uk", "pl"]
+checks = ["syntax"]
+fail-on = ["error"]
+output-format = "terminal"
+```
+
+Check only missing message and term references inside `.ftl` files. This check does not need `code-path`:
+
+```toml
+[tool.ftl-extract.check]
+locales-path = "app/bot/locales"
+languages = ["uk", "pl"]
+checks = ["references"]
+fail-on = ["error"]
+output-format = "terminal"
+```
+
+Check keys used in Python but missing from locale files. This check requires `code-path`:
+
+```toml
+[tool.ftl-extract.check]
+locales-path = "app/bot/locales"
+code-path = "app/bot"
+languages = ["uk", "pl"]
+checks = ["missing"]
+suggest-from = ["en"]
+fail-on = ["error"]
+output-format = "terminal"
+```
+
+Check stale `.ftl` messages that are not used by Python. This check requires `code-path`:
+
+```toml
+[tool.ftl-extract.check]
+locales-path = "app/bot/locales"
+code-path = "app/bot"
+languages = ["uk", "pl"]
+checks = ["stale"]
+fail-on = ["error"]
+output-format = "terminal"
+```
+
+Check Python keyword arguments against Fluent variables. This check requires `code-path`:
+
+```toml
+[tool.ftl-extract.check]
+locales-path = "app/bot/locales"
+code-path = "app/bot"
+languages = ["uk", "pl"]
+checks = ["kwargs"]
+fail-on = ["error"]
+output-format = "terminal"
+```
+
+Run a custom subset:
+
+```toml
+[tool.ftl-extract.check]
+locales-path = "app/bot/locales"
+code-path = "app/bot"
+languages = ["uk", "pl"]
+checks = ["syntax", "references", "missing", "kwargs"]
+suggest-from = ["en"]
+fail-on = ["error"]
+output = "reports/ftl-check"
+output-format = "json"
+```
 
 ### 🙈 Ignore marker for intentional placeholders
 
@@ -186,7 +300,7 @@ If a key is intentionally the same as its message id (for example, brand or doma
 balance = balance
 ```
 
-This key will be skipped by `ftl untranslated`.
+This key will be skipped by `ftl check --check untranslated`.
 
 
 ## FAQ

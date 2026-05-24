@@ -1,3 +1,4 @@
+use crate::checks::validate_locales;
 use crate::parser::{discover_locales, read_locale_messages};
 use crate::types::{
     CheckUntranslatedConfig, CheckUntranslatedResult, TranslationSuggestion, UntranslatedKey,
@@ -7,21 +8,7 @@ use anyhow::{Result, bail};
 pub fn check_untranslated(config: CheckUntranslatedConfig) -> Result<CheckUntranslatedResult> {
     let available_locales = discover_locales(&config.locales_path)?;
 
-    let locales = if config.locales.is_empty() {
-        available_locales.clone()
-    } else {
-        config.locales
-    };
-
-    for locale in &locales {
-        if !available_locales.iter().any(|existing| existing == locale) {
-            bail!(
-                "Locale `{}` does not exist in `{}`",
-                locale,
-                config.locales_path.display()
-            );
-        }
-    }
+    validate_locales(&config.locales_path, &available_locales, &config.locales)?;
 
     for locale in &config.suggest_from {
         if !available_locales.iter().any(|existing| existing == locale) {
@@ -34,13 +21,13 @@ pub fn check_untranslated(config: CheckUntranslatedConfig) -> Result<CheckUntran
     }
 
     let mut checked_entries = Vec::new();
-    for locale in &locales {
+    for locale in &config.locales {
         checked_entries.extend(read_locale_messages(&config.locales_path, locale)?);
     }
 
     let mut suggestion_only_entries = Vec::new();
     for locale in &config.suggest_from {
-        if !locales.iter().any(|checked| checked == locale) {
+        if !config.locales.iter().any(|checked| checked == locale) {
             suggestion_only_entries.extend(read_locale_messages(&config.locales_path, locale)?);
         }
     }
@@ -106,14 +93,15 @@ pub fn check_untranslated(config: CheckUntranslatedConfig) -> Result<CheckUntran
             .then_with(|| a.key.cmp(&b.key))
     });
 
-    let fully_translated_locales = locales
+    let fully_translated_locales = config
+        .locales
         .iter()
         .filter(|locale| untranslated.iter().all(|item| &item.locale != *locale))
         .cloned()
         .collect::<Vec<_>>();
 
     Ok(CheckUntranslatedResult {
-        checked_locales: locales,
+        checked_locales: config.locales,
         fully_translated_locales,
         untranslated,
     })
@@ -133,6 +121,28 @@ mod tests {
     fn test_placeholder_detection() {
         assert!(is_placeholder_translation("hello-world", "hello-world"));
         assert!(!is_placeholder_translation("hello-world", "Hello world"));
+    }
+
+    #[test]
+    fn test_check_untranslated_requires_languages() -> Result<()> {
+        let temp_dir = TempDir::new()?;
+        let locales = temp_dir.path().join("locales");
+        fs::create_dir_all(locales.join("en"))?;
+
+        let result = check_untranslated(CheckUntranslatedConfig {
+            locales_path: locales,
+            locales: vec![],
+            suggest_from: vec![],
+        });
+
+        assert!(result.is_err());
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Missing languages")
+        );
+        Ok(())
     }
 
     #[test]
@@ -205,7 +215,7 @@ mod tests {
         let result = check_untranslated(CheckUntranslatedConfig {
             locales_path: locales,
             locales: vec!["en".to_string()],
-            suggest_from: vec!["ru".to_string()],
+            suggest_from: vec!["pl".to_string()],
         });
 
         assert!(result.is_err());
@@ -213,7 +223,7 @@ mod tests {
             result
                 .unwrap_err()
                 .to_string()
-                .contains("Suggest locale `ru` does not exist")
+                .contains("Suggest locale `pl` does not exist")
         );
         Ok(())
     }

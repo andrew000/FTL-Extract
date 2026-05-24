@@ -2,7 +2,7 @@
 
 ## Project Structure & Module Organization
 
-This repository is a Rust workspace packaged as a Python-distributed CLI. Workspace crates live under `src/`: `src/cli` provides the `ftl` binary, `src/extractor` contains Fluent key extraction logic, `src/stub` generates Python stubs, and `src/untranslated` handles untranslated-report workflows. Rust tests and benchmarks are colocated with crates, for example `src/extractor/tests` and `src/extractor/benches`. Repository-level fixtures live in `tests/files`.
+This repository is a Rust workspace packaged as a Python-distributed CLI. Workspace crates live under `src/`: `src/cli` provides the `ftl` binary, `src/extractor` contains Fluent key extraction logic, `src/stub` generates Python stubs, and `src/check` handles validation workflows. Rust tests and benchmarks are colocated with crates, for example `src/extractor/tests` and `src/extractor/benches`. Repository-level fixtures live in `tests/files`.
 
 ## Build, Test, and Development Commands
 

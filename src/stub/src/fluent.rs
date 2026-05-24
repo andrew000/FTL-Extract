@@ -294,7 +294,7 @@ mod fluent_tests {
     use tempfile::TempDir;
 
     #[test]
-    fn test_parse_ftl_files_comprehensive() -> anyhow::Result<()> {
+    fn test_parse_ftl_files_comprehensive() -> Result<()> {
         let temp_dir = TempDir::new()?;
         let ftl_dir = temp_dir.path();
 
@@ -351,7 +351,7 @@ rocket-message = Blast off { -emoji }
     }
 
     #[test]
-    fn test_parse_ftl_files_empty_directory() -> anyhow::Result<()> {
+    fn test_parse_ftl_files_empty_directory() -> Result<()> {
         let temp_dir = TempDir::new()?;
         let messages = parse_ftl_files(temp_dir.path())?;
         assert!(messages.is_empty());
@@ -359,7 +359,7 @@ rocket-message = Blast off { -emoji }
     }
 
     #[test]
-    fn test_parse_ftl_files_no_ftl_files() -> anyhow::Result<()> {
+    fn test_parse_ftl_files_no_ftl_files() -> Result<()> {
         let temp_dir = TempDir::new()?;
 
         // Create non-FTL files
@@ -484,7 +484,7 @@ welcome = { -greeting }
     }
 
     #[test]
-    fn test_error_handling_invalid_ftl() -> anyhow::Result<()> {
+    fn test_error_handling_invalid_ftl() -> Result<()> {
         let temp_dir = TempDir::new()?;
 
         // Create FTL file with syntax error (should not crash, but might fail parsing)

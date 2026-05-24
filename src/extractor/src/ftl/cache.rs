@@ -1,3 +1,4 @@
+use crate::ftl::code_extractor::kwargs_from_key;
 use crate::ftl::matcher::{FluentEntry, FluentKey};
 use crate::ftl::utils::{FastHashMap, FastHashSet};
 use bincode_next::{Decode, Encode};
@@ -181,28 +182,7 @@ fn cached_key_to_fluent_key(cached: CachedFluentKey) -> FluentKey {
 }
 
 fn fluent_key_to_cached_key(fluent_key: FluentKey) -> CachedFluentKey {
-    let kwargs = match fluent_key.entry.as_ref() {
-        FluentEntry::Message(message) => message
-            .value
-            .as_ref()
-            .map(|pattern| {
-                pattern
-                    .elements
-                    .iter()
-                    .filter_map(|element| match element {
-                        fluent_syntax::ast::PatternElement::Placeable {
-                            expression:
-                                fluent_syntax::ast::Expression::Inline(
-                                    fluent_syntax::ast::InlineExpression::VariableReference { id },
-                                ),
-                        } => Some(id.name.clone()),
-                        _ => None,
-                    })
-                    .collect()
-            })
-            .unwrap_or_default(),
-        _ => Vec::new(),
-    };
+    let kwargs = kwargs_from_key(&fluent_key);
 
     CachedFluentKey {
         key: fluent_key.key,

@@ -1,6 +1,7 @@
 #![allow(unused_variables)]
 
 use crate::ftl::consts;
+use crate::ftl::diagnostics::{CodeLocation, ExtractionDiagnostic, ExtractionDiagnosticKind};
 use crate::ftl::utils::{FastHashMap, FastHashSet};
 use anyhow::{Result, bail};
 use fluent::types::AnyEq;
@@ -10,7 +11,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 #[derive(Clone, Debug, PartialEq)]
-pub(crate) enum FluentEntry {
+pub enum FluentEntry {
     Message(fluent_syntax::ast::Message<String>),
     Term(fluent_syntax::ast::Term<String>),
     Comment(fluent_syntax::ast::Comment<String>),
@@ -20,14 +21,15 @@ pub(crate) enum FluentEntry {
 }
 
 #[derive(Clone, Debug)]
-pub(crate) struct FluentKey {
-    pub(crate) code_path: Arc<PathBuf>,
-    pub(crate) key: String,
-    pub(crate) entry: Arc<FluentEntry>,
-    pub(crate) path: Arc<PathBuf>,
-    pub(crate) locale: Option<String>,
-    pub(crate) position: usize,
-    pub(crate) depends_on_keys: FastHashSet<String>,
+pub struct FluentKey {
+    pub code_path: Arc<PathBuf>,
+    pub key: String,
+    pub entry: Arc<FluentEntry>,
+    pub path: Arc<PathBuf>,
+    pub locale: Option<String>,
+    pub position: usize,
+    pub depends_on_keys: FastHashSet<String>,
+    pub source_location: Option<CodeLocation>,
 }
 
 impl FluentKey {
@@ -48,6 +50,7 @@ impl FluentKey {
             locale,
             position: position.unwrap_or(usize::MAX),
             depends_on_keys,
+            source_location: None,
         }
     }
 }
@@ -59,6 +62,9 @@ pub(crate) struct I18nMatcher<'a> {
     i18n_keys_prefix: &'a FastHashSet<String>,
     ignore_attributes: &'a FastHashSet<String>,
     ignore_kwargs: &'a FastHashSet<String>,
+    source: Option<&'a str>,
+    collect_diagnostics: bool,
+    pub(crate) diagnostics: Vec<ExtractionDiagnostic>,
     pub(crate) fluent_keys: FastHashMap<String, FluentKey>,
 }
 
@@ -105,6 +111,32 @@ impl<'a> I18nMatcher<'a> {
             i18n_keys_prefix,
             ignore_attributes,
             ignore_kwargs,
+            source: None,
+            collect_diagnostics: false,
+            diagnostics: Vec::new(),
+            fluent_keys: FastHashMap::default(),
+        }
+    }
+
+    pub(crate) fn collecting(
+        code_path: PathBuf,
+        source: &'a str,
+        default_ftl_file: PathBuf,
+        i18n_keys: &'a FastHashSet<String>,
+        i18n_keys_prefix: &'a FastHashSet<String>,
+        ignore_attributes: &'a FastHashSet<String>,
+        ignore_kwargs: &'a FastHashSet<String>,
+    ) -> Self {
+        Self {
+            code_path: Arc::new(code_path),
+            default_ftl_file: Arc::new(default_ftl_file),
+            i18n_keys,
+            i18n_keys_prefix,
+            ignore_attributes,
+            ignore_kwargs,
+            source: Some(source),
+            collect_diagnostics: true,
+            diagnostics: Vec::new(),
             fluent_keys: FastHashMap::default(),
         }
     }
@@ -240,6 +272,7 @@ impl<'a> I18nMatcher<'a> {
             None,
             FastHashSet::default(),
         );
+        fluent_key.source_location = self.code_location(expr);
 
         let keywords = expr
             .arguments
@@ -297,36 +330,98 @@ impl<'a> I18nMatcher<'a> {
 
         fluent_key
     }
+
+    fn code_location(&self, expr: &ruff_python_ast::ExprCall) -> Option<CodeLocation> {
+        let source = self.source?;
+        let (line, column) = line_column(source, expr.range.start().to_u32() as usize);
+
+        Some(CodeLocation {
+            path: self.code_path.as_ref().clone(),
+            line,
+            column,
+        })
+    }
+
+    fn add_conflict_diagnostic(
+        &mut self,
+        kind: ExtractionDiagnosticKind,
+        existing: &FluentKey,
+        new_fluent_key: &FluentKey,
+        message: String,
+    ) {
+        let mut locations = Vec::new();
+        if let Some(location) = existing.source_location.clone() {
+            locations.push(location);
+        }
+        if let Some(location) = new_fluent_key.source_location.clone() {
+            locations.push(location);
+        }
+
+        self.diagnostics.push(ExtractionDiagnostic {
+            kind,
+            key: new_fluent_key.key.clone(),
+            message,
+            locations,
+        });
+    }
+
     #[inline]
     fn add_fluent_key(&mut self, expr: &ruff_python_ast::ExprCall, key: String) -> Result<()> {
         let new_fluent_key = self.create_fluent_key(expr, key);
 
-        if self.fluent_keys.contains_key(&new_fluent_key.key) {
-            if self.fluent_keys[&new_fluent_key.key].path != new_fluent_key.path {
-                bail!(
+        if let Some(existing) = self.fluent_keys.get(&new_fluent_key.key).cloned() {
+            if existing.path != new_fluent_key.path {
+                let message = format!(
                     "Fluent key {} has different paths: {} and {}",
                     new_fluent_key.key,
                     new_fluent_key.path.display(),
-                    self.fluent_keys[&new_fluent_key.key].path.display()
-                )
-            }
-            if let (FluentEntry::Message(existing_message), FluentEntry::Message(new_message)) = (
-                self.fluent_keys[&new_fluent_key.key].entry.as_ref(),
-                new_fluent_key.entry.as_ref(),
-            ) {
-                if !existing_message.clone().equals(new_message) {
-                    bail!(
-                        "Fluent key {} has different translations:\n{:?}\nand\n{:?}",
-                        new_fluent_key.key,
-                        new_message,
-                        existing_message
+                    existing.path.display()
+                );
+                if self.collect_diagnostics {
+                    self.add_conflict_diagnostic(
+                        ExtractionDiagnosticKind::KeyPathConflict,
+                        &existing,
+                        &new_fluent_key,
+                        message,
                     );
+                    return Ok(());
+                }
+                bail!(message)
+            }
+            if let (FluentEntry::Message(existing_message), FluentEntry::Message(new_message)) =
+                (existing.entry.as_ref(), new_fluent_key.entry.as_ref())
+            {
+                if !existing_message.clone().equals(new_message) {
+                    let message = format!(
+                        "Fluent key {} has different translations:\n{:?}\nand\n{:?}",
+                        new_fluent_key.key, new_message, existing_message
+                    );
+                    if self.collect_diagnostics {
+                        self.add_conflict_diagnostic(
+                            ExtractionDiagnosticKind::KeyMessageConflict,
+                            &existing,
+                            &new_fluent_key,
+                            message,
+                        );
+                        return Ok(());
+                    }
+                    bail!(message);
                 }
             } else {
-                bail!(
+                let message = format!(
                     "Fluent key {} is not a Message in one of the entries.",
                     new_fluent_key.key
                 );
+                if self.collect_diagnostics {
+                    self.add_conflict_diagnostic(
+                        ExtractionDiagnosticKind::KeyTypeConflict,
+                        &existing,
+                        &new_fluent_key,
+                        message,
+                    );
+                    return Ok(());
+                }
+                bail!(message);
             }
         } else {
             self.fluent_keys
@@ -335,4 +430,25 @@ impl<'a> I18nMatcher<'a> {
 
         Ok(())
     }
+}
+
+pub fn line_column(content: &str, byte_index: usize) -> (usize, usize) {
+    let target = byte_index.min(content.len());
+    let mut line = 1;
+    let mut column = 1;
+
+    for (offset, ch) in content.char_indices() {
+        if offset >= target {
+            break;
+        }
+
+        if ch == '\n' {
+            line += 1;
+            column = 1;
+        } else {
+            column += 1;
+        }
+    }
+
+    (line, column)
 }

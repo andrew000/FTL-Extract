@@ -22,7 +22,7 @@ pub struct ToolConfig {
 pub struct FtlExtractConfig {
     pub extract: Option<ExtractPyprojectConfig>,
     pub stub: Option<StubPyprojectConfig>,
-    pub untranslated: Option<UntranslatedPyprojectConfig>,
+    pub check: Option<CheckPyprojectConfig>,
 }
 
 #[derive(Debug, Clone, Default, Deserialize)]
@@ -59,11 +59,13 @@ pub struct StubPyprojectConfig {
 
 #[derive(Debug, Clone, Default, Deserialize)]
 #[serde(rename_all = "kebab-case")]
-pub struct UntranslatedPyprojectConfig {
+pub struct CheckPyprojectConfig {
     pub locales_path: Option<PathBuf>,
+    pub code_path: Option<PathBuf>,
     pub languages: Option<Vec<String>>,
+    pub checks: Option<Vec<String>>,
     pub suggest_from: Option<Vec<String>>,
-    pub fail_on_untranslated: Option<bool>,
+    pub fail_on: Option<Vec<String>>,
     pub output: Option<PathBuf>,
     pub output_format: Option<String>,
 }
@@ -114,20 +116,20 @@ pub fn resolve_config_path(path: Option<PathBuf>, base_dir: &Path) -> Option<Pat
 pub enum ConfigSampleCommand {
     Extract,
     Stub,
-    Untranslated,
+    Check,
 }
 
 pub fn render_config_sample(command: Option<ConfigSampleCommand>) -> &'static str {
     match command {
         Some(ConfigSampleCommand::Extract) => EXTRACT_SAMPLE,
         Some(ConfigSampleCommand::Stub) => STUB_SAMPLE,
-        Some(ConfigSampleCommand::Untranslated) => UNTRANSLATED_SAMPLE,
+        Some(ConfigSampleCommand::Check) => CHECK_SAMPLE,
         None => FULL_SAMPLE.as_str(),
     }
 }
 
 static FULL_SAMPLE: LazyLock<String> =
-    LazyLock::new(|| [EXTRACT_SAMPLE, STUB_SAMPLE, UNTRANSLATED_SAMPLE].join("\n"));
+    LazyLock::new(|| [EXTRACT_SAMPLE, STUB_SAMPLE, CHECK_SAMPLE].join("\n"));
 
 const EXTRACT_SAMPLE: &str = r#"[tool.ftl-extract.extract]
 code-path = "app/bot"
@@ -149,13 +151,25 @@ output-path = "app/bot/stub.pyi"
 export-tree = false
 "#;
 
-const UNTRANSLATED_SAMPLE: &str = r#"[tool.ftl-extract.untranslated]
+const CHECK_SAMPLE: &str = r#"[tool.ftl-extract.check]
 locales-path = "app/bot/locales"
-languages = ["uk"]
+code-path = "app/bot"
+languages = ["uk", "pl"]
+checks = ["all"]
 suggest-from = ["en"]
-fail-on-untranslated = true
-output = "reports/untranslated"
+fail-on = ["error"]
+output = "reports/ftl-check"
 output-format = "json"
+
+# Check presets:
+# checks = ["all"]
+# checks = ["untranslated"] # Does not require code-path.
+# checks = ["syntax"]       # Does not require code-path.
+# checks = ["references"]   # Does not require code-path.
+# checks = ["missing"]      # Requires code-path.
+# checks = ["stale"]        # Requires code-path.
+# checks = ["kwargs"]       # Requires code-path.
+# checks = ["syntax", "references", "missing", "kwargs"]
 "#;
 
 fn find_pyproject() -> Option<PathBuf> {
@@ -195,8 +209,10 @@ comment-keys-mode = "warn"
 ftl-path = "locales/en"
 output-path = "app/stub.pyi"
 
-[tool.ftl-extract.untranslated]
+[tool.ftl-extract.check]
 locales-path = "locales"
+code-path = "app"
+checks = ["all"]
 output-format = "json"
 "#,
         )
@@ -217,10 +233,9 @@ output-format = "json"
             loaded.config.stub.unwrap().output_path,
             Some(PathBuf::from("app/stub.pyi"))
         );
-        assert_eq!(
-            loaded.config.untranslated.unwrap().output_format,
-            Some("json".to_string())
-        );
+        let check = loaded.config.check.unwrap();
+        assert_eq!(check.code_path, Some(PathBuf::from("app")));
+        assert_eq!(check.output_format, Some("json".to_string()));
     }
 
     #[test]
@@ -239,7 +254,7 @@ output-format = "json"
 
         assert!(sample.contains("[tool.ftl-extract.extract]"));
         assert!(sample.contains("[tool.ftl-extract.stub]"));
-        assert!(sample.contains("[tool.ftl-extract.untranslated]"));
+        assert!(sample.contains("[tool.ftl-extract.check]"));
     }
 
     #[test]
@@ -248,6 +263,6 @@ output-format = "json"
 
         assert!(sample.contains("[tool.ftl-extract.extract]"));
         assert!(!sample.contains("[tool.ftl-extract.stub]"));
-        assert!(!sample.contains("[tool.ftl-extract.untranslated]"));
+        assert!(!sample.contains("[tool.ftl-extract.check]"));
     }
 }

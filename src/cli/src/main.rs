@@ -727,7 +727,7 @@ where
                         locales: config.locales.clone(),
                     })?),
                 );
-                if expanded_checks.is_default_or_all && has_fatal_syntax_diagnostics(&result) {
+                if has_fatal_syntax_diagnostics(&result) {
                     break;
                 }
             }
@@ -816,7 +816,6 @@ fn extend_check_result(target: &mut CheckResult, source: CheckResult) {
 #[derive(Debug, Clone)]
 struct ExpandedChecks {
     checks: Vec<CheckKind>,
-    is_default_or_all: bool,
 }
 
 fn expand_check_kinds(checks: Vec<CheckKind>) -> ExpandedChecks {
@@ -830,7 +829,11 @@ fn expand_check_kinds(checks: Vec<CheckKind>) -> ExpandedChecks {
     ];
 
     let is_default_or_all = checks.is_empty() || checks.contains(&CheckKind::All);
-    let checks = if is_default_or_all { defaults } else { checks };
+    let checks = if is_default_or_all {
+        defaults
+    } else {
+        normalize_check_order(checks)
+    };
 
     let mut expanded = Vec::new();
     for check in checks {
@@ -838,10 +841,21 @@ fn expand_check_kinds(checks: Vec<CheckKind>) -> ExpandedChecks {
             expanded.push(check);
         }
     }
-    ExpandedChecks {
-        checks: expanded,
-        is_default_or_all,
+    ExpandedChecks { checks: expanded }
+}
+
+fn normalize_check_order(checks: Vec<CheckKind>) -> Vec<CheckKind> {
+    if !checks.contains(&CheckKind::Syntax) {
+        return checks;
     }
+
+    let mut normalized = vec![CheckKind::Syntax];
+    normalized.extend(
+        checks
+            .into_iter()
+            .filter(|check| *check != CheckKind::Syntax),
+    );
+    normalized
 }
 
 fn has_fatal_syntax_diagnostics(result: &CheckResult) -> bool {
@@ -1007,7 +1021,6 @@ mod tests {
     fn check_all_runs_syntax_first() {
         let expanded = expand_check_kinds(vec![CheckKind::All]);
 
-        assert!(expanded.is_default_or_all);
         assert_eq!(expanded.checks.first(), Some(&CheckKind::Syntax));
         assert_eq!(
             expanded.checks,
@@ -1026,8 +1039,36 @@ mod tests {
     fn check_custom_list_is_not_default_or_all() {
         let expanded = expand_check_kinds(vec![CheckKind::Missing, CheckKind::Syntax]);
 
-        assert!(!expanded.is_default_or_all);
-        assert_eq!(expanded.checks, vec![CheckKind::Missing, CheckKind::Syntax]);
+        assert_eq!(expanded.checks, vec![CheckKind::Syntax, CheckKind::Missing]);
+    }
+
+    #[test]
+    fn custom_checks_move_syntax_first() {
+        let expanded = expand_check_kinds(vec![
+            CheckKind::Kwargs,
+            CheckKind::Missing,
+            CheckKind::References,
+            CheckKind::Stale,
+            CheckKind::Syntax,
+        ]);
+
+        assert_eq!(
+            expanded.checks,
+            vec![
+                CheckKind::Syntax,
+                CheckKind::Kwargs,
+                CheckKind::Missing,
+                CheckKind::References,
+                CheckKind::Stale,
+            ]
+        );
+    }
+
+    #[test]
+    fn custom_checks_without_syntax_keep_order() {
+        let expanded = expand_check_kinds(vec![CheckKind::Missing, CheckKind::Kwargs]);
+
+        assert_eq!(expanded.checks, vec![CheckKind::Missing, CheckKind::Kwargs]);
     }
 
     #[test]

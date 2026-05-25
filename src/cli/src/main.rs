@@ -5,16 +5,18 @@ use crate::config::{
 };
 use anyhow::{Context, Result};
 use check::{
-    CheckKwargsConfig, CheckMissingConfig, CheckReferencesConfig, CheckResult, CheckStaleConfig,
-    CheckSyntaxConfig, CheckUntranslatedConfig, Diagnostic, DiagnosticKind, Severity, check_kwargs,
-    check_missing, check_references, check_stale, check_syntax, check_untranslated,
-    has_failing_diagnostics, render_check_json, render_check_terminal,
+    CheckCodeAwareConfig, CheckCodeConfig, CheckReferencesConfig, CheckResult, CheckSyntaxConfig,
+    CheckUntranslatedConfig, Diagnostic, DiagnosticKind, Severity, check_kwargs_with_extracted,
+    check_missing_with_extracted, check_references, check_stale_with_extracted, check_syntax,
+    check_untranslated, code_extraction_errors, extract_check_code, has_failing_diagnostics,
+    render_check_json, render_check_terminal, validate_check_locales,
 };
 use clap::{Parser, Subcommand, ValueEnum};
 use extractor::ftl::consts::{
     CommentsKeyModes, DEFAULT_EXCLUDE_DIRS, DEFAULT_FTL_FILENAME, DEFAULT_I18N_KEYS,
     DEFAULT_IGNORE_ATTRIBUTES, DEFAULT_IGNORE_KWARGS, LineEndings,
 };
+use extractor::ftl::diagnostics::ExtractedCode;
 use extractor::ftl::ftl_extractor::{ExtractConfig, extract};
 use extractor::ftl::utils::FastHashSet;
 use log::{error, info};
@@ -630,50 +632,63 @@ struct CheckRunConfig {
 }
 
 fn run_check(expanded_checks: ExpandedChecks, config: CheckRunConfig) -> Result<CheckResult> {
+    run_check_with_extractor(expanded_checks, config, extract_check_code)
+}
+
+fn run_check_with_extractor<F>(
+    expanded_checks: ExpandedChecks,
+    config: CheckRunConfig,
+    mut extract_code: F,
+) -> Result<CheckResult>
+where
+    F: FnMut(CheckCodeConfig) -> Result<ExtractedCode>,
+{
     let mut result = CheckResult {
         checked_kinds: Vec::new(),
         diagnostics: Vec::new(),
     };
+    let mut extracted_code = None;
+    let mut extraction_diagnostics_added = false;
 
     for check in expanded_checks.checks {
         match check {
             CheckKind::All => unreachable!("check expansion removes `all`"),
             CheckKind::Kwargs => {
-                let code_path = config.code_path.clone().context(
-                    "Missing code path. Pass --code-path or set tool.ftl-extract.check.code-path",
-                )?;
+                let extracted =
+                    ensure_extracted_code(&mut extracted_code, &config, &mut extract_code)?;
                 extend_check_result(
                     &mut result,
-                    CheckResult::from(check_kwargs(CheckKwargsConfig {
-                        locales_path: config.locales_path.clone(),
-                        code_path,
-                        locales: config.locales.clone(),
-                        i18n_keys: config.i18n_keys.clone(),
-                        i18n_keys_prefix: config.i18n_keys_prefix.clone(),
-                        exclude_dirs: config.exclude_dirs.clone(),
-                        ignore_attributes: config.ignore_attributes.clone(),
-                        ignore_kwargs: config.ignore_kwargs.clone(),
-                        default_ftl_file: config.default_ftl_file.clone(),
-                    })?),
+                    CheckResult::from(check_kwargs_with_extracted(
+                        CheckCodeAwareConfig {
+                            locales_path: config.locales_path.clone(),
+                            locales: config.locales.clone(),
+                        },
+                        extracted,
+                    )?),
+                );
+                add_extraction_diagnostics_once(
+                    &mut result,
+                    extracted,
+                    &mut extraction_diagnostics_added,
                 );
             }
             CheckKind::Missing => {
-                let code_path = config.code_path.clone().context(
-                    "Missing code path. Pass --code-path or set tool.ftl-extract.check.code-path",
-                )?;
+                let extracted =
+                    ensure_extracted_code(&mut extracted_code, &config, &mut extract_code)?;
                 extend_check_result(
                     &mut result,
-                    CheckResult::from(check_missing(CheckMissingConfig {
-                        locales_path: config.locales_path.clone(),
-                        code_path,
-                        locales: config.locales.clone(),
-                        i18n_keys: config.i18n_keys.clone(),
-                        i18n_keys_prefix: config.i18n_keys_prefix.clone(),
-                        exclude_dirs: config.exclude_dirs.clone(),
-                        ignore_attributes: config.ignore_attributes.clone(),
-                        ignore_kwargs: config.ignore_kwargs.clone(),
-                        default_ftl_file: config.default_ftl_file.clone(),
-                    })?),
+                    CheckResult::from(check_missing_with_extracted(
+                        CheckCodeAwareConfig {
+                            locales_path: config.locales_path.clone(),
+                            locales: config.locales.clone(),
+                        },
+                        extracted,
+                    )?),
+                );
+                add_extraction_diagnostics_once(
+                    &mut result,
+                    extracted,
+                    &mut extraction_diagnostics_added,
                 );
             }
             CheckKind::References => {
@@ -686,22 +701,22 @@ fn run_check(expanded_checks: ExpandedChecks, config: CheckRunConfig) -> Result<
                 );
             }
             CheckKind::Stale => {
-                let code_path = config.code_path.clone().context(
-                    "Missing code path. Pass --code-path or set tool.ftl-extract.check.code-path",
-                )?;
+                let extracted =
+                    ensure_extracted_code(&mut extracted_code, &config, &mut extract_code)?;
                 extend_check_result(
                     &mut result,
-                    CheckResult::from(check_stale(CheckStaleConfig {
-                        locales_path: config.locales_path.clone(),
-                        code_path,
-                        locales: config.locales.clone(),
-                        i18n_keys: config.i18n_keys.clone(),
-                        i18n_keys_prefix: config.i18n_keys_prefix.clone(),
-                        exclude_dirs: config.exclude_dirs.clone(),
-                        ignore_attributes: config.ignore_attributes.clone(),
-                        ignore_kwargs: config.ignore_kwargs.clone(),
-                        default_ftl_file: config.default_ftl_file.clone(),
-                    })?),
+                    CheckResult::from(check_stale_with_extracted(
+                        CheckCodeAwareConfig {
+                            locales_path: config.locales_path.clone(),
+                            locales: config.locales.clone(),
+                        },
+                        extracted,
+                    )?),
+                );
+                add_extraction_diagnostics_once(
+                    &mut result,
+                    extracted,
+                    &mut extraction_diagnostics_added,
                 );
             }
             CheckKind::Syntax => {
@@ -732,6 +747,65 @@ fn run_check(expanded_checks: ExpandedChecks, config: CheckRunConfig) -> Result<
     dedup_diagnostics(&mut result);
 
     Ok(result)
+}
+
+fn ensure_extracted_code<'a, F>(
+    extracted_code: &'a mut Option<ExtractedCode>,
+    config: &CheckRunConfig,
+    extract_code: &mut F,
+) -> Result<&'a ExtractedCode>
+where
+    F: FnMut(CheckCodeConfig) -> Result<ExtractedCode>,
+{
+    if extracted_code.is_none() {
+        validate_check_locales(&config.locales_path, &config.locales)?;
+        let code_path = config.code_path.clone().context(
+            "Missing code path. Pass --code-path or set tool.ftl-extract.check.code-path",
+        )?;
+        *extracted_code = Some(extract_code(CheckCodeConfig {
+            code_path,
+            i18n_keys: config.i18n_keys.clone(),
+            i18n_keys_prefix: config.i18n_keys_prefix.clone(),
+            exclude_dirs: config.exclude_dirs.clone(),
+            ignore_attributes: config.ignore_attributes.clone(),
+            ignore_kwargs: config.ignore_kwargs.clone(),
+            default_ftl_file: config.default_ftl_file.clone(),
+        })?);
+    }
+
+    Ok(extracted_code
+        .as_ref()
+        .expect("extracted code is initialized"))
+}
+
+fn add_extraction_diagnostics_once(
+    result: &mut CheckResult,
+    extracted: &ExtractedCode,
+    added: &mut bool,
+) {
+    if *added {
+        return;
+    }
+
+    result
+        .diagnostics
+        .extend(
+            code_extraction_errors(extracted)
+                .into_iter()
+                .map(|item| Diagnostic {
+                    severity: Severity::Error,
+                    kind: DiagnosticKind::Extraction,
+                    locale: None,
+                    key: Some(item.key),
+                    ftl_location: None,
+                    code_location: item.locations.first().cloned(),
+                    message: item.message,
+                    suggestions: Vec::new(),
+                    missing_kwargs: Vec::new(),
+                    unused_kwargs: Vec::new(),
+                }),
+        );
+    *added = true;
 }
 
 fn extend_check_result(target: &mut CheckResult, source: CheckResult) {
@@ -924,6 +998,10 @@ fn exit_config_error(error: anyhow::Error) -> ! {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use extractor::ftl::diagnostics::{
+        CodeLocation, ExtractionDiagnostic, ExtractionDiagnosticKind,
+    };
+    use tempfile::TempDir;
 
     #[test]
     fn check_all_runs_syntax_first() {
@@ -950,5 +1028,63 @@ mod tests {
 
         assert!(!expanded.is_default_or_all);
         assert_eq!(expanded.checks, vec![CheckKind::Missing, CheckKind::Syntax]);
+    }
+
+    #[test]
+    fn combined_code_aware_checks_extract_once() {
+        let temp = TempDir::new().unwrap();
+        let locales_path = temp.path().join("locales");
+        let code_path = temp.path().join("code");
+        std::fs::create_dir_all(locales_path.join("uk")).unwrap();
+        std::fs::create_dir_all(&code_path).unwrap();
+        std::fs::write(locales_path.join("uk").join("_default.ftl"), "").unwrap();
+
+        let expanded_checks = expand_check_kinds(vec![
+            CheckKind::Missing,
+            CheckKind::Stale,
+            CheckKind::Kwargs,
+        ]);
+        let config = CheckRunConfig {
+            locales_path,
+            code_path: Some(code_path.clone()),
+            locales: vec!["uk".to_string()],
+            suggest_from: Vec::new(),
+            i18n_keys: FastHashSet::default(),
+            i18n_keys_prefix: FastHashSet::default(),
+            exclude_dirs: FastHashSet::default(),
+            ignore_attributes: FastHashSet::default(),
+            ignore_kwargs: FastHashSet::default(),
+            default_ftl_file: PathBuf::from(DEFAULT_FTL_FILENAME),
+        };
+
+        let mut extraction_calls = 0;
+        let result = run_check_with_extractor(expanded_checks, config, |_| {
+            extraction_calls += 1;
+            Ok(ExtractedCode {
+                keys: Vec::new(),
+                diagnostics: vec![ExtractionDiagnostic {
+                    kind: ExtractionDiagnosticKind::KeyPathConflict,
+                    key: "hello".to_string(),
+                    message: "Fluent key hello has different paths".to_string(),
+                    locations: vec![CodeLocation {
+                        path: code_path.join("app.py"),
+                        line: 1,
+                        column: 1,
+                    }],
+                }],
+                py_files_count: 1,
+            })
+        })
+        .unwrap();
+
+        assert_eq!(extraction_calls, 1);
+        assert_eq!(
+            result
+                .diagnostics
+                .iter()
+                .filter(|diagnostic| diagnostic.kind == DiagnosticKind::Extraction)
+                .count(),
+            1
+        );
     }
 }

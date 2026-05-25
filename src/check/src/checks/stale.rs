@@ -1,29 +1,49 @@
-use crate::checks::validate_locales;
+use crate::checks::{code_extraction_errors, extract_check_code, validate_locales};
 use crate::parser::{
     discover_locales, ftl_files_for_locale, parse_ftl_resource_lossy, read_locale_messages,
 };
-use crate::types::{CheckStaleConfig, CheckStaleResult, CodeExtractionError, StaleKey};
+use crate::types::{
+    CheckCodeAwareConfig, CheckCodeConfig, CheckStaleConfig, CheckStaleResult, StaleKey,
+};
 use anyhow::Result;
-use extractor::ftl::code_extractor::extract_code_with_diagnostics;
+use extractor::ftl::diagnostics::ExtractedCode;
 use extractor::ftl::utils::FastHashSet;
 use fluent_syntax::ast::{Entry, Expression, InlineExpression, Pattern, PatternElement};
-use globset::{Glob, GlobSetBuilder};
 use std::path::Path;
 
 pub fn check_stale(config: CheckStaleConfig) -> Result<CheckStaleResult> {
+    let code_aware_config = CheckCodeAwareConfig {
+        locales_path: config.locales_path,
+        locales: config.locales,
+    };
+    let available_locales = discover_locales(&code_aware_config.locales_path)?;
+    validate_locales(
+        &code_aware_config.locales_path,
+        &available_locales,
+        &code_aware_config.locales,
+    )?;
+    let extracted = extract_check_code(CheckCodeConfig {
+        code_path: config.code_path,
+        i18n_keys: config.i18n_keys,
+        i18n_keys_prefix: config.i18n_keys_prefix,
+        exclude_dirs: config.exclude_dirs,
+        ignore_attributes: config.ignore_attributes,
+        ignore_kwargs: config.ignore_kwargs,
+        default_ftl_file: config.default_ftl_file,
+    })?;
+
+    let mut result = check_stale_with_extracted(code_aware_config, &extracted)?;
+    result.extraction_errors = code_extraction_errors(&extracted);
+    Ok(result)
+}
+
+pub fn check_stale_with_extracted(
+    config: CheckCodeAwareConfig,
+    extracted: &ExtractedCode,
+) -> Result<CheckStaleResult> {
     let available_locales = discover_locales(&config.locales_path)?;
     validate_locales(&config.locales_path, &available_locales, &config.locales)?;
 
-    let ignore_set = build_ignore_set(&config.exclude_dirs)?;
-    let extracted = extract_code_with_diagnostics(
-        &config.code_path,
-        config.i18n_keys,
-        config.i18n_keys_prefix,
-        &ignore_set,
-        config.ignore_attributes,
-        config.ignore_kwargs,
-        &config.default_ftl_file,
-    );
     let used_keys = extracted
         .keys
         .iter()
@@ -72,24 +92,8 @@ pub fn check_stale(config: CheckStaleConfig) -> Result<CheckStaleResult> {
     Ok(CheckStaleResult {
         checked_locales: config.locales,
         stale_keys,
-        extraction_errors: extracted
-            .diagnostics
-            .into_iter()
-            .map(|diagnostic| CodeExtractionError {
-                key: diagnostic.key,
-                message: diagnostic.message,
-                locations: diagnostic.locations.into_iter().map(Into::into).collect(),
-            })
-            .collect(),
+        extraction_errors: Vec::new(),
     })
-}
-
-fn build_ignore_set(exclude_dirs: &FastHashSet<String>) -> Result<globset::GlobSet> {
-    let mut builder = GlobSetBuilder::new();
-    for exclude in exclude_dirs {
-        builder.add(Glob::new(exclude.as_str())?);
-    }
-    Ok(builder.build()?)
 }
 
 fn referenced_messages(locales_path: &Path, locale: &str) -> Result<FastHashSet<String>> {

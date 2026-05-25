@@ -1,8 +1,10 @@
-use crate::checks::{build_ignore_set, validate_locales};
+use crate::checks::{code_extraction_errors, extract_check_code, validate_locales};
 use crate::parser::{discover_locales, ftl_files_for_locale, parse_ftl_entries_lossy};
-use crate::types::{CheckKwargsConfig, CheckKwargsResult, CodeExtractionError, KwargsMismatch};
+use crate::types::{
+    CheckCodeAwareConfig, CheckCodeConfig, CheckKwargsConfig, CheckKwargsResult, KwargsMismatch,
+};
 use anyhow::Result;
-use extractor::ftl::code_extractor::extract_code_with_diagnostics;
+use extractor::ftl::diagnostics::ExtractedCode;
 use extractor::ftl::utils::{FastHashMap, FastHashSet};
 use fluent_syntax::ast::{
     Entry, Expression, InlineExpression, Message, Pattern, PatternElement, Term,
@@ -10,19 +12,37 @@ use fluent_syntax::ast::{
 use std::path::{Path, PathBuf};
 
 pub fn check_kwargs(config: CheckKwargsConfig) -> Result<CheckKwargsResult> {
+    let code_aware_config = CheckCodeAwareConfig {
+        locales_path: config.locales_path,
+        locales: config.locales,
+    };
+    let available_locales = discover_locales(&code_aware_config.locales_path)?;
+    validate_locales(
+        &code_aware_config.locales_path,
+        &available_locales,
+        &code_aware_config.locales,
+    )?;
+    let extracted = extract_check_code(CheckCodeConfig {
+        code_path: config.code_path,
+        i18n_keys: config.i18n_keys,
+        i18n_keys_prefix: config.i18n_keys_prefix,
+        exclude_dirs: config.exclude_dirs,
+        ignore_attributes: config.ignore_attributes,
+        ignore_kwargs: config.ignore_kwargs,
+        default_ftl_file: config.default_ftl_file,
+    })?;
+
+    let mut result = check_kwargs_with_extracted(code_aware_config, &extracted)?;
+    result.extraction_errors = code_extraction_errors(&extracted);
+    Ok(result)
+}
+
+pub fn check_kwargs_with_extracted(
+    config: CheckCodeAwareConfig,
+    extracted: &ExtractedCode,
+) -> Result<CheckKwargsResult> {
     let available_locales = discover_locales(&config.locales_path)?;
     validate_locales(&config.locales_path, &available_locales, &config.locales)?;
-
-    let ignore_set = build_ignore_set(&config.exclude_dirs)?;
-    let extracted = extract_code_with_diagnostics(
-        &config.code_path,
-        config.i18n_keys,
-        config.i18n_keys_prefix,
-        &ignore_set,
-        config.ignore_attributes,
-        config.ignore_kwargs,
-        &config.default_ftl_file,
-    );
 
     let mut mismatches = Vec::new();
     for locale in &config.locales {
@@ -77,15 +97,7 @@ pub fn check_kwargs(config: CheckKwargsConfig) -> Result<CheckKwargsResult> {
     Ok(CheckKwargsResult {
         checked_locales: config.locales,
         mismatches,
-        extraction_errors: extracted
-            .diagnostics
-            .into_iter()
-            .map(|diagnostic| CodeExtractionError {
-                key: diagnostic.key,
-                message: diagnostic.message,
-                locations: diagnostic.locations.into_iter().map(Into::into).collect(),
-            })
-            .collect(),
+        extraction_errors: Vec::new(),
     })
 }
 

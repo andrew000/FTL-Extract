@@ -579,6 +579,116 @@ fn check_all_stops_after_syntax_errors() {
 }
 
 #[test]
+fn custom_checks_move_syntax_first_from_pyproject() {
+    let temp = TempDir::new().unwrap();
+    write(
+        &temp.path().join("locales/uk/_default.ftl"),
+        "valid = Valid\nbroken = {\n",
+    );
+    write(
+        &pyproject(&temp),
+        r#"
+[tool.ftl-extract.check]
+locales-path = "locales"
+languages = ["uk"]
+checks = ["kwargs", "missing", "references", "stale", "syntax"]
+"#,
+    );
+
+    let output = ftl()
+        .arg("--config")
+        .arg(pyproject(&temp))
+        .arg("check")
+        .output()
+        .unwrap();
+
+    assert_eq!(output.status.code(), Some(1));
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stdout.contains("error[syntax]"));
+    assert!(stdout.contains("syntax: failed"));
+    assert!(!stdout.contains("kwargs:"));
+    assert!(!stdout.contains("missing:"));
+    assert!(!stderr.contains("Error during check"));
+    assert!(!stderr.contains("Missing code path"));
+}
+
+#[test]
+fn custom_checks_move_syntax_first_from_cli() {
+    let temp = TempDir::new().unwrap();
+    write(
+        &temp.path().join("locales/uk/_default.ftl"),
+        "valid = Valid\nbroken = {\n",
+    );
+
+    let output = ftl()
+        .arg("check")
+        .arg(temp.path().join("locales"))
+        .arg("--check")
+        .arg("kwargs")
+        .arg("--check")
+        .arg("missing")
+        .arg("--check")
+        .arg("syntax")
+        .arg("--language")
+        .arg("uk")
+        .output()
+        .unwrap();
+
+    assert_eq!(output.status.code(), Some(1));
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stdout.contains("error[syntax]"));
+    assert!(stdout.contains("syntax: failed"));
+    assert!(!stdout.contains("kwargs:"));
+    assert!(!stdout.contains("missing:"));
+    assert!(!stderr.contains("Error during check"));
+    assert!(!stderr.contains("Missing code path"));
+}
+
+#[test]
+fn custom_checks_stop_after_syntax_errors() {
+    let temp = TempDir::new().unwrap();
+    write(&temp.path().join("code/app.py"), r#"i18n.get("hello")"#);
+    write(
+        &temp.path().join("locales/uk/_default.ftl"),
+        "valid = Valid\nbroken = {\n",
+    );
+    write(
+        &pyproject(&temp),
+        r#"
+[tool.ftl-extract.check]
+locales-path = "locales"
+code-path = "code"
+languages = ["uk"]
+checks = ["kwargs", "missing", "syntax"]
+fail-on = []
+output = "reports/ftl-check"
+output-format = "json"
+"#,
+    );
+
+    let output = ftl()
+        .arg("--config")
+        .arg(pyproject(&temp))
+        .arg("check")
+        .output()
+        .unwrap();
+
+    assert_success(&output);
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    let report = std::fs::read_to_string(temp.path().join("reports/ftl-check.json")).unwrap();
+    assert!(stdout.contains("error[syntax]"));
+    assert!(!stdout.contains("kwargs:"));
+    assert!(!stdout.contains("missing:"));
+    assert!(report.contains(r#""kind": "syntax""#));
+    assert!(!report.contains(r#""kind": "kwargs""#));
+    assert!(!report.contains(r#""kind": "missing""#));
+    assert!(!stderr.contains("Error during check"));
+}
+
+#[test]
 fn check_all_with_valid_syntax_runs_remaining_checks() {
     let temp = TempDir::new().unwrap();
     write(

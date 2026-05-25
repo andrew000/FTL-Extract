@@ -22,6 +22,23 @@ pub struct CheckReferencesConfig {
 }
 
 #[derive(Debug, Clone)]
+pub struct CheckCodeConfig {
+    pub code_path: PathBuf,
+    pub i18n_keys: FastHashSet<String>,
+    pub i18n_keys_prefix: FastHashSet<String>,
+    pub exclude_dirs: FastHashSet<String>,
+    pub ignore_attributes: FastHashSet<String>,
+    pub ignore_kwargs: FastHashSet<String>,
+    pub default_ftl_file: PathBuf,
+}
+
+#[derive(Debug, Clone)]
+pub struct CheckCodeAwareConfig {
+    pub locales_path: PathBuf,
+    pub locales: Vec<String>,
+}
+
+#[derive(Debug, Clone)]
 pub struct CheckMissingConfig {
     pub locales_path: PathBuf,
     pub code_path: PathBuf,
@@ -257,6 +274,16 @@ impl From<extractor_diagnostics::CodeLocation> for SourceLocation {
             path: location.path,
             line: Some(location.line),
             column: Some(location.column),
+        }
+    }
+}
+
+impl From<extractor_diagnostics::ExtractionDiagnostic> for CodeExtractionError {
+    fn from(diagnostic: extractor_diagnostics::ExtractionDiagnostic) -> Self {
+        Self {
+            key: diagnostic.key,
+            message: diagnostic.message,
+            locations: diagnostic.locations.into_iter().map(Into::into).collect(),
         }
     }
 }

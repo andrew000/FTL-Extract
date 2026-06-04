@@ -1,10 +1,10 @@
+use crate::checks::run_locale_check;
 use crate::parser::CheckLocaleCache;
 use crate::types::{CheckSyntaxConfig, CheckSyntaxResult, SyntaxError};
 use anyhow::Result;
 
 pub fn check_syntax(config: CheckSyntaxConfig) -> Result<CheckSyntaxResult> {
-    let cache = CheckLocaleCache::load(&config.locales_path, &config.locales, &[])?;
-    check_syntax_with_cache(&cache)
+    run_locale_check(config, check_syntax_with_cache)
 }
 
 pub fn check_syntax_with_cache(cache: &CheckLocaleCache) -> Result<CheckSyntaxResult> {

@@ -1,4 +1,4 @@
-use crate::checks::validate_locales;
+use crate::checks::resolve_locales_with_available;
 use crate::parser::{discover_locales, read_locale_messages};
 use crate::types::{
     CheckUntranslatedConfig, CheckUntranslatedResult, TranslationSuggestion, UntranslatedKey,
@@ -8,7 +8,8 @@ use anyhow::{Result, bail};
 pub fn check_untranslated(config: CheckUntranslatedConfig) -> Result<CheckUntranslatedResult> {
     let available_locales = discover_locales(&config.locales_path)?;
 
-    validate_locales(&config.locales_path, &available_locales, &config.locales)?;
+    let locales =
+        resolve_locales_with_available(&config.locales_path, &available_locales, &config.locales)?;
 
     for locale in &config.suggest_from {
         if !available_locales.iter().any(|existing| existing == locale) {
@@ -21,13 +22,13 @@ pub fn check_untranslated(config: CheckUntranslatedConfig) -> Result<CheckUntran
     }
 
     let mut checked_entries = Vec::new();
-    for locale in &config.locales {
+    for locale in &locales {
         checked_entries.extend(read_locale_messages(&config.locales_path, locale)?);
     }
 
     let mut suggestion_only_entries = Vec::new();
     for locale in &config.suggest_from {
-        if !config.locales.iter().any(|checked| checked == locale) {
+        if !locales.iter().any(|checked| checked == locale) {
             suggestion_only_entries.extend(read_locale_messages(&config.locales_path, locale)?);
         }
     }
@@ -93,15 +94,14 @@ pub fn check_untranslated(config: CheckUntranslatedConfig) -> Result<CheckUntran
             .then_with(|| a.key.cmp(&b.key))
     });
 
-    let fully_translated_locales = config
-        .locales
+    let fully_translated_locales = locales
         .iter()
         .filter(|locale| untranslated.iter().all(|item| &item.locale != *locale))
         .cloned()
         .collect::<Vec<_>>();
 
     Ok(CheckUntranslatedResult {
-        checked_locales: config.locales,
+        checked_locales: locales,
         fully_translated_locales,
         untranslated,
     })
@@ -124,24 +124,32 @@ mod tests {
     }
 
     #[test]
-    fn test_check_untranslated_requires_languages() -> Result<()> {
+    fn test_check_untranslated_defaults_to_all_locales() -> Result<()> {
         let temp_dir = TempDir::new()?;
         let locales = temp_dir.path().join("locales");
         fs::create_dir_all(locales.join("en"))?;
+        fs::create_dir_all(locales.join("uk"))?;
+        fs::write(
+            locales.join("en").join("_default.ftl"),
+            "welcome = Welcome\n",
+        )?;
+        fs::write(
+            locales.join("uk").join("_default.ftl"),
+            "welcome = welcome\n",
+        )?;
 
         let result = check_untranslated(CheckUntranslatedConfig {
             locales_path: locales,
             locales: vec![],
             suggest_from: vec![],
-        });
+        })?;
 
-        assert!(result.is_err());
-        assert!(
-            result
-                .unwrap_err()
-                .to_string()
-                .contains("Missing languages")
+        assert_eq!(
+            result.checked_locales,
+            vec!["en".to_string(), "uk".to_string()]
         );
+        assert_eq!(result.untranslated.len(), 1);
+        assert_eq!(result.untranslated[0].locale, "uk");
         Ok(())
     }
 

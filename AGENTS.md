@@ -2,7 +2,7 @@
 
 ## Project Structure & Module Organization
 
-This repository is a Rust workspace packaged as a Python-distributed CLI. Workspace crates live under `src/`: `src/cli` provides the `ftl` binary, `src/extractor` contains Fluent key extraction logic, `src/stub` generates Python stubs, and `src/check` handles validation workflows. Rust tests and benchmarks are colocated with crates, for example `src/extractor/tests` and `src/extractor/benches`. Repository-level fixtures live in `tests/files`.
+This repository is a Rust workspace packaged as a Python-distributed CLI. Workspace crates live under `src/`: `src/cli` provides the `ftl` binary, `src/extractor` contains Fluent key extraction logic, `src/stub` generates Python stubs, and `src/check` handles validation workflows. Rust tests, fixtures, and benchmarks are colocated with crates, for example `src/cli/tests` and `src/extractor/benches`.
 
 ## Build, Test, and Development Commands
 
@@ -10,9 +10,7 @@ Use `just` targets when possible:
 
 - `just sync`: install/sync Python development dependencies with `uv`.
 - `just format`: run `cargo fix` and `cargo fmt --all`.
-- `just format py`: run Ruff fixes/formatting and isort.
 - `just lint`: run `cargo clippy --all-targets --all-features`.
-- `just lint py`: run Ruff checks.
 - `just test`: run `cargo llvm-cov --html`.
 - `just test-cov`: write an LCOV report to `lcov.info`.
 - `just build`: build the Python wheel and sdist with `uv build`.
@@ -24,11 +22,11 @@ Use `cargo test --workspace` for a quick correctness pass.
 
 Rust uses edition 2024 with formatting enforced by `cargo fmt`. Use `snake_case` for modules, functions, and variables; `PascalCase` for types and traits; `SCREAMING_SNAKE_CASE` for constants. Keep crate-specific code inside its crate boundary.
 
-Python tooling is configured in `pyproject.toml`: 100-character lines, double quotes, space indentation, Ruff, and isort.
+Python packaging and build metadata are configured in `pyproject.toml`; there are no Python package modules in this repository.
 
 ## Testing Guidelines
 
-Prefer focused crate tests near changed code. Use fixtures under `tests/files` or crate-local `tests` directories for extraction behavior. Run `cargo test --workspace` for fast verification, then `just test` when coverage output is needed. For performance-sensitive extractor changes, run `just bench` and compare with `just bench-cmp baseline`.
+Prefer focused crate tests near changed code. Use crate-local `tests` directories or test-local temporary fixtures for extraction behavior. Run `cargo test --workspace` for fast verification, then `just test` when coverage output is needed. For performance-sensitive extractor changes, run `just bench` and compare with `just bench-cmp baseline`.
 
 ## Commit & Pull Request Guidelines
 

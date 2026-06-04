@@ -162,10 +162,18 @@ pub fn render_check_terminal(result: &CheckResult) -> String {
 }
 
 pub fn has_failing_diagnostics(result: &CheckResult, fail_on: &[Severity]) -> bool {
-    result
-        .diagnostics
-        .iter()
-        .any(|diagnostic| fail_on.contains(&diagnostic.severity))
+    result.diagnostics.iter().any(|diagnostic| {
+        fail_on
+            .iter()
+            .any(|severity| severity_fails(diagnostic.severity, *severity))
+    })
+}
+
+fn severity_fails(severity: Severity, fail_on: Severity) -> bool {
+    match fail_on {
+        Severity::Error => severity == Severity::Error,
+        Severity::Warn => true,
+    }
 }
 
 #[derive(Debug)]
@@ -268,6 +276,7 @@ mod tests {
     #[test]
     fn test_has_failing_diagnostics() {
         assert!(has_failing_diagnostics(&result(), &[Severity::Error]));
-        assert!(!has_failing_diagnostics(&result(), &[Severity::Warn]));
+        assert!(has_failing_diagnostics(&result(), &[Severity::Warn]));
+        assert!(!has_failing_diagnostics(&result(), &[]));
     }
 }

@@ -177,7 +177,7 @@ $ ftl check project_path/locales --code-path project_path/code_path -l uk --sugg
 - `--code-path` - path to Python code. Required for `--check missing`, `--check stale`, and `--check kwargs`.
 - `-l` or `--language` - check only selected locales. Can be passed multiple times.
 - `--suggest-from` - locale(s) used to suggest non-placeholder translations for missing items. Can be passed multiple times.
-- `--fail-on` - diagnostic severities that should return exit code `1`, for example `--fail-on error`.
+- `--fail-on` - minimum diagnostic severity that should return exit code `1`, for example `--fail-on error`. `--fail-on warn` also fails on errors.
 - `--output` - optional output file path for batch processing reports. If no extension is provided, `.txt` or `.json` is appended automatically based on `--output-format`.
 - `--output-format` - report file format: `terminal` or `json` (default: `json`).
 

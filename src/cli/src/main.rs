@@ -159,7 +159,7 @@ enum Commands {
         #[arg(long, default_values_t = Vec::<String>::new())]
         suggest_from: Vec<String>,
 
-        /// Diagnostic severities that should fail the command
+        /// Minimum diagnostic severity that should fail the command
         #[arg(long, value_enum, default_values_t = Vec::<FailSeverity>::new())]
         fail_on: Vec<FailSeverity>,
 

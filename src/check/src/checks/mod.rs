@@ -46,8 +46,25 @@ pub fn code_extraction_errors(extracted: &ExtractedCode) -> Vec<CodeExtractionEr
 }
 
 pub fn validate_check_locales(locales_path: &Path, locales: &[String]) -> Result<()> {
+    resolve_locales(locales_path, locales).map(|_| ())
+}
+
+pub(super) fn resolve_locales(locales_path: &Path, locales: &[String]) -> Result<Vec<String>> {
     let available_locales = discover_locales(locales_path)?;
-    validate_locales(locales_path, &available_locales, locales)
+    resolve_locales_with_available(locales_path, &available_locales, locales)
+}
+
+pub(super) fn resolve_locales_with_available(
+    locales_path: &Path,
+    available_locales: &[String],
+    locales: &[String],
+) -> Result<Vec<String>> {
+    if locales.is_empty() {
+        return Ok(available_locales.to_vec());
+    }
+
+    validate_locales(locales_path, available_locales, locales)?;
+    Ok(locales.to_vec())
 }
 
 pub(super) fn validate_locales(
@@ -55,10 +72,6 @@ pub(super) fn validate_locales(
     available_locales: &[String],
     locales: &[String],
 ) -> Result<()> {
-    if locales.is_empty() {
-        bail!("Missing languages. Pass --language or set tool.ftl-extract.check.languages");
-    }
-
     for locale in locales {
         if !available_locales.iter().any(|existing| existing == locale) {
             bail!(

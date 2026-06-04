@@ -1,14 +1,13 @@
-use crate::checks::validate_locales;
-use crate::parser::{discover_locales, ftl_files_for_locale, parse_ftl_syntax_errors};
+use crate::checks::resolve_locales;
+use crate::parser::{ftl_files_for_locale, parse_ftl_syntax_errors};
 use crate::types::{CheckSyntaxConfig, CheckSyntaxResult, SyntaxError};
 use anyhow::Result;
 
 pub fn check_syntax(config: CheckSyntaxConfig) -> Result<CheckSyntaxResult> {
-    let available_locales = discover_locales(&config.locales_path)?;
-    validate_locales(&config.locales_path, &available_locales, &config.locales)?;
+    let locales = resolve_locales(&config.locales_path, &config.locales)?;
 
     let mut errors = Vec::new();
-    for locale in &config.locales {
+    for locale in &locales {
         for file_path in ftl_files_for_locale(&config.locales_path, locale)? {
             for error in parse_ftl_syntax_errors(&file_path)? {
                 errors.push(SyntaxError {
@@ -34,7 +33,7 @@ pub fn check_syntax(config: CheckSyntaxConfig) -> Result<CheckSyntaxResult> {
     });
 
     Ok(CheckSyntaxResult {
-        checked_locales: config.locales,
+        checked_locales: locales,
         errors,
     })
 }

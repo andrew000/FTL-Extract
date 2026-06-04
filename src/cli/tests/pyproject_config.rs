@@ -212,6 +212,36 @@ output-format = "json"
 }
 
 #[test]
+fn check_untranslated_defaults_to_all_locales_from_cli() {
+    let temp = TempDir::new().unwrap();
+    write(
+        &temp.path().join("locales/en/_default.ftl"),
+        "hello = Hello\n",
+    );
+    write(
+        &temp.path().join("locales/uk/_default.ftl"),
+        "hello = hello\n",
+    );
+
+    let output = ftl()
+        .arg("check")
+        .arg(temp.path().join("locales"))
+        .arg("--check")
+        .arg("untranslated")
+        .arg("--suggest-from")
+        .arg("en")
+        .arg("--fail-on")
+        .arg("warn")
+        .output()
+        .unwrap();
+
+    assert_eq!(output.status.code(), Some(1));
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("key `hello` is untranslated in locale `uk`"));
+    assert!(stdout.contains("suggestion[en]: hello = Hello"));
+}
+
+#[test]
 fn check_syntax_reads_command_config_from_pyproject() {
     let temp = TempDir::new().unwrap();
     write(

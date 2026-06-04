@@ -1,27 +1,20 @@
-use crate::checks::{code_extraction_errors, extract_check_code, validate_locales};
-use crate::parser::{
-    discover_locales, ftl_files_for_locale, parse_ftl_resource_lossy, read_locale_messages,
-};
+use crate::checks::{code_extraction_errors, extract_check_code, resolve_locales};
+use crate::parser::{ftl_files_for_locale, parse_ftl_resource_lossy, read_locale_messages};
 use crate::types::{
     CheckCodeAwareConfig, CheckCodeConfig, CheckStaleConfig, CheckStaleResult, StaleKey,
 };
 use anyhow::Result;
 use extractor::ftl::diagnostics::ExtractedCode;
-use extractor::ftl::utils::FastHashSet;
+use extractor::ftl::utils::{FastHashMap, FastHashSet};
 use fluent_syntax::ast::{Entry, Expression, InlineExpression, Pattern, PatternElement};
 use std::path::Path;
 
 pub fn check_stale(config: CheckStaleConfig) -> Result<CheckStaleResult> {
+    let locales = resolve_locales(&config.locales_path, &config.locales)?;
     let code_aware_config = CheckCodeAwareConfig {
         locales_path: config.locales_path,
-        locales: config.locales,
+        locales,
     };
-    let available_locales = discover_locales(&code_aware_config.locales_path)?;
-    validate_locales(
-        &code_aware_config.locales_path,
-        &available_locales,
-        &code_aware_config.locales,
-    )?;
     let extracted = extract_check_code(CheckCodeConfig {
         code_path: config.code_path,
         i18n_keys: config.i18n_keys,
@@ -41,8 +34,7 @@ pub fn check_stale_with_extracted(
     config: CheckCodeAwareConfig,
     extracted: &ExtractedCode,
 ) -> Result<CheckStaleResult> {
-    let available_locales = discover_locales(&config.locales_path)?;
-    validate_locales(&config.locales_path, &available_locales, &config.locales)?;
+    let locales = resolve_locales(&config.locales_path, &config.locales)?;
 
     let used_keys = extracted
         .keys
@@ -51,9 +43,10 @@ pub fn check_stale_with_extracted(
         .collect::<FastHashSet<_>>();
 
     let mut stale_keys = Vec::new();
-    for locale in &config.locales {
+    for locale in &locales {
         let locale_path = config.locales_path.join(locale);
-        let referenced_messages = referenced_messages(&config.locales_path, locale)?;
+        let referenced_messages =
+            live_referenced_messages(&config.locales_path, locale, &used_keys)?;
 
         for entry in read_locale_messages(&config.locales_path, locale)? {
             let relative_to_locale = entry
@@ -90,31 +83,55 @@ pub fn check_stale_with_extracted(
     });
 
     Ok(CheckStaleResult {
-        checked_locales: config.locales,
+        checked_locales: locales,
         stale_keys,
         extraction_errors: Vec::new(),
     })
 }
 
-fn referenced_messages(locales_path: &Path, locale: &str) -> Result<FastHashSet<String>> {
-    let mut references = FastHashSet::default();
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+enum ReferenceNode {
+    Message(String),
+    Term(String),
+}
+
+fn live_referenced_messages(
+    locales_path: &Path,
+    locale: &str,
+    used_keys: &FastHashSet<(String, std::path::PathBuf)>,
+) -> Result<FastHashSet<String>> {
+    let locale_path = locales_path.join(locale);
+    let mut graph: FastHashMap<ReferenceNode, FastHashSet<ReferenceNode>> = FastHashMap::default();
+    let mut roots = FastHashSet::default();
 
     for path in ftl_files_for_locale(locales_path, locale)? {
+        let relative_to_locale = path
+            .strip_prefix(&locale_path)
+            .unwrap_or(&path)
+            .to_path_buf();
         let resource = parse_ftl_resource_lossy(&path)?;
         for entry in &resource.body {
             match entry {
                 Entry::Message(message) => {
+                    let node = ReferenceNode::Message(message.id.name.clone());
+                    if used_keys.contains(&(message.id.name.clone(), relative_to_locale.clone())) {
+                        roots.insert(node.clone());
+                    }
+                    let references = graph.entry(node).or_default();
                     if let Some(pattern) = &message.value {
-                        collect_pattern_message_references(pattern, &mut references);
+                        collect_pattern_references(pattern, references);
                     }
                     for attribute in &message.attributes {
-                        collect_pattern_message_references(&attribute.value, &mut references);
+                        collect_pattern_references(&attribute.value, references);
                     }
                 }
                 Entry::Term(term) => {
-                    collect_pattern_message_references(&term.value, &mut references);
+                    let references = graph
+                        .entry(ReferenceNode::Term(term.id.name.clone()))
+                        .or_default();
+                    collect_pattern_references(&term.value, references);
                     for attribute in &term.attributes {
-                        collect_pattern_message_references(&attribute.value, &mut references);
+                        collect_pattern_references(&attribute.value, references);
                     }
                 }
                 _ => {}
@@ -122,56 +139,85 @@ fn referenced_messages(locales_path: &Path, locale: &str) -> Result<FastHashSet<
         }
     }
 
-    Ok(references)
+    let mut seen = roots.clone();
+    let mut stack = roots.into_iter().collect::<Vec<_>>();
+    let mut referenced_messages = FastHashSet::default();
+
+    while let Some(node) = stack.pop() {
+        let Some(references) = graph.get(&node) else {
+            continue;
+        };
+
+        for reference in references {
+            if let ReferenceNode::Message(message) = reference {
+                referenced_messages.insert(message.clone());
+            }
+            if seen.insert(reference.clone()) {
+                stack.push(reference.clone());
+            }
+        }
+    }
+
+    Ok(referenced_messages)
 }
 
-fn collect_pattern_message_references(
+fn collect_pattern_references(
     pattern: &Pattern<String>,
-    references: &mut FastHashSet<String>,
+    references: &mut FastHashSet<ReferenceNode>,
 ) {
     for element in &pattern.elements {
         if let PatternElement::Placeable { expression } = element {
-            collect_expression_message_references(expression, references);
+            collect_expression_references(expression, references);
         }
     }
 }
 
-fn collect_expression_message_references(
+fn collect_expression_references(
     expression: &Expression<String>,
-    references: &mut FastHashSet<String>,
+    references: &mut FastHashSet<ReferenceNode>,
 ) {
     match expression {
-        Expression::Inline(inline) => collect_inline_message_references(inline, references),
+        Expression::Inline(inline) => collect_inline_references(inline, references),
         Expression::Select { selector, variants } => {
-            collect_inline_message_references(selector, references);
+            collect_inline_references(selector, references);
             for variant in variants {
-                collect_pattern_message_references(&variant.value, references);
+                collect_pattern_references(&variant.value, references);
             }
         }
     }
 }
 
-fn collect_inline_message_references(
+fn collect_inline_references(
     inline: &InlineExpression<String>,
-    references: &mut FastHashSet<String>,
+    references: &mut FastHashSet<ReferenceNode>,
 ) {
     match inline {
         InlineExpression::MessageReference { id, .. } => {
-            references.insert(id.name.clone());
+            references.insert(ReferenceNode::Message(id.name.clone()));
+        }
+        InlineExpression::TermReference { id, arguments, .. } => {
+            references.insert(ReferenceNode::Term(id.name.clone()));
+            if let Some(arguments) = arguments {
+                for positional in &arguments.positional {
+                    collect_inline_references(positional, references);
+                }
+                for named in &arguments.named {
+                    collect_inline_references(&named.value, references);
+                }
+            }
         }
         InlineExpression::Placeable { expression } => {
-            collect_expression_message_references(expression, references);
+            collect_expression_references(expression, references);
         }
         InlineExpression::FunctionReference { arguments, .. } => {
             for positional in &arguments.positional {
-                collect_inline_message_references(positional, references);
+                collect_inline_references(positional, references);
             }
             for named in &arguments.named {
-                collect_inline_message_references(&named.value, references);
+                collect_inline_references(&named.value, references);
             }
         }
-        InlineExpression::TermReference { .. }
-        | InlineExpression::StringLiteral { .. }
+        InlineExpression::StringLiteral { .. }
         | InlineExpression::NumberLiteral { .. }
         | InlineExpression::VariableReference { .. } => {}
     }
@@ -281,6 +327,39 @@ mod tests {
         let result = check_stale(config(&temp, vec!["uk".to_string()])).unwrap();
 
         assert!(result.stale_keys.is_empty());
+    }
+
+    #[test]
+    fn test_check_stale_keeps_message_referenced_from_term_argument() {
+        let temp = TempDir::new().unwrap();
+        write(&temp.path().join("code/app.py"), r#"i18n.get("welcome")"#);
+        write(
+            &temp.path().join("locales/uk/_default.ftl"),
+            "-brand = { $label }\nwelcome = { -brand(label: child) }\nchild = Child\n",
+        );
+
+        let result = check_stale(config(&temp, vec!["uk".to_string()])).unwrap();
+
+        assert!(result.stale_keys.is_empty());
+    }
+
+    #[test]
+    fn test_check_stale_reports_messages_referenced_only_by_stale_messages() {
+        let temp = TempDir::new().unwrap();
+        write(&temp.path().join("code/app.py"), r#"i18n.get("used")"#);
+        write(
+            &temp.path().join("locales/uk/_default.ftl"),
+            "used = Used\norphan = { child }\nchild = Child\n",
+        );
+
+        let result = check_stale(config(&temp, vec!["uk".to_string()])).unwrap();
+        let stale_keys = result
+            .stale_keys
+            .iter()
+            .map(|item| item.key.as_str())
+            .collect::<Vec<_>>();
+
+        assert_eq!(stale_keys, vec!["orphan", "child"]);
     }
 
     #[test]

@@ -1,7 +1,5 @@
-use crate::checks::validate_locales;
-use crate::parser::{
-    LocatedEntry, discover_locales, ftl_files_for_locale, parse_ftl_entries_lossy,
-};
+use crate::checks::resolve_locales;
+use crate::parser::{LocatedEntry, ftl_files_for_locale, parse_ftl_entries_lossy};
 use crate::types::{CheckReferencesConfig, CheckReferencesResult, MissingReference};
 use anyhow::Result;
 use extractor::ftl::utils::{FastHashMap, FastHashSet};
@@ -11,11 +9,10 @@ use fluent_syntax::ast::{
 use std::path::{Path, PathBuf};
 
 pub fn check_references(config: CheckReferencesConfig) -> Result<CheckReferencesResult> {
-    let available_locales = discover_locales(&config.locales_path)?;
-    validate_locales(&config.locales_path, &available_locales, &config.locales)?;
+    let locales = resolve_locales(&config.locales_path, &config.locales)?;
 
     let mut missing_references = Vec::new();
-    for locale in &config.locales {
+    for locale in &locales {
         let locale_resources = read_locale_resources(&config.locales_path, locale)?;
         let definitions = collect_definitions(&locale_resources);
 
@@ -33,7 +30,7 @@ pub fn check_references(config: CheckReferencesConfig) -> Result<CheckReferences
     });
 
     Ok(CheckReferencesResult {
-        checked_locales: config.locales,
+        checked_locales: locales,
         missing_references,
     })
 }
@@ -262,7 +259,11 @@ fn collect_inline_references(
                 });
             }
         }
-        InlineExpression::TermReference { id, attribute, .. } => {
+        InlineExpression::TermReference {
+            id,
+            attribute,
+            arguments,
+        } => {
             if !term_reference_exists(id, attribute, definitions) {
                 missing_references.push(MissingReference {
                     locale: locale.to_string(),
@@ -271,6 +272,30 @@ fn collect_inline_references(
                     key: Some(owner.key()),
                     reference: display_term_reference(id, attribute),
                 });
+            }
+            if let Some(arguments) = arguments {
+                for positional in &arguments.positional {
+                    collect_inline_references(
+                        locale,
+                        path,
+                        line,
+                        owner,
+                        positional,
+                        definitions,
+                        missing_references,
+                    );
+                }
+                for named in &arguments.named {
+                    collect_inline_references(
+                        locale,
+                        path,
+                        line,
+                        owner,
+                        &named.value,
+                        definitions,
+                        missing_references,
+                    );
+                }
             }
         }
         InlineExpression::Placeable { expression } => collect_expression_references(
@@ -418,6 +443,26 @@ mod tests {
         })?;
 
         assert!(result.missing_references.is_empty());
+        Ok(())
+    }
+
+    #[test]
+    fn test_check_references_reports_missing_term_argument_reference() -> Result<()> {
+        let temp_dir = TempDir::new()?;
+        let locales = temp_dir.path().join("locales");
+        fs::create_dir_all(locales.join("en"))?;
+        fs::write(
+            locales.join("en").join("_default.ftl"),
+            "-brand = Brand { $case }\nwelcome = { -brand(case: missing-message) }\n",
+        )?;
+
+        let result = check_references(CheckReferencesConfig {
+            locales_path: locales,
+            locales: vec!["en".to_string()],
+        })?;
+
+        assert_eq!(result.missing_references.len(), 1);
+        assert_eq!(result.missing_references[0].reference, "missing-message");
         Ok(())
     }
 

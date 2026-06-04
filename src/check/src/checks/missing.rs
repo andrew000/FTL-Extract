@@ -1,5 +1,5 @@
-use crate::checks::{code_extraction_errors, extract_check_code, validate_locales};
-use crate::parser::{discover_locales, read_locale_messages};
+use crate::checks::{code_extraction_errors, extract_check_code, resolve_locales};
+use crate::parser::read_locale_messages;
 use crate::types::{
     CheckCodeAwareConfig, CheckCodeConfig, CheckMissingConfig, CheckMissingResult, MissingKey,
 };
@@ -9,16 +9,11 @@ use extractor::ftl::utils::FastHashSet;
 use std::path::{Path, PathBuf};
 
 pub fn check_missing(config: CheckMissingConfig) -> Result<CheckMissingResult> {
+    let locales = resolve_locales(&config.locales_path, &config.locales)?;
     let code_aware_config = CheckCodeAwareConfig {
         locales_path: config.locales_path,
-        locales: config.locales,
+        locales,
     };
-    let available_locales = discover_locales(&code_aware_config.locales_path)?;
-    validate_locales(
-        &code_aware_config.locales_path,
-        &available_locales,
-        &code_aware_config.locales,
-    )?;
     let extracted = extract_check_code(CheckCodeConfig {
         code_path: config.code_path,
         i18n_keys: config.i18n_keys,
@@ -38,11 +33,10 @@ pub fn check_missing_with_extracted(
     config: CheckCodeAwareConfig,
     extracted: &ExtractedCode,
 ) -> Result<CheckMissingResult> {
-    let available_locales = discover_locales(&config.locales_path)?;
-    validate_locales(&config.locales_path, &available_locales, &config.locales)?;
+    let locales = resolve_locales(&config.locales_path, &config.locales)?;
 
     let mut missing_keys = Vec::new();
-    for locale in &config.locales {
+    for locale in &locales {
         let existing = existing_locale_keys(&config.locales_path, locale)?;
         for code_key in &extracted.keys {
             if !existing.contains(&(code_key.key.clone(), code_key.ftl_path.clone())) {
@@ -57,7 +51,7 @@ pub fn check_missing_with_extracted(
     }
 
     Ok(CheckMissingResult {
-        checked_locales: config.locales,
+        checked_locales: locales,
         missing_keys,
         extraction_errors: Vec::new(),
     })

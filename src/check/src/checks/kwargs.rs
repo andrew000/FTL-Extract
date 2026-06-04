@@ -1,5 +1,5 @@
-use crate::checks::{code_extraction_errors, extract_check_code, validate_locales};
-use crate::parser::{discover_locales, ftl_files_for_locale, parse_ftl_entries_lossy};
+use crate::checks::{code_extraction_errors, extract_check_code, resolve_locales};
+use crate::parser::{ftl_files_for_locale, parse_ftl_entries_lossy};
 use crate::types::{
     CheckCodeAwareConfig, CheckCodeConfig, CheckKwargsConfig, CheckKwargsResult, KwargsMismatch,
 };
@@ -12,16 +12,11 @@ use fluent_syntax::ast::{
 use std::path::{Path, PathBuf};
 
 pub fn check_kwargs(config: CheckKwargsConfig) -> Result<CheckKwargsResult> {
+    let locales = resolve_locales(&config.locales_path, &config.locales)?;
     let code_aware_config = CheckCodeAwareConfig {
         locales_path: config.locales_path,
-        locales: config.locales,
+        locales,
     };
-    let available_locales = discover_locales(&code_aware_config.locales_path)?;
-    validate_locales(
-        &code_aware_config.locales_path,
-        &available_locales,
-        &code_aware_config.locales,
-    )?;
     let extracted = extract_check_code(CheckCodeConfig {
         code_path: config.code_path,
         i18n_keys: config.i18n_keys,
@@ -41,11 +36,10 @@ pub fn check_kwargs_with_extracted(
     config: CheckCodeAwareConfig,
     extracted: &ExtractedCode,
 ) -> Result<CheckKwargsResult> {
-    let available_locales = discover_locales(&config.locales_path)?;
-    validate_locales(&config.locales_path, &available_locales, &config.locales)?;
+    let locales = resolve_locales(&config.locales_path, &config.locales)?;
 
     let mut mismatches = Vec::new();
-    for locale in &config.locales {
+    for locale in &locales {
         let locale_messages = read_locale_messages_with_ast(&config.locales_path, locale)?;
 
         for code_key in &extracted.keys {
@@ -95,7 +89,7 @@ pub fn check_kwargs_with_extracted(
     });
 
     Ok(CheckKwargsResult {
-        checked_locales: config.locales,
+        checked_locales: locales,
         mismatches,
         extraction_errors: Vec::new(),
     })

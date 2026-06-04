@@ -1,19 +1,15 @@
-use crate::checks::{code_extraction_errors, extract_check_code, resolve_locales};
-use crate::parser::read_locale_messages;
+use crate::checks::{code_extraction_errors, extract_check_code};
+use crate::parser::CheckLocaleCache;
 use crate::types::{
     CheckCodeAwareConfig, CheckCodeConfig, CheckMissingConfig, CheckMissingResult, MissingKey,
 };
 use anyhow::Result;
 use extractor::ftl::diagnostics::ExtractedCode;
 use extractor::ftl::utils::FastHashSet;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 pub fn check_missing(config: CheckMissingConfig) -> Result<CheckMissingResult> {
-    let locales = resolve_locales(&config.locales_path, &config.locales)?;
-    let code_aware_config = CheckCodeAwareConfig {
-        locales_path: config.locales_path,
-        locales,
-    };
+    let cache = CheckLocaleCache::load(&config.locales_path, &config.locales, &[])?;
     let extracted = extract_check_code(CheckCodeConfig {
         code_path: config.code_path,
         i18n_keys: config.i18n_keys,
@@ -22,9 +18,12 @@ pub fn check_missing(config: CheckMissingConfig) -> Result<CheckMissingResult> {
         ignore_attributes: config.ignore_attributes,
         ignore_kwargs: config.ignore_kwargs,
         default_ftl_file: config.default_ftl_file,
+        cache: config.cache,
+        cache_path: config.cache_path,
+        clear_cache: config.clear_cache,
     })?;
 
-    let mut result = check_missing_with_extracted(code_aware_config, &extracted)?;
+    let mut result = check_missing_with_cache(&cache, &extracted)?;
     result.extraction_errors = code_extraction_errors(&extracted);
     Ok(result)
 }
@@ -33,11 +32,17 @@ pub fn check_missing_with_extracted(
     config: CheckCodeAwareConfig,
     extracted: &ExtractedCode,
 ) -> Result<CheckMissingResult> {
-    let locales = resolve_locales(&config.locales_path, &config.locales)?;
+    let cache = CheckLocaleCache::load(&config.locales_path, &config.locales, &[])?;
+    check_missing_with_cache(&cache, extracted)
+}
 
+pub fn check_missing_with_cache(
+    cache: &CheckLocaleCache,
+    extracted: &ExtractedCode,
+) -> Result<CheckMissingResult> {
     let mut missing_keys = Vec::new();
-    for locale in &locales {
-        let existing = existing_locale_keys(&config.locales_path, locale)?;
+    for locale in cache.checked_locales() {
+        let existing = existing_locale_keys(cache, locale)?;
         for code_key in &extracted.keys {
             if !existing.contains(&(code_key.key.clone(), code_key.ftl_path.clone())) {
                 missing_keys.push(MissingKey {
@@ -51,18 +56,18 @@ pub fn check_missing_with_extracted(
     }
 
     Ok(CheckMissingResult {
-        checked_locales: locales,
+        checked_locales: cache.checked_locales().to_vec(),
         missing_keys,
         extraction_errors: Vec::new(),
     })
 }
 
 fn existing_locale_keys(
-    locales_path: &Path,
+    cache: &CheckLocaleCache,
     locale: &str,
 ) -> Result<FastHashSet<(String, PathBuf)>> {
-    let locale_path = locales_path.join(locale);
-    let entries = read_locale_messages(locales_path, locale)?;
+    let locale_path = cache.locales_path().join(locale);
+    let entries = cache.messages(locale)?;
     Ok(entries
         .into_iter()
         .filter_map(|entry| {
@@ -84,6 +89,7 @@ mod tests {
         DEFAULT_IGNORE_KWARGS,
     };
     use std::fs;
+    use std::path::Path;
     use tempfile::TempDir;
 
     fn write(path: &Path, content: &str) {
@@ -104,6 +110,9 @@ mod tests {
             ignore_attributes: DEFAULT_IGNORE_ATTRIBUTES.clone(),
             ignore_kwargs: DEFAULT_IGNORE_KWARGS.clone(),
             default_ftl_file: PathBuf::from(DEFAULT_FTL_FILENAME),
+            cache: false,
+            cache_path: None,
+            clear_cache: false,
         }
     }
 

@@ -1,6 +1,7 @@
 use crate::types::MessageEntry;
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, bail};
 use extractor::ftl::matcher::line_column;
+use extractor::ftl::utils::FastHashMap;
 use fluent_syntax::ast::{Comment, Entry, Message, PatternElement, Resource};
 use fluent_syntax::parser::ParserError;
 use ignore::WalkBuilder;
@@ -24,34 +25,171 @@ pub(crate) fn discover_locales(locales_path: &Path) -> Result<Vec<String>> {
     Ok(locales)
 }
 
-pub(crate) fn read_locale_messages(locales_path: &Path, locale: &str) -> Result<Vec<MessageEntry>> {
-    let locale_path = locales_path.join(locale);
-    if !locale_path.exists() {
-        return Ok(Vec::new());
-    }
+#[derive(Debug)]
+pub struct CheckLocaleCache {
+    locales_path: PathBuf,
+    checked_locales: Vec<String>,
+    loaded_locales: FastHashMap<String, Vec<CachedLocaleFile>>,
+}
 
-    let mut type_builder = TypesBuilder::new();
-    type_builder.add("ftl", "*.ftl")?;
-    type_builder.select("ftl");
-    let types = type_builder.build()?;
+#[derive(Debug)]
+pub(crate) struct CachedLocaleFile {
+    pub(crate) path: PathBuf,
+    pub(crate) relative_to_locale: PathBuf,
+    pub(crate) relative_to_locales: PathBuf,
+    pub(crate) entries: Vec<LocatedEntry>,
+    pub(crate) syntax_errors: Vec<SyntaxParseError>,
+    messages: Vec<MessageEntry>,
+}
 
-    let walker = WalkBuilder::new(&locale_path)
-        .types(types)
-        .parents(false)
-        .git_global(false)
-        .build();
-
-    let mut entries = Vec::new();
-    for entry in walker {
-        let Some(path) = entry.ok().map(|it| it.into_path()) else {
-            continue;
+impl CheckLocaleCache {
+    pub fn load(
+        locales_path: &Path,
+        requested_locales: &[String],
+        extra_locales: &[String],
+    ) -> Result<Self> {
+        let available_locales = discover_locales(locales_path)?;
+        let checked_locales = if requested_locales.is_empty() {
+            available_locales.clone()
+        } else {
+            validate_locale_names(locales_path, &available_locales, requested_locales)?;
+            requested_locales.to_vec()
         };
-        if !path.is_file() {
-            continue;
+
+        let mut locales_to_load = checked_locales.clone();
+        for locale in extra_locales {
+            if !locales_to_load.iter().any(|loaded| loaded == locale) {
+                locales_to_load.push(locale.clone());
+            }
         }
-        entries.extend(read_ftl_messages(&path, locale)?);
+        validate_locale_names(locales_path, &available_locales, &locales_to_load)?;
+
+        let mut loaded_locales = FastHashMap::default();
+        for locale in &locales_to_load {
+            let files = ftl_files_for_locale(locales_path, locale)?
+                .into_iter()
+                .map(|path| parse_cached_ftl_file(locales_path, locale, path))
+                .collect::<Result<Vec<_>>>()?;
+            loaded_locales.insert(locale.clone(), files);
+        }
+
+        Ok(Self {
+            locales_path: locales_path.to_path_buf(),
+            checked_locales,
+            loaded_locales,
+        })
     }
-    Ok(entries)
+
+    pub fn checked_locales(&self) -> &[String] {
+        &self.checked_locales
+    }
+
+    pub(crate) fn locales_path(&self) -> &Path {
+        &self.locales_path
+    }
+
+    pub(crate) fn files(&self, locale: &str) -> impl Iterator<Item = &CachedLocaleFile> {
+        self.loaded_locales
+            .get(locale)
+            .into_iter()
+            .flat_map(|files| files.iter())
+    }
+
+    pub(crate) fn messages(&self, locale: &str) -> Result<Vec<MessageEntry>> {
+        let mut messages = Vec::new();
+        for file in self.files(locale) {
+            if !file.syntax_errors.is_empty() {
+                bail!(
+                    "Failed to parse FTL file {}: {:?}",
+                    file.path.display(),
+                    file.syntax_errors
+                );
+            }
+            messages.extend(file.messages.iter().cloned());
+        }
+        Ok(messages)
+    }
+
+    pub fn load_extra_locales(&mut self, extra_locales: &[String]) -> Result<()> {
+        let locales_to_load = extra_locales
+            .iter()
+            .filter(|locale| !self.loaded_locales.contains_key(*locale))
+            .cloned()
+            .collect::<Vec<_>>();
+
+        if locales_to_load.is_empty() {
+            return Ok(());
+        }
+
+        let available_locales = discover_locales(&self.locales_path)?;
+        validate_locale_names(&self.locales_path, &available_locales, &locales_to_load)?;
+
+        for locale in locales_to_load {
+            let files = ftl_files_for_locale(&self.locales_path, &locale)?
+                .into_iter()
+                .map(|path| parse_cached_ftl_file(&self.locales_path, &locale, path))
+                .collect::<Result<Vec<_>>>()?;
+            self.loaded_locales.insert(locale, files);
+        }
+
+        Ok(())
+    }
+}
+
+fn validate_locale_names(
+    locales_path: &Path,
+    available_locales: &[String],
+    locales: &[String],
+) -> Result<()> {
+    for locale in locales {
+        if !available_locales.iter().any(|existing| existing == locale) {
+            bail!(
+                "Locale `{}` does not exist in `{}`",
+                locale,
+                locales_path.display()
+            );
+        }
+    }
+    Ok(())
+}
+
+fn parse_cached_ftl_file(
+    locales_path: &Path,
+    locale: &str,
+    path: PathBuf,
+) -> Result<CachedLocaleFile> {
+    let locale_path = locales_path.join(locale);
+    let content = fs::read_to_string(&path)
+        .with_context(|| format!("Failed to read FTL file: {}", path.display()))?;
+    let (resource, syntax_errors) = match fluent_syntax::parser::parse(content.clone()) {
+        Ok(resource) => (resource, Vec::new()),
+        Err((resource, errors)) => (
+            resource,
+            errors
+                .into_iter()
+                .map(|error| syntax_parse_error(&content, error))
+                .collect(),
+        ),
+    };
+    let entries = located_entries(content.as_str(), resource);
+    let messages = message_entries_from_located_entries(&entries, &path, locale);
+    let relative_to_locale = path
+        .strip_prefix(&locale_path)
+        .unwrap_or(&path)
+        .to_path_buf();
+    let relative_to_locales = path
+        .strip_prefix(locales_path)
+        .unwrap_or(&path)
+        .to_path_buf();
+
+    Ok(CachedLocaleFile {
+        path,
+        relative_to_locale,
+        relative_to_locales,
+        entries,
+        syntax_errors,
+        messages,
+    })
 }
 
 pub(crate) fn ftl_files_for_locale(locales_path: &Path, locale: &str) -> Result<Vec<PathBuf>> {
@@ -84,39 +222,6 @@ pub(crate) fn ftl_files_for_locale(locales_path: &Path, locale: &str) -> Result<
     Ok(files)
 }
 
-pub(crate) fn parse_ftl_syntax_errors(path: &Path) -> Result<Vec<SyntaxParseError>> {
-    let content = fs::read_to_string(path)
-        .with_context(|| format!("Failed to read FTL file: {}", path.display()))?;
-
-    match fluent_syntax::parser::parse(content.as_str()) {
-        Ok(_) => Ok(Vec::new()),
-        Err((_, errors)) => Ok(errors
-            .into_iter()
-            .map(|error| syntax_parse_error(&content, error))
-            .collect()),
-    }
-}
-
-pub(crate) fn parse_ftl_resource_lossy(path: &Path) -> Result<Resource<String>> {
-    let content = fs::read_to_string(path)
-        .with_context(|| format!("Failed to read FTL file: {}", path.display()))?;
-
-    match fluent_syntax::parser::parse(content) {
-        Ok(resource) => Ok(resource),
-        Err((resource, _)) => Ok(resource),
-    }
-}
-
-pub(crate) fn parse_ftl_entries_lossy(path: &Path) -> Result<Vec<LocatedEntry>> {
-    let content = fs::read_to_string(path)
-        .with_context(|| format!("Failed to read FTL file: {}", path.display()))?;
-
-    let resource =
-        fluent_syntax::parser::parse(content.clone()).unwrap_or_else(|(resource, _)| resource);
-
-    Ok(located_entries(content.as_str(), resource))
-}
-
 #[derive(Debug, Clone)]
 pub(crate) struct LocatedEntry {
     pub(crate) entry: Entry<String>,
@@ -140,28 +245,28 @@ fn syntax_parse_error(content: &str, error: ParserError) -> SyntaxParseError {
     }
 }
 
-fn read_ftl_messages(path: &Path, locale: &str) -> Result<Vec<MessageEntry>> {
-    let content = fs::read_to_string(path)
-        .with_context(|| format!("Failed to read FTL file: {}", path.display()))?;
-    let resource = fluent_syntax::parser::parse(content.clone()).map_err(|err| {
-        anyhow::anyhow!("Failed to parse FTL file {}: {:?}", path.display(), err.1)
-    })?;
+fn message_entries_from_located_entries(
+    entries: &[LocatedEntry],
+    path: &Path,
+    locale: &str,
+) -> Vec<MessageEntry> {
+    entries
+        .iter()
+        .filter_map(|located| {
+            let Entry::Message(message) = &located.entry else {
+                return None;
+            };
 
-    let mut messages = Vec::new();
-    for located in located_entries(content.as_str(), resource) {
-        if let Entry::Message(message) = located.entry {
-            messages.push(MessageEntry {
+            Some(MessageEntry {
                 locale: locale.to_string(),
                 file_path: path.to_path_buf(),
                 key: message.id.name.clone(),
-                value: extract_message_value(&message),
+                value: extract_message_value(message),
                 line: located.line,
                 ignore_untranslated: has_ignore_untranslated_marker(message.comment.as_ref()),
-            });
-        }
-    }
-
-    Ok(messages)
+            })
+        })
+        .collect()
 }
 
 fn extract_message_value(message: &Message<String>) -> Option<String> {

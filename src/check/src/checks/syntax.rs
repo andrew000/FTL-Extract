@@ -1,24 +1,23 @@
-use crate::checks::resolve_locales;
-use crate::parser::{ftl_files_for_locale, parse_ftl_syntax_errors};
+use crate::parser::CheckLocaleCache;
 use crate::types::{CheckSyntaxConfig, CheckSyntaxResult, SyntaxError};
 use anyhow::Result;
 
 pub fn check_syntax(config: CheckSyntaxConfig) -> Result<CheckSyntaxResult> {
-    let locales = resolve_locales(&config.locales_path, &config.locales)?;
+    let cache = CheckLocaleCache::load(&config.locales_path, &config.locales, &[])?;
+    check_syntax_with_cache(&cache)
+}
 
+pub fn check_syntax_with_cache(cache: &CheckLocaleCache) -> Result<CheckSyntaxResult> {
     let mut errors = Vec::new();
-    for locale in &locales {
-        for file_path in ftl_files_for_locale(&config.locales_path, locale)? {
-            for error in parse_ftl_syntax_errors(&file_path)? {
+    for locale in cache.checked_locales() {
+        for file in cache.files(locale) {
+            for error in &file.syntax_errors {
                 errors.push(SyntaxError {
                     locale: locale.clone(),
-                    file_path: file_path
-                        .strip_prefix(&config.locales_path)
-                        .unwrap_or(&file_path)
-                        .to_path_buf(),
+                    file_path: file.relative_to_locales.clone(),
                     line: error.line,
                     column: error.column,
-                    message: error.message,
+                    message: error.message.clone(),
                 });
             }
         }
@@ -33,7 +32,7 @@ pub fn check_syntax(config: CheckSyntaxConfig) -> Result<CheckSyntaxResult> {
     });
 
     Ok(CheckSyntaxResult {
-        checked_locales: locales,
+        checked_locales: cache.checked_locales().to_vec(),
         errors,
     })
 }

@@ -1,5 +1,5 @@
-use crate::checks::{code_extraction_errors, extract_check_code, resolve_locales};
-use crate::parser::{ftl_files_for_locale, parse_ftl_entries_lossy};
+use crate::checks::{code_extraction_errors, extract_check_code};
+use crate::parser::CheckLocaleCache;
 use crate::types::{
     CheckCodeAwareConfig, CheckCodeConfig, CheckKwargsConfig, CheckKwargsResult, KwargsMismatch,
 };
@@ -9,14 +9,10 @@ use extractor::ftl::utils::{FastHashMap, FastHashSet};
 use fluent_syntax::ast::{
     Entry, Expression, InlineExpression, Message, Pattern, PatternElement, Term,
 };
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 pub fn check_kwargs(config: CheckKwargsConfig) -> Result<CheckKwargsResult> {
-    let locales = resolve_locales(&config.locales_path, &config.locales)?;
-    let code_aware_config = CheckCodeAwareConfig {
-        locales_path: config.locales_path,
-        locales,
-    };
+    let cache = CheckLocaleCache::load(&config.locales_path, &config.locales, &[])?;
     let extracted = extract_check_code(CheckCodeConfig {
         code_path: config.code_path,
         i18n_keys: config.i18n_keys,
@@ -25,9 +21,12 @@ pub fn check_kwargs(config: CheckKwargsConfig) -> Result<CheckKwargsResult> {
         ignore_attributes: config.ignore_attributes,
         ignore_kwargs: config.ignore_kwargs,
         default_ftl_file: config.default_ftl_file,
+        cache: config.cache,
+        cache_path: config.cache_path,
+        clear_cache: config.clear_cache,
     })?;
 
-    let mut result = check_kwargs_with_extracted(code_aware_config, &extracted)?;
+    let mut result = check_kwargs_with_cache(&cache, &extracted)?;
     result.extraction_errors = code_extraction_errors(&extracted);
     Ok(result)
 }
@@ -36,11 +35,17 @@ pub fn check_kwargs_with_extracted(
     config: CheckCodeAwareConfig,
     extracted: &ExtractedCode,
 ) -> Result<CheckKwargsResult> {
-    let locales = resolve_locales(&config.locales_path, &config.locales)?;
+    let cache = CheckLocaleCache::load(&config.locales_path, &config.locales, &[])?;
+    check_kwargs_with_cache(&cache, extracted)
+}
 
+pub fn check_kwargs_with_cache(
+    cache: &CheckLocaleCache,
+    extracted: &ExtractedCode,
+) -> Result<CheckKwargsResult> {
     let mut mismatches = Vec::new();
-    for locale in &locales {
-        let locale_messages = read_locale_messages_with_ast(&config.locales_path, locale)?;
+    for locale in cache.checked_locales() {
+        let locale_messages = read_locale_messages_with_ast(cache, locale);
 
         for code_key in &extracted.keys {
             let Some(locale_message) = locale_messages
@@ -51,7 +56,10 @@ pub fn check_kwargs_with_extracted(
             };
 
             let code_kwargs = code_key.kwargs.iter().cloned().collect::<FastHashSet<_>>();
-            let ftl_kwargs = locale_messages.message_kwargs(&locale_message.message);
+            let ftl_kwargs = locale_messages
+                .message_kwargs(&locale_message.key)
+                .cloned()
+                .unwrap_or_default();
 
             let mut missing_kwargs = ftl_kwargs
                 .difference(&code_kwargs)
@@ -89,7 +97,7 @@ pub fn check_kwargs_with_extracted(
     });
 
     Ok(CheckKwargsResult {
-        checked_locales: locales,
+        checked_locales: cache.checked_locales().to_vec(),
         mismatches,
         extraction_errors: Vec::new(),
     })
@@ -97,9 +105,9 @@ pub fn check_kwargs_with_extracted(
 
 #[derive(Debug, Clone)]
 struct LocaleMessage {
+    key: String,
     path: PathBuf,
     line: Option<usize>,
-    message: Message<String>,
 }
 
 #[derive(Debug)]
@@ -107,10 +115,26 @@ struct LocaleMessages {
     by_expected_path: FastHashMap<(String, PathBuf), LocaleMessage>,
     messages: FastHashMap<String, Message<String>>,
     terms: FastHashMap<String, Term<String>>,
+    message_kwargs: FastHashMap<String, FastHashSet<String>>,
 }
 
 impl LocaleMessages {
-    fn message_kwargs(&self, message: &Message<String>) -> FastHashSet<String> {
+    fn message_kwargs(&self, key: &str) -> Option<&FastHashSet<String>> {
+        self.message_kwargs.get(key)
+    }
+
+    fn build_message_kwargs(&mut self) {
+        let keys = self.messages.keys().cloned().collect::<Vec<_>>();
+        for key in keys {
+            let Some(message) = self.messages.get(&key) else {
+                continue;
+            };
+            let kwargs = self.collect_message_kwargs_set(message);
+            self.message_kwargs.insert(key, kwargs);
+        }
+    }
+
+    fn collect_message_kwargs_set(&self, message: &Message<String>) -> FastHashSet<String> {
         let mut kwargs = FastHashSet::default();
         let mut seen_messages = FastHashSet::default();
         let mut seen_terms = FastHashSet::default();
@@ -339,49 +363,41 @@ fn term_seen_key(term_id: &str, local_bindings: &FastHashSet<String>) -> String 
     format!("{term_id}:{}", bindings.join(","))
 }
 
-fn read_locale_messages_with_ast(locales_path: &Path, locale: &str) -> Result<LocaleMessages> {
-    let locale_path = locales_path.join(locale);
+fn read_locale_messages_with_ast(cache: &CheckLocaleCache, locale: &str) -> LocaleMessages {
     let mut by_expected_path = FastHashMap::default();
     let mut messages = FastHashMap::default();
     let mut terms = FastHashMap::default();
 
-    for file_path in ftl_files_for_locale(locales_path, locale)? {
-        let entries = parse_ftl_entries_lossy(&file_path)?;
-        let relative_to_locale = file_path
-            .strip_prefix(&locale_path)
-            .unwrap_or(&file_path)
-            .to_path_buf();
-        let relative_to_locales = file_path
-            .strip_prefix(locales_path)
-            .unwrap_or(&file_path)
-            .to_path_buf();
-
-        for located in entries {
-            match located.entry {
+    for file in cache.files(locale) {
+        for located in &file.entries {
+            match &located.entry {
                 Entry::Message(message) => {
                     by_expected_path.insert(
-                        (message.id.name.clone(), relative_to_locale.clone()),
+                        (message.id.name.clone(), file.relative_to_locale.clone()),
                         LocaleMessage {
-                            path: relative_to_locales.clone(),
+                            key: message.id.name.clone(),
+                            path: file.relative_to_locales.clone(),
                             line: located.line,
-                            message: message.clone(),
                         },
                     );
-                    messages.insert(message.id.name.clone(), message);
+                    messages.insert(message.id.name.clone(), message.clone());
                 }
                 Entry::Term(term) => {
-                    terms.insert(term.id.name.clone(), term);
+                    terms.insert(term.id.name.clone(), term.clone());
                 }
                 _ => {}
             }
         }
     }
 
-    Ok(LocaleMessages {
+    let mut locale_messages = LocaleMessages {
         by_expected_path,
         messages,
         terms,
-    })
+        message_kwargs: FastHashMap::default(),
+    };
+    locale_messages.build_message_kwargs();
+    locale_messages
 }
 
 #[cfg(test)]
@@ -392,6 +408,7 @@ mod tests {
         DEFAULT_IGNORE_KWARGS,
     };
     use std::fs;
+    use std::path::Path;
     use tempfile::TempDir;
 
     fn write(path: &Path, content: &str) {
@@ -412,6 +429,9 @@ mod tests {
             ignore_attributes: DEFAULT_IGNORE_ATTRIBUTES.clone(),
             ignore_kwargs: DEFAULT_IGNORE_KWARGS.clone(),
             default_ftl_file: PathBuf::from(DEFAULT_FTL_FILENAME),
+            cache: false,
+            cache_path: None,
+            clear_cache: false,
         }
     }
 

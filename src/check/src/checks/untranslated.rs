@@ -1,15 +1,15 @@
 use crate::checks::resolve_locales_with_available;
-use crate::parser::{discover_locales, read_locale_messages};
+use crate::parser::{CheckLocaleCache, discover_locales};
 use crate::types::{
     CheckUntranslatedConfig, CheckUntranslatedResult, TranslationSuggestion, UntranslatedKey,
 };
 use anyhow::{Result, bail};
+use extractor::ftl::utils::FastHashMap;
 
 pub fn check_untranslated(config: CheckUntranslatedConfig) -> Result<CheckUntranslatedResult> {
     let available_locales = discover_locales(&config.locales_path)?;
 
-    let locales =
-        resolve_locales_with_available(&config.locales_path, &available_locales, &config.locales)?;
+    resolve_locales_with_available(&config.locales_path, &available_locales, &config.locales)?;
 
     for locale in &config.suggest_from {
         if !available_locales.iter().any(|existing| existing == locale) {
@@ -21,15 +21,29 @@ pub fn check_untranslated(config: CheckUntranslatedConfig) -> Result<CheckUntran
         }
     }
 
+    let cache =
+        CheckLocaleCache::load(&config.locales_path, &config.locales, &config.suggest_from)?;
+
+    check_untranslated_with_cache(&cache, &config.suggest_from)
+}
+
+pub fn check_untranslated_with_cache(
+    cache: &CheckLocaleCache,
+    suggest_from: &[String],
+) -> Result<CheckUntranslatedResult> {
     let mut checked_entries = Vec::new();
-    for locale in &locales {
-        checked_entries.extend(read_locale_messages(&config.locales_path, locale)?);
+    for locale in cache.checked_locales() {
+        checked_entries.extend(cache.messages(locale)?);
     }
 
     let mut suggestion_only_entries = Vec::new();
-    for locale in &config.suggest_from {
-        if !locales.iter().any(|checked| checked == locale) {
-            suggestion_only_entries.extend(read_locale_messages(&config.locales_path, locale)?);
+    for locale in suggest_from {
+        if !cache
+            .checked_locales()
+            .iter()
+            .any(|checked| checked == locale)
+        {
+            suggestion_only_entries.extend(cache.messages(locale)?);
         }
     }
 
@@ -39,12 +53,9 @@ pub fn check_untranslated(config: CheckUntranslatedConfig) -> Result<CheckUntran
         .filter(|(_, value)| !value.is_empty())
         .collect::<Vec<_>>();
 
-    let all_messages = checked_entries
-        .iter()
-        .chain(suggestion_only_entries.iter())
-        .filter_map(|entry| entry.value.as_ref().map(|value| (entry, value)))
-        .filter(|(_, value)| !value.is_empty())
-        .collect::<Vec<_>>();
+    let suggestion_values = suggestion_values_by_locale_and_key(
+        checked_entries.iter().chain(suggestion_only_entries.iter()),
+    );
 
     let mut untranslated = checked_messages
         .iter()
@@ -55,7 +66,7 @@ pub fn check_untranslated(config: CheckUntranslatedConfig) -> Result<CheckUntran
             locale: entry.locale.clone(),
             file_path: entry
                 .file_path
-                .strip_prefix(&config.locales_path)
+                .strip_prefix(cache.locales_path())
                 .unwrap_or(&entry.file_path)
                 .to_path_buf(),
             key: entry.key.clone(),
@@ -65,22 +76,16 @@ pub fn check_untranslated(config: CheckUntranslatedConfig) -> Result<CheckUntran
         })
         .collect::<Vec<_>>();
 
-    if !config.suggest_from.is_empty() {
+    if !suggest_from.is_empty() {
         for item in &mut untranslated {
-            item.suggestions = config
-                .suggest_from
+            item.suggestions = suggest_from
                 .iter()
                 .filter_map(|locale| {
-                    all_messages
-                        .iter()
-                        .find(|(entry, value)| {
-                            entry.locale == *locale
-                                && entry.key == item.key
-                                && !is_placeholder_translation(&entry.key, value)
-                        })
-                        .map(|(_, value)| TranslationSuggestion {
+                    suggestion_values
+                        .get(&(locale.clone(), item.key.clone()))
+                        .map(|value| TranslationSuggestion {
                             locale: locale.clone(),
-                            value: (*value).clone(),
+                            value: value.clone(),
                         })
                 })
                 .collect();
@@ -94,17 +99,32 @@ pub fn check_untranslated(config: CheckUntranslatedConfig) -> Result<CheckUntran
             .then_with(|| a.key.cmp(&b.key))
     });
 
-    let fully_translated_locales = locales
+    let fully_translated_locales = cache
+        .checked_locales()
         .iter()
         .filter(|locale| untranslated.iter().all(|item| &item.locale != *locale))
         .cloned()
         .collect::<Vec<_>>();
 
     Ok(CheckUntranslatedResult {
-        checked_locales: locales,
+        checked_locales: cache.checked_locales().to_vec(),
         fully_translated_locales,
         untranslated,
     })
+}
+
+fn suggestion_values_by_locale_and_key<'a>(
+    entries: impl Iterator<Item = &'a crate::types::MessageEntry>,
+) -> FastHashMap<(String, String), String> {
+    entries
+        .filter_map(|entry| {
+            let value = entry.value.as_ref()?;
+            if value.is_empty() || is_placeholder_translation(&entry.key, value) {
+                return None;
+            }
+            Some(((entry.locale.clone(), entry.key.clone()), value.clone()))
+        })
+        .collect()
 }
 
 fn is_placeholder_translation(key: &str, value: &str) -> bool {

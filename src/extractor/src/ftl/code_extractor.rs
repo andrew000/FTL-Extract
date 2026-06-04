@@ -241,6 +241,54 @@ fn extract_from_file(
     (keys, Some(CacheUpdate::Upsert(cache_key, cached_file)))
 }
 
+fn extract_from_file_collecting(
+    file: &PyFile,
+    i18n_keys: &FastHashSet<String>,
+    i18n_keys_prefix: &FastHashSet<String>,
+    ignore_attributes: &FastHashSet<String>,
+    ignore_kwargs: &FastHashSet<String>,
+    default_ftl_file: &Path,
+    cache: Option<&CacheFile>,
+) -> (
+    FastHashMap<String, FluentKey>,
+    Vec<ExtractionDiagnostic>,
+    Option<CacheUpdate>,
+) {
+    let cache_key = file_cache_key(&file.path);
+    let cached_file = cache.and_then(|cache| cache.files.get(&cache_key));
+
+    if let Some(cached) = cached_file
+        .filter(|cached| cached.size == file.size && cached.modified_ns == file.modified_ns)
+    {
+        return (cached_file_to_keys(cached), Vec::new(), None);
+    }
+
+    let (keys, diagnostics) = parse_file_collecting(
+        &file.path,
+        file.size,
+        i18n_keys,
+        i18n_keys_prefix,
+        ignore_attributes,
+        ignore_kwargs,
+        default_ftl_file,
+    );
+
+    if keys.is_empty() || !diagnostics.is_empty() {
+        let update = cached_file
+            .is_some()
+            .then_some(CacheUpdate::Remove(cache_key));
+        return (keys, diagnostics, update);
+    }
+
+    let cached_file = keys_to_cached_file(file.size, file.modified_ns, &keys);
+
+    (
+        keys,
+        diagnostics,
+        Some(CacheUpdate::Upsert(cache_key, cached_file)),
+    )
+}
+
 fn conflict_locations(existing: &FluentKey, new_fluent_key: &FluentKey) -> Vec<CodeLocation> {
     let mut locations = Vec::new();
     if let Some(location) = existing.source_location.clone() {
@@ -522,27 +570,124 @@ pub fn extract_code_with_diagnostics(
     ignore_kwargs: FastHashSet<String>,
     default_ftl_file: &Path,
 ) -> ExtractedCode {
-    let py_files = find_py_files(path, exclude_dirs);
-    let mut fluent_keys = FastHashMap::default();
-    let mut diagnostics = Vec::new();
+    extract_code_with_diagnostics_cached(
+        path,
+        i18n_keys,
+        i18n_keys_prefix,
+        exclude_dirs,
+        ignore_attributes,
+        ignore_kwargs,
+        default_ftl_file,
+        false,
+        None,
+        false,
+    )
+}
 
-    for file in &py_files {
-        let (keys, mut file_diagnostics) = parse_file_collecting(
-            &file.path,
-            file.size,
-            &i18n_keys,
-            &i18n_keys_prefix,
-            &ignore_attributes,
-            &ignore_kwargs,
-            default_ftl_file,
+#[allow(clippy::too_many_arguments)]
+pub fn extract_code_with_diagnostics_cached(
+    path: &Path,
+    i18n_keys: FastHashSet<String>,
+    i18n_keys_prefix: FastHashSet<String>,
+    exclude_dirs: &GlobSet,
+    ignore_attributes: FastHashSet<String>,
+    ignore_kwargs: FastHashSet<String>,
+    default_ftl_file: &Path,
+    use_cache: bool,
+    cache_path: Option<&Path>,
+    clear_cache: bool,
+) -> ExtractedCode {
+    let py_files = find_py_files(path, exclude_dirs);
+    let options = cache_options(
+        &i18n_keys,
+        &i18n_keys_prefix,
+        &ignore_attributes,
+        &ignore_kwargs,
+        default_ftl_file,
+    );
+    let cache_file_path = cache_file_path(cache_path);
+    let cache = use_cache.then(|| load_cache(&cache_file_path, &options, clear_cache));
+
+    let (fluent_keys, mut diagnostics, cache_updates): (
+        FastHashMap<String, FluentKey>,
+        Vec<ExtractionDiagnostic>,
+        Vec<CacheUpdate>,
+    ) = py_files
+        .par_iter()
+        .fold(
+            || (FastHashMap::default(), Vec::new(), Vec::new()),
+            |(mut acc, mut diagnostics, mut updates), file| {
+                let (keys, mut file_diagnostics, cache_update) = extract_from_file_collecting(
+                    file,
+                    &i18n_keys,
+                    &i18n_keys_prefix,
+                    &ignore_attributes,
+                    &ignore_kwargs,
+                    default_ftl_file,
+                    cache.as_ref(),
+                );
+
+                diagnostics.append(&mut file_diagnostics);
+                if let Some(update) = cache_update {
+                    updates.push(update);
+                }
+
+                for (key, fluent_key) in keys {
+                    merge_fluent_key_collecting(&mut acc, &mut diagnostics, key, fluent_key);
+                }
+
+                (acc, diagnostics, updates)
+            },
+        )
+        .reduce(
+            || (FastHashMap::default(), Vec::new(), Vec::new()),
+            |a, b| {
+                let (
+                    (mut target, mut target_diagnostics, mut target_updates),
+                    (source, source_diagnostics, source_updates),
+                ) = if a.0.len() > b.0.len() {
+                    (a, b)
+                } else {
+                    (b, a)
+                };
+
+                for (key, fluent_key) in source {
+                    merge_fluent_key_collecting(
+                        &mut target,
+                        &mut target_diagnostics,
+                        key,
+                        fluent_key,
+                    );
+                }
+                target_diagnostics.extend(source_diagnostics);
+                target_updates.extend(source_updates);
+
+                (target, target_diagnostics, target_updates)
+            },
         );
 
-        diagnostics.append(&mut file_diagnostics);
-
-        for (key, fluent_key) in keys {
-            merge_fluent_key_collecting(&mut fluent_keys, &mut diagnostics, key, fluent_key);
+    if let Some(mut cache) = cache
+        && !cache_updates.is_empty()
+    {
+        for update in cache_updates {
+            match update {
+                CacheUpdate::Upsert(path, cached_file) => {
+                    cache.files.insert(path, cached_file);
+                }
+                CacheUpdate::Remove(path) => {
+                    cache.files.remove(&path);
+                }
+            }
         }
+        save_cache(&cache_file_path, &cache);
     }
+
+    diagnostics.sort_by(|a, b| {
+        a.key
+            .cmp(&b.key)
+            .then_with(|| a.message.cmp(&b.message))
+            .then_with(|| format!("{:?}", a.kind).cmp(&format!("{:?}", b.kind)))
+    });
 
     let mut keys = fluent_keys
         .into_values()

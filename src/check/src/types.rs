@@ -30,6 +30,9 @@ pub struct CheckCodeConfig {
     pub ignore_attributes: FastHashSet<String>,
     pub ignore_kwargs: FastHashSet<String>,
     pub default_ftl_file: PathBuf,
+    pub cache: bool,
+    pub cache_path: Option<PathBuf>,
+    pub clear_cache: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -49,6 +52,9 @@ pub struct CheckMissingConfig {
     pub ignore_attributes: FastHashSet<String>,
     pub ignore_kwargs: FastHashSet<String>,
     pub default_ftl_file: PathBuf,
+    pub cache: bool,
+    pub cache_path: Option<PathBuf>,
+    pub clear_cache: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -62,6 +68,9 @@ pub struct CheckStaleConfig {
     pub ignore_attributes: FastHashSet<String>,
     pub ignore_kwargs: FastHashSet<String>,
     pub default_ftl_file: PathBuf,
+    pub cache: bool,
+    pub cache_path: Option<PathBuf>,
+    pub clear_cache: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -75,6 +84,9 @@ pub struct CheckKwargsConfig {
     pub ignore_attributes: FastHashSet<String>,
     pub ignore_kwargs: FastHashSet<String>,
     pub default_ftl_file: PathBuf,
+    pub cache: bool,
+    pub cache_path: Option<PathBuf>,
+    pub clear_cache: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

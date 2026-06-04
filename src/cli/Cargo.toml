@@ -24,7 +24,7 @@ stub.workspace = true
 toml.workspace = true
 
 env_logger = { version = "0.11.10" }
-mimalloc = { version = "0.1.50" }
+mimalloc = { version = "0.1.52" }
 
 [dev-dependencies]
 tempfile.workspace = true

@@ -1,4 +1,5 @@
 use crate::ftl::code_extractor::kwargs_from_key;
+use crate::ftl::diagnostics::CodeLocation;
 use crate::ftl::matcher::{FluentEntry, FluentKey};
 use crate::ftl::utils::{FastHashMap, FastHashSet};
 use bincode_next::{Decode, Encode};
@@ -8,7 +9,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::UNIX_EPOCH;
 
-pub(super) const CACHE_SCHEMA_VERSION: u32 = 1;
+pub(super) const CACHE_SCHEMA_VERSION: u32 = 2;
 
 #[derive(Clone, Debug, PartialEq, Eq, Encode, Decode)]
 pub(super) struct CacheOptions {
@@ -39,6 +40,8 @@ struct CachedFluentKey {
     code_path: PathBuf,
     ftl_path: PathBuf,
     kwargs: Vec<String>,
+    source_line: Option<usize>,
+    source_column: Option<usize>,
 }
 
 pub(super) enum CacheUpdate {
@@ -165,7 +168,7 @@ fn cached_key_to_fluent_key(cached: CachedFluentKey) -> FluentKey {
         });
     }
 
-    FluentKey::new(
+    let mut fluent_key = FluentKey::new(
         Arc::new(cached.code_path),
         cached.key.clone(),
         FluentEntry::Message(fluent_syntax::ast::Message {
@@ -178,17 +181,37 @@ fn cached_key_to_fluent_key(cached: CachedFluentKey) -> FluentKey {
         None,
         None,
         FastHashSet::default(),
-    )
+    );
+
+    if let (Some(line), Some(column)) = (cached.source_line, cached.source_column) {
+        fluent_key.source_location = Some(CodeLocation {
+            path: fluent_key.code_path.as_ref().clone(),
+            line,
+            column,
+        });
+    }
+
+    fluent_key
 }
 
 fn fluent_key_to_cached_key(fluent_key: FluentKey) -> CachedFluentKey {
     let kwargs = kwargs_from_key(&fluent_key);
+    let source_line = fluent_key
+        .source_location
+        .as_ref()
+        .map(|location| location.line);
+    let source_column = fluent_key
+        .source_location
+        .as_ref()
+        .map(|location| location.column);
 
     CachedFluentKey {
         key: fluent_key.key,
         code_path: fluent_key.code_path.as_ref().clone(),
         ftl_path: fluent_key.path.as_ref().clone(),
         kwargs,
+        source_line,
+        source_column,
     }
 }
 
@@ -292,11 +315,11 @@ mod tests {
     fn test_cache_file_path_uses_versioned_name_for_directories() {
         assert_eq!(
             cache_file_path(None),
-            PathBuf::from(".ftl-extract-cache").join("extract-0.11.0-v1.bin")
+            PathBuf::from(".ftl-extract-cache").join("extract-0.11.0-v2.bin")
         );
         assert_eq!(
             cache_file_path(Some(Path::new("cache-dir"))),
-            PathBuf::from("cache-dir").join("extract-0.11.0-v1.bin")
+            PathBuf::from("cache-dir").join("extract-0.11.0-v2.bin")
         );
         assert_eq!(
             cache_file_path(Some(Path::new("custom.bin"))),

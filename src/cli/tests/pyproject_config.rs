@@ -591,6 +591,8 @@ fn check_all_stops_after_syntax_errors() {
         .arg("all")
         .arg("--language")
         .arg("en")
+        .arg("--suggest-from")
+        .arg("missing-suggest")
         .output()
         .unwrap();
 
@@ -606,6 +608,7 @@ fn check_all_stops_after_syntax_errors() {
     assert!(!stdout.contains("kwargs:"));
     assert!(!stderr.contains("Error during check"));
     assert!(!stderr.contains("Missing code path"));
+    assert!(!stderr.contains("Suggestion locale `missing-suggest`"));
 }
 
 #[test]

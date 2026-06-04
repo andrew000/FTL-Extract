@@ -6,26 +6,32 @@ mod syntax;
 mod untranslated;
 
 pub use kwargs::check_kwargs;
+pub use kwargs::check_kwargs_with_cache;
 pub use kwargs::check_kwargs_with_extracted;
 pub use missing::check_missing;
+pub use missing::check_missing_with_cache;
 pub use missing::check_missing_with_extracted;
 pub use references::check_references;
+pub use references::check_references_with_cache;
 pub use stale::check_stale;
+pub use stale::check_stale_with_cache;
 pub use stale::check_stale_with_extracted;
 pub use syntax::check_syntax;
+pub use syntax::check_syntax_with_cache;
 pub use untranslated::check_untranslated;
+pub use untranslated::check_untranslated_with_cache;
 
 use crate::parser::discover_locales;
 use crate::types::{CheckCodeConfig, CodeExtractionError};
 use anyhow::{Result, bail};
-use extractor::ftl::code_extractor::extract_code_with_diagnostics;
+use extractor::ftl::code_extractor::extract_code_with_diagnostics_cached;
 use extractor::ftl::diagnostics::ExtractedCode;
 use globset::{Glob, GlobSetBuilder};
 use std::path::Path;
 
 pub fn extract_check_code(config: CheckCodeConfig) -> Result<ExtractedCode> {
     let ignore_set = build_ignore_set(&config.exclude_dirs)?;
-    Ok(extract_code_with_diagnostics(
+    Ok(extract_code_with_diagnostics_cached(
         &config.code_path,
         config.i18n_keys,
         config.i18n_keys_prefix,
@@ -33,6 +39,9 @@ pub fn extract_check_code(config: CheckCodeConfig) -> Result<ExtractedCode> {
         config.ignore_attributes,
         config.ignore_kwargs,
         &config.default_ftl_file,
+        config.cache,
+        config.cache_path.as_deref(),
+        config.clear_cache,
     ))
 }
 

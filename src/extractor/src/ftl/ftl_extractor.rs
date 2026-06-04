@@ -383,7 +383,7 @@ i18n.page.title(_path="pages/main.ftl")
         assert_eq!(first_stats.py_files_count, 1);
         assert_eq!(first_stats.ftl_in_code_keys_count, 2);
         assert_eq!(first_stats.ftl_keys_added["en"], 2);
-        assert!(cache_path.join("extract-0.11.0-v1.bin").exists());
+        assert!(cache_path.join("extract-0.11.0-v2.bin").exists());
 
         let default_content =
             fs::read_to_string(output_path.join("en").join("_default.ftl")).unwrap();

@@ -1,5 +1,5 @@
-use crate::checks::{code_extraction_errors, extract_check_code, resolve_locales};
-use crate::parser::{ftl_files_for_locale, parse_ftl_resource_lossy, read_locale_messages};
+use crate::checks::{code_extraction_errors, extract_check_code};
+use crate::parser::CheckLocaleCache;
 use crate::types::{
     CheckCodeAwareConfig, CheckCodeConfig, CheckStaleConfig, CheckStaleResult, StaleKey,
 };
@@ -7,14 +7,9 @@ use anyhow::Result;
 use extractor::ftl::diagnostics::ExtractedCode;
 use extractor::ftl::utils::{FastHashMap, FastHashSet};
 use fluent_syntax::ast::{Entry, Expression, InlineExpression, Pattern, PatternElement};
-use std::path::Path;
 
 pub fn check_stale(config: CheckStaleConfig) -> Result<CheckStaleResult> {
-    let locales = resolve_locales(&config.locales_path, &config.locales)?;
-    let code_aware_config = CheckCodeAwareConfig {
-        locales_path: config.locales_path,
-        locales,
-    };
+    let cache = CheckLocaleCache::load(&config.locales_path, &config.locales, &[])?;
     let extracted = extract_check_code(CheckCodeConfig {
         code_path: config.code_path,
         i18n_keys: config.i18n_keys,
@@ -23,9 +18,12 @@ pub fn check_stale(config: CheckStaleConfig) -> Result<CheckStaleResult> {
         ignore_attributes: config.ignore_attributes,
         ignore_kwargs: config.ignore_kwargs,
         default_ftl_file: config.default_ftl_file,
+        cache: config.cache,
+        cache_path: config.cache_path,
+        clear_cache: config.clear_cache,
     })?;
 
-    let mut result = check_stale_with_extracted(code_aware_config, &extracted)?;
+    let mut result = check_stale_with_cache(&cache, &extracted)?;
     result.extraction_errors = code_extraction_errors(&extracted);
     Ok(result)
 }
@@ -34,8 +32,14 @@ pub fn check_stale_with_extracted(
     config: CheckCodeAwareConfig,
     extracted: &ExtractedCode,
 ) -> Result<CheckStaleResult> {
-    let locales = resolve_locales(&config.locales_path, &config.locales)?;
+    let cache = CheckLocaleCache::load(&config.locales_path, &config.locales, &[])?;
+    check_stale_with_cache(&cache, extracted)
+}
 
+pub fn check_stale_with_cache(
+    cache: &CheckLocaleCache,
+    extracted: &ExtractedCode,
+) -> Result<CheckStaleResult> {
     let used_keys = extracted
         .keys
         .iter()
@@ -43,12 +47,11 @@ pub fn check_stale_with_extracted(
         .collect::<FastHashSet<_>>();
 
     let mut stale_keys = Vec::new();
-    for locale in &locales {
-        let locale_path = config.locales_path.join(locale);
-        let referenced_messages =
-            live_referenced_messages(&config.locales_path, locale, &used_keys)?;
+    for locale in cache.checked_locales() {
+        let locale_path = cache.locales_path().join(locale);
+        let referenced_messages = live_referenced_messages(cache, locale, &used_keys);
 
-        for entry in read_locale_messages(&config.locales_path, locale)? {
+        for entry in cache.messages(locale)? {
             let relative_to_locale = entry
                 .file_path
                 .strip_prefix(&locale_path)
@@ -65,7 +68,7 @@ pub fn check_stale_with_extracted(
                 locale: locale.clone(),
                 file_path: entry
                     .file_path
-                    .strip_prefix(&config.locales_path)
+                    .strip_prefix(cache.locales_path())
                     .unwrap_or(&entry.file_path)
                     .to_path_buf(),
                 line: entry.line,
@@ -83,7 +86,7 @@ pub fn check_stale_with_extracted(
     });
 
     Ok(CheckStaleResult {
-        checked_locales: locales,
+        checked_locales: cache.checked_locales().to_vec(),
         stale_keys,
         extraction_errors: Vec::new(),
     })
@@ -96,25 +99,21 @@ enum ReferenceNode {
 }
 
 fn live_referenced_messages(
-    locales_path: &Path,
+    cache: &CheckLocaleCache,
     locale: &str,
     used_keys: &FastHashSet<(String, std::path::PathBuf)>,
-) -> Result<FastHashSet<String>> {
-    let locale_path = locales_path.join(locale);
+) -> FastHashSet<String> {
     let mut graph: FastHashMap<ReferenceNode, FastHashSet<ReferenceNode>> = FastHashMap::default();
     let mut roots = FastHashSet::default();
 
-    for path in ftl_files_for_locale(locales_path, locale)? {
-        let relative_to_locale = path
-            .strip_prefix(&locale_path)
-            .unwrap_or(&path)
-            .to_path_buf();
-        let resource = parse_ftl_resource_lossy(&path)?;
-        for entry in &resource.body {
-            match entry {
+    for file in cache.files(locale) {
+        for located in &file.entries {
+            match &located.entry {
                 Entry::Message(message) => {
                     let node = ReferenceNode::Message(message.id.name.clone());
-                    if used_keys.contains(&(message.id.name.clone(), relative_to_locale.clone())) {
+                    if used_keys
+                        .contains(&(message.id.name.clone(), file.relative_to_locale.clone()))
+                    {
                         roots.insert(node.clone());
                     }
                     let references = graph.entry(node).or_default();
@@ -158,7 +157,7 @@ fn live_referenced_messages(
         }
     }
 
-    Ok(referenced_messages)
+    referenced_messages
 }
 
 fn collect_pattern_references(
@@ -231,7 +230,7 @@ mod tests {
         DEFAULT_IGNORE_KWARGS,
     };
     use std::fs;
-    use std::path::PathBuf;
+    use std::path::{Path, PathBuf};
     use tempfile::TempDir;
 
     fn write(path: &Path, content: &str) {
@@ -252,6 +251,9 @@ mod tests {
             ignore_attributes: DEFAULT_IGNORE_ATTRIBUTES.clone(),
             ignore_kwargs: DEFAULT_IGNORE_KWARGS.clone(),
             default_ftl_file: PathBuf::from(DEFAULT_FTL_FILENAME),
+            cache: false,
+            cache_path: None,
+            clear_cache: false,
         }
     }
 

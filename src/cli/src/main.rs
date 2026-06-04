@@ -5,11 +5,11 @@ use crate::config::{
 };
 use anyhow::{Context, Result};
 use check::{
-    CheckCodeAwareConfig, CheckCodeConfig, CheckReferencesConfig, CheckResult, CheckSyntaxConfig,
-    CheckUntranslatedConfig, Diagnostic, DiagnosticKind, Severity, check_kwargs_with_extracted,
-    check_missing_with_extracted, check_references, check_stale_with_extracted, check_syntax,
-    check_untranslated, code_extraction_errors, extract_check_code, has_failing_diagnostics,
-    render_check_json, render_check_terminal, validate_check_locales,
+    CheckCodeConfig, CheckLocaleCache, CheckResult, Diagnostic, DiagnosticKind, Severity,
+    check_kwargs_with_cache, check_missing_with_cache, check_references_with_cache,
+    check_stale_with_cache, check_syntax_with_cache, check_untranslated_with_cache,
+    code_extraction_errors, extract_check_code, has_failing_diagnostics, render_check_json,
+    render_check_terminal, validate_check_locales,
 };
 use clap::{Parser, Subcommand, ValueEnum};
 use extractor::ftl::consts::{
@@ -493,6 +493,8 @@ fn main() {
                     .or_else(|| extract_pyproject.code_path.clone()),
                 base_dir,
             );
+            let cache_path =
+                cli_or_config_path(None, extract_pyproject.cache_path.clone(), base_dir);
             let output_format =
                 match cli_or_config_enum(output_format, pyproject.output_format, "output-format") {
                     Ok(output_format) => output_format,
@@ -559,6 +561,11 @@ fn main() {
                 default_ftl_file: extract_pyproject
                     .default_ftl_file
                     .unwrap_or_else(|| PathBuf::from(DEFAULT_FTL_FILENAME)),
+                cache: extract_pyproject.cache.unwrap_or(false)
+                    || cache_path.is_some()
+                    || extract_pyproject.clear_cache.unwrap_or(false),
+                cache_path,
+                clear_cache: extract_pyproject.clear_cache.unwrap_or(false),
             };
 
             let start_time = std::time::Instant::now();
@@ -629,6 +636,9 @@ struct CheckRunConfig {
     ignore_attributes: FastHashSet<String>,
     ignore_kwargs: FastHashSet<String>,
     default_ftl_file: PathBuf,
+    cache: bool,
+    cache_path: Option<PathBuf>,
+    clear_cache: bool,
 }
 
 fn run_check(expanded_checks: ExpandedChecks, config: CheckRunConfig) -> Result<CheckResult> {
@@ -648,6 +658,7 @@ where
         diagnostics: Vec::new(),
     };
     let mut extracted_code = None;
+    let mut locale_cache = None;
     let mut extraction_diagnostics_added = false;
 
     for check in expanded_checks.checks {
@@ -656,15 +667,10 @@ where
             CheckKind::Kwargs => {
                 let extracted =
                     ensure_extracted_code(&mut extracted_code, &config, &mut extract_code)?;
+                let cache = ensure_locale_cache(&mut locale_cache, &config, &[])?;
                 extend_check_result(
                     &mut result,
-                    CheckResult::from(check_kwargs_with_extracted(
-                        CheckCodeAwareConfig {
-                            locales_path: config.locales_path.clone(),
-                            locales: config.locales.clone(),
-                        },
-                        extracted,
-                    )?),
+                    CheckResult::from(check_kwargs_with_cache(cache, extracted)?),
                 );
                 add_extraction_diagnostics_once(
                     &mut result,
@@ -675,15 +681,10 @@ where
             CheckKind::Missing => {
                 let extracted =
                     ensure_extracted_code(&mut extracted_code, &config, &mut extract_code)?;
+                let cache = ensure_locale_cache(&mut locale_cache, &config, &[])?;
                 extend_check_result(
                     &mut result,
-                    CheckResult::from(check_missing_with_extracted(
-                        CheckCodeAwareConfig {
-                            locales_path: config.locales_path.clone(),
-                            locales: config.locales.clone(),
-                        },
-                        extracted,
-                    )?),
+                    CheckResult::from(check_missing_with_cache(cache, extracted)?),
                 );
                 add_extraction_diagnostics_once(
                     &mut result,
@@ -692,26 +693,19 @@ where
                 );
             }
             CheckKind::References => {
+                let cache = ensure_locale_cache(&mut locale_cache, &config, &[])?;
                 extend_check_result(
                     &mut result,
-                    CheckResult::from(check_references(CheckReferencesConfig {
-                        locales_path: config.locales_path.clone(),
-                        locales: config.locales.clone(),
-                    })?),
+                    CheckResult::from(check_references_with_cache(cache)?),
                 );
             }
             CheckKind::Stale => {
                 let extracted =
                     ensure_extracted_code(&mut extracted_code, &config, &mut extract_code)?;
+                let cache = ensure_locale_cache(&mut locale_cache, &config, &[])?;
                 extend_check_result(
                     &mut result,
-                    CheckResult::from(check_stale_with_extracted(
-                        CheckCodeAwareConfig {
-                            locales_path: config.locales_path.clone(),
-                            locales: config.locales.clone(),
-                        },
-                        extracted,
-                    )?),
+                    CheckResult::from(check_stale_with_cache(cache, extracted)?),
                 );
                 add_extraction_diagnostics_once(
                     &mut result,
@@ -720,25 +714,20 @@ where
                 );
             }
             CheckKind::Syntax => {
+                let cache = ensure_locale_cache(&mut locale_cache, &config, &[])?;
                 extend_check_result(
                     &mut result,
-                    CheckResult::from(check_syntax(CheckSyntaxConfig {
-                        locales_path: config.locales_path.clone(),
-                        locales: config.locales.clone(),
-                    })?),
+                    CheckResult::from(check_syntax_with_cache(cache)?),
                 );
                 if has_fatal_syntax_diagnostics(&result) {
                     break;
                 }
             }
             CheckKind::Untranslated => {
+                let cache = ensure_locale_cache(&mut locale_cache, &config, &config.suggest_from)?;
                 extend_check_result(
                     &mut result,
-                    CheckResult::from(check_untranslated(CheckUntranslatedConfig {
-                        locales_path: config.locales_path.clone(),
-                        locales: config.locales.clone(),
-                        suggest_from: config.suggest_from.clone(),
-                    })?),
+                    CheckResult::from(check_untranslated_with_cache(cache, &config.suggest_from)?),
                 );
             }
         }
@@ -747,6 +736,26 @@ where
     dedup_diagnostics(&mut result);
 
     Ok(result)
+}
+
+fn ensure_locale_cache<'a>(
+    locale_cache: &'a mut Option<CheckLocaleCache>,
+    config: &CheckRunConfig,
+    extra_locales: &[String],
+) -> Result<&'a CheckLocaleCache> {
+    if locale_cache.is_none() {
+        *locale_cache = Some(CheckLocaleCache::load(
+            &config.locales_path,
+            &config.locales,
+            extra_locales,
+        )?);
+    } else if !extra_locales.is_empty()
+        && let Some(cache) = locale_cache.as_mut()
+    {
+        cache.load_extra_locales(extra_locales)?;
+    }
+
+    Ok(locale_cache.as_ref().expect("locale cache is initialized"))
 }
 
 fn ensure_extracted_code<'a, F>(
@@ -770,6 +779,9 @@ where
             ignore_attributes: config.ignore_attributes.clone(),
             ignore_kwargs: config.ignore_kwargs.clone(),
             default_ftl_file: config.default_ftl_file.clone(),
+            cache: config.cache,
+            cache_path: config.cache_path.clone(),
+            clear_cache: config.clear_cache,
         })?);
     }
 
@@ -1096,6 +1108,9 @@ mod tests {
             ignore_attributes: FastHashSet::default(),
             ignore_kwargs: FastHashSet::default(),
             default_ftl_file: PathBuf::from(DEFAULT_FTL_FILENAME),
+            cache: false,
+            cache_path: None,
+            clear_cache: false,
         };
 
         let mut extraction_calls = 0;

@@ -13,10 +13,10 @@ pub use checks::{
 pub use parser::CheckLocaleCache;
 pub use render::{has_failing_diagnostics, render_check_json, render_check_terminal};
 pub use types::{
-    CheckCodeAwareConfig, CheckCodeConfig, CheckKwargsConfig, CheckKwargsResult,
-    CheckMissingConfig, CheckMissingResult, CheckReferencesConfig, CheckReferencesResult,
-    CheckResult, CheckStaleConfig, CheckStaleResult, CheckSyntaxConfig, CheckSyntaxResult,
-    CheckUntranslatedConfig, CheckUntranslatedResult, CodeExtractionError, Diagnostic,
-    DiagnosticKind, KwargsMismatch, MissingKey, MissingReference, Severity, SourceLocation,
-    StaleKey, SyntaxError, TranslationSuggestion, UntranslatedKey,
+    CheckCodeAwareCheckConfig, CheckCodeAwareConfig, CheckCodeConfig, CheckKwargsConfig,
+    CheckKwargsResult, CheckLocaleConfig, CheckMissingConfig, CheckMissingResult,
+    CheckReferencesConfig, CheckReferencesResult, CheckResult, CheckStaleConfig, CheckStaleResult,
+    CheckSyntaxConfig, CheckSyntaxResult, CheckUntranslatedConfig, CheckUntranslatedResult,
+    CodeExtractionError, Diagnostic, DiagnosticKind, KwargsMismatch, MissingKey, MissingReference,
+    Severity, SourceLocation, StaleKey, SyntaxError, TranslationSuggestion, UntranslatedKey,
 };

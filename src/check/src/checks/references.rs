@@ -1,3 +1,4 @@
+use crate::checks::run_locale_check;
 use crate::parser::{CheckLocaleCache, LocatedEntry};
 use crate::types::{CheckReferencesConfig, CheckReferencesResult, MissingReference};
 use anyhow::Result;
@@ -8,8 +9,7 @@ use fluent_syntax::ast::{
 use std::path::Path;
 
 pub fn check_references(config: CheckReferencesConfig) -> Result<CheckReferencesResult> {
-    let cache = CheckLocaleCache::load(&config.locales_path, &config.locales, &[])?;
-    check_references_with_cache(&cache)
+    run_locale_check(config, check_references_with_cache)
 }
 
 pub fn check_references_with_cache(cache: &CheckLocaleCache) -> Result<CheckReferencesResult> {

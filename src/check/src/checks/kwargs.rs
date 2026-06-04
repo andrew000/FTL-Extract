@@ -1,8 +1,6 @@
-use crate::checks::{code_extraction_errors, extract_check_code};
+use crate::checks::{run_code_aware_check, run_code_aware_check_with_extracted};
 use crate::parser::CheckLocaleCache;
-use crate::types::{
-    CheckCodeAwareConfig, CheckCodeConfig, CheckKwargsConfig, CheckKwargsResult, KwargsMismatch,
-};
+use crate::types::{CheckCodeAwareConfig, CheckKwargsConfig, CheckKwargsResult, KwargsMismatch};
 use anyhow::Result;
 use extractor::ftl::diagnostics::ExtractedCode;
 use extractor::ftl::utils::{FastHashMap, FastHashSet};
@@ -12,31 +10,14 @@ use fluent_syntax::ast::{
 use std::path::PathBuf;
 
 pub fn check_kwargs(config: CheckKwargsConfig) -> Result<CheckKwargsResult> {
-    let cache = CheckLocaleCache::load(&config.locales_path, &config.locales, &[])?;
-    let extracted = extract_check_code(CheckCodeConfig {
-        code_path: config.code_path,
-        i18n_keys: config.i18n_keys,
-        i18n_keys_prefix: config.i18n_keys_prefix,
-        exclude_dirs: config.exclude_dirs,
-        ignore_attributes: config.ignore_attributes,
-        ignore_kwargs: config.ignore_kwargs,
-        default_ftl_file: config.default_ftl_file,
-        cache: config.cache,
-        cache_path: config.cache_path,
-        clear_cache: config.clear_cache,
-    })?;
-
-    let mut result = check_kwargs_with_cache(&cache, &extracted)?;
-    result.extraction_errors = code_extraction_errors(&extracted);
-    Ok(result)
+    run_code_aware_check(config, check_kwargs_with_cache)
 }
 
 pub fn check_kwargs_with_extracted(
     config: CheckCodeAwareConfig,
     extracted: &ExtractedCode,
 ) -> Result<CheckKwargsResult> {
-    let cache = CheckLocaleCache::load(&config.locales_path, &config.locales, &[])?;
-    check_kwargs_with_cache(&cache, extracted)
+    run_code_aware_check_with_extracted(config, extracted, check_kwargs_with_cache)
 }
 
 pub fn check_kwargs_with_cache(

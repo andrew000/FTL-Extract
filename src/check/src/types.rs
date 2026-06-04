@@ -10,16 +10,14 @@ pub struct CheckUntranslatedConfig {
 }
 
 #[derive(Debug, Clone)]
-pub struct CheckSyntaxConfig {
+pub struct CheckLocaleConfig {
     pub locales_path: PathBuf,
     pub locales: Vec<String>,
 }
 
-#[derive(Debug, Clone)]
-pub struct CheckReferencesConfig {
-    pub locales_path: PathBuf,
-    pub locales: Vec<String>,
-}
+pub type CheckSyntaxConfig = CheckLocaleConfig;
+pub type CheckReferencesConfig = CheckLocaleConfig;
+pub type CheckCodeAwareConfig = CheckLocaleConfig;
 
 #[derive(Debug, Clone)]
 pub struct CheckCodeConfig {
@@ -36,13 +34,7 @@ pub struct CheckCodeConfig {
 }
 
 #[derive(Debug, Clone)]
-pub struct CheckCodeAwareConfig {
-    pub locales_path: PathBuf,
-    pub locales: Vec<String>,
-}
-
-#[derive(Debug, Clone)]
-pub struct CheckMissingConfig {
+pub struct CheckCodeAwareCheckConfig {
     pub locales_path: PathBuf,
     pub code_path: PathBuf,
     pub locales: Vec<String>,
@@ -57,37 +49,9 @@ pub struct CheckMissingConfig {
     pub clear_cache: bool,
 }
 
-#[derive(Debug, Clone)]
-pub struct CheckStaleConfig {
-    pub locales_path: PathBuf,
-    pub code_path: PathBuf,
-    pub locales: Vec<String>,
-    pub i18n_keys: FastHashSet<String>,
-    pub i18n_keys_prefix: FastHashSet<String>,
-    pub exclude_dirs: FastHashSet<String>,
-    pub ignore_attributes: FastHashSet<String>,
-    pub ignore_kwargs: FastHashSet<String>,
-    pub default_ftl_file: PathBuf,
-    pub cache: bool,
-    pub cache_path: Option<PathBuf>,
-    pub clear_cache: bool,
-}
-
-#[derive(Debug, Clone)]
-pub struct CheckKwargsConfig {
-    pub locales_path: PathBuf,
-    pub code_path: PathBuf,
-    pub locales: Vec<String>,
-    pub i18n_keys: FastHashSet<String>,
-    pub i18n_keys_prefix: FastHashSet<String>,
-    pub exclude_dirs: FastHashSet<String>,
-    pub ignore_attributes: FastHashSet<String>,
-    pub ignore_kwargs: FastHashSet<String>,
-    pub default_ftl_file: PathBuf,
-    pub cache: bool,
-    pub cache_path: Option<PathBuf>,
-    pub clear_cache: bool,
-}
+pub type CheckMissingConfig = CheckCodeAwareCheckConfig;
+pub type CheckStaleConfig = CheckCodeAwareCheckConfig;
+pub type CheckKwargsConfig = CheckCodeAwareCheckConfig;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Severity {

@@ -1,39 +1,20 @@
-use crate::checks::{code_extraction_errors, extract_check_code};
+use crate::checks::{run_code_aware_check, run_code_aware_check_with_extracted};
 use crate::parser::CheckLocaleCache;
-use crate::types::{
-    CheckCodeAwareConfig, CheckCodeConfig, CheckMissingConfig, CheckMissingResult, MissingKey,
-};
+use crate::types::{CheckCodeAwareConfig, CheckMissingConfig, CheckMissingResult, MissingKey};
 use anyhow::Result;
 use extractor::ftl::diagnostics::ExtractedCode;
 use extractor::ftl::utils::FastHashSet;
 use std::path::PathBuf;
 
 pub fn check_missing(config: CheckMissingConfig) -> Result<CheckMissingResult> {
-    let cache = CheckLocaleCache::load(&config.locales_path, &config.locales, &[])?;
-    let extracted = extract_check_code(CheckCodeConfig {
-        code_path: config.code_path,
-        i18n_keys: config.i18n_keys,
-        i18n_keys_prefix: config.i18n_keys_prefix,
-        exclude_dirs: config.exclude_dirs,
-        ignore_attributes: config.ignore_attributes,
-        ignore_kwargs: config.ignore_kwargs,
-        default_ftl_file: config.default_ftl_file,
-        cache: config.cache,
-        cache_path: config.cache_path,
-        clear_cache: config.clear_cache,
-    })?;
-
-    let mut result = check_missing_with_cache(&cache, &extracted)?;
-    result.extraction_errors = code_extraction_errors(&extracted);
-    Ok(result)
+    run_code_aware_check(config, check_missing_with_cache)
 }
 
 pub fn check_missing_with_extracted(
     config: CheckCodeAwareConfig,
     extracted: &ExtractedCode,
 ) -> Result<CheckMissingResult> {
-    let cache = CheckLocaleCache::load(&config.locales_path, &config.locales, &[])?;
-    check_missing_with_cache(&cache, extracted)
+    run_code_aware_check_with_extracted(config, extracted, check_missing_with_cache)
 }
 
 pub fn check_missing_with_cache(

@@ -21,13 +21,16 @@ pub use syntax::check_syntax_with_cache;
 pub use untranslated::check_untranslated;
 pub use untranslated::check_untranslated_with_cache;
 
-use crate::parser::discover_locales;
-use crate::types::{CheckCodeConfig, CodeExtractionError};
+use crate::parser::{CheckLocaleCache, discover_locales};
+use crate::types::{
+    CheckCodeAwareCheckConfig, CheckCodeAwareConfig, CheckCodeConfig, CheckKwargsResult,
+    CheckLocaleConfig, CheckMissingResult, CheckStaleResult, CodeExtractionError,
+};
 use anyhow::{Result, bail};
 use extractor::ftl::code_extractor::extract_code_with_diagnostics_cached;
 use extractor::ftl::diagnostics::ExtractedCode;
 use globset::{Glob, GlobSetBuilder};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 pub fn extract_check_code(config: CheckCodeConfig) -> Result<ExtractedCode> {
     let ignore_set = build_ignore_set(&config.exclude_dirs)?;
@@ -52,6 +55,40 @@ pub fn code_extraction_errors(extracted: &ExtractedCode) -> Vec<CodeExtractionEr
         .cloned()
         .map(Into::into)
         .collect()
+}
+
+pub(super) fn run_locale_check<R>(
+    config: CheckLocaleConfig,
+    check: impl FnOnce(&CheckLocaleCache) -> Result<R>,
+) -> Result<R> {
+    let cache = CheckLocaleCache::load(&config.locales_path, &config.locales, &[])?;
+    check(&cache)
+}
+
+pub(super) fn run_code_aware_check<C, R>(
+    config: C,
+    check: impl FnOnce(&CheckLocaleCache, &ExtractedCode) -> Result<R>,
+) -> Result<R>
+where
+    C: IntoCodeAwareCheckInputs,
+    R: CheckResultWithExtractionErrors,
+{
+    let inputs = config.into_code_aware_check_inputs();
+    let cache = CheckLocaleCache::load(&inputs.locales_path, &inputs.locales, &[])?;
+    let extracted = extract_check_code(inputs.code)?;
+
+    let mut result = check(&cache, &extracted)?;
+    result.set_extraction_errors(code_extraction_errors(&extracted));
+    Ok(result)
+}
+
+pub(super) fn run_code_aware_check_with_extracted<R>(
+    config: CheckCodeAwareConfig,
+    extracted: &ExtractedCode,
+    check: impl FnOnce(&CheckLocaleCache, &ExtractedCode) -> Result<R>,
+) -> Result<R> {
+    let cache = CheckLocaleCache::load(&config.locales_path, &config.locales, &[])?;
+    check(&cache, extracted)
 }
 
 pub fn validate_check_locales(locales_path: &Path, locales: &[String]) -> Result<()> {
@@ -103,3 +140,52 @@ pub(super) fn build_ignore_set(
     }
     Ok(builder.build()?)
 }
+
+pub(super) struct CodeAwareCheckInputs {
+    locales_path: PathBuf,
+    locales: Vec<String>,
+    code: CheckCodeConfig,
+}
+
+pub(super) trait IntoCodeAwareCheckInputs {
+    fn into_code_aware_check_inputs(self) -> CodeAwareCheckInputs;
+}
+
+pub(super) trait CheckResultWithExtractionErrors {
+    fn set_extraction_errors(&mut self, extraction_errors: Vec<CodeExtractionError>);
+}
+
+impl IntoCodeAwareCheckInputs for CheckCodeAwareCheckConfig {
+    fn into_code_aware_check_inputs(self) -> CodeAwareCheckInputs {
+        CodeAwareCheckInputs {
+            locales_path: self.locales_path,
+            locales: self.locales,
+            code: CheckCodeConfig {
+                code_path: self.code_path,
+                i18n_keys: self.i18n_keys,
+                i18n_keys_prefix: self.i18n_keys_prefix,
+                exclude_dirs: self.exclude_dirs,
+                ignore_attributes: self.ignore_attributes,
+                ignore_kwargs: self.ignore_kwargs,
+                default_ftl_file: self.default_ftl_file,
+                cache: self.cache,
+                cache_path: self.cache_path,
+                clear_cache: self.clear_cache,
+            },
+        }
+    }
+}
+
+macro_rules! impl_check_result_with_extraction_errors {
+    ($result:ty) => {
+        impl CheckResultWithExtractionErrors for $result {
+            fn set_extraction_errors(&mut self, extraction_errors: Vec<CodeExtractionError>) {
+                self.extraction_errors = extraction_errors;
+            }
+        }
+    };
+}
+
+impl_check_result_with_extraction_errors!(CheckKwargsResult);
+impl_check_result_with_extraction_errors!(CheckMissingResult);
+impl_check_result_with_extraction_errors!(CheckStaleResult);

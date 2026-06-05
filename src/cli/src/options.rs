@@ -118,3 +118,132 @@ pub(crate) fn exit_config_error(error: anyhow::Error) -> ! {
     error!(target: "cli", "Configuration error: {}", error);
     std::process::exit(2);
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::args::FailSeverity;
+    use tempfile::TempDir;
+
+    #[test]
+    fn write_output_file_creates_parent_directories() {
+        let temp = TempDir::new().unwrap();
+        let path = temp.path().join("reports").join("ftl-check.json");
+
+        write_output_file(&path, "report".to_string()).unwrap();
+
+        assert_eq!(std::fs::read_to_string(path).unwrap(), "report");
+    }
+
+    #[test]
+    fn normalize_output_path_adds_extension_for_selected_format() {
+        assert_eq!(
+            normalize_output_path(PathBuf::from("report"), &CheckReportFormat::Json),
+            PathBuf::from("report.json")
+        );
+        assert_eq!(
+            normalize_output_path(PathBuf::from("report"), &CheckReportFormat::Terminal),
+            PathBuf::from("report.txt")
+        );
+    }
+
+    #[test]
+    fn normalize_output_path_preserves_existing_extension() {
+        assert_eq!(
+            normalize_output_path(PathBuf::from("report.out"), &CheckReportFormat::Json),
+            PathBuf::from("report.out")
+        );
+    }
+
+    #[test]
+    fn cli_or_config_vec_prefers_cli_then_config_then_default() {
+        assert_eq!(
+            cli_or_config_vec(vec!["cli"], Some(vec!["config"]), vec!["default"]),
+            vec!["cli"]
+        );
+        assert_eq!(
+            cli_or_config_vec(Vec::<&str>::new(), Some(vec!["config"]), vec!["default"]),
+            vec!["config"]
+        );
+        assert_eq!(
+            cli_or_config_vec(Vec::<&str>::new(), None, vec!["default"]),
+            vec!["default"]
+        );
+    }
+
+    #[test]
+    fn cli_or_config_path_resolves_config_relative_to_base() {
+        let base = Path::new("project");
+
+        assert_eq!(
+            cli_or_config_path(
+                Some(PathBuf::from("cli")),
+                Some(PathBuf::from("config")),
+                base
+            ),
+            Some(PathBuf::from("cli"))
+        );
+        assert_eq!(
+            cli_or_config_path(None, Some(PathBuf::from("config")), base),
+            Some(PathBuf::from("project").join("config"))
+        );
+    }
+
+    #[test]
+    fn resolve_required_path_reports_missing_path() {
+        let error = resolve_required_path(None, None, Path::new("."), "missing path").unwrap_err();
+
+        assert_eq!(error.to_string(), "missing path");
+    }
+
+    #[test]
+    fn cli_or_config_enum_parses_config_and_reports_invalid_values() {
+        assert_eq!(
+            cli_or_config_enum::<CheckReportFormat>(
+                None,
+                Some("terminal".to_string()),
+                "report-format"
+            )
+            .unwrap(),
+            Some(CheckReportFormat::Terminal)
+        );
+
+        let error =
+            cli_or_config_enum::<CheckReportFormat>(None, Some("xml".to_string()), "report-format")
+                .unwrap_err();
+        assert!(error.to_string().contains("Invalid `report-format` value"));
+    }
+
+    #[test]
+    fn cli_or_config_enum_vec_prefers_cli_and_reports_invalid_values() {
+        assert_eq!(
+            cli_or_config_enum_vec(
+                vec![FailSeverity::Warn],
+                Some(vec!["error".to_string()]),
+                "fail-on",
+                vec![FailSeverity::Error]
+            )
+            .unwrap(),
+            vec![FailSeverity::Warn]
+        );
+        assert_eq!(
+            cli_or_config_enum_vec::<FailSeverity>(
+                Vec::new(),
+                None,
+                "fail-on",
+                vec![FailSeverity::Error]
+            )
+            .unwrap(),
+            vec![FailSeverity::Error]
+        );
+
+        let error = cli_or_config_enum_vec::<FailSeverity>(
+            Vec::new(),
+            Some(vec!["fatal".to_string()]),
+            "fail-on",
+            Vec::new(),
+        )
+        .unwrap_err();
+        assert!(error.to_string().contains("Invalid `fail-on` value"));
+    }
+}

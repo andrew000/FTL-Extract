@@ -315,11 +315,13 @@ mod tests {
     fn test_cache_file_path_uses_versioned_name_for_directories() {
         assert_eq!(
             cache_file_path(None),
-            PathBuf::from(".ftl-extract-cache").join("extract-0.11.0-v2.bin")
+            PathBuf::from(".ftl-extract-cache")
+                .join(format!("extract-{}-v2.bin", env!("CARGO_PKG_VERSION")))
         );
         assert_eq!(
             cache_file_path(Some(Path::new("cache-dir"))),
-            PathBuf::from("cache-dir").join("extract-0.11.0-v2.bin")
+            PathBuf::from("cache-dir")
+                .join(format!("extract-{}-v2.bin", env!("CARGO_PKG_VERSION")))
         );
         assert_eq!(
             cache_file_path(Some(Path::new("custom.bin"))),

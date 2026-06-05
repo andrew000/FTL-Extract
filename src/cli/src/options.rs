@@ -1,4 +1,4 @@
-use crate::args::CheckOutputFormat;
+use crate::args::CheckReportFormat;
 use crate::config::resolve_config_path;
 use anyhow::{Context, Result};
 use clap::ValueEnum;
@@ -14,14 +14,14 @@ pub(crate) fn write_output_file(path: &Path, content: String) -> std::io::Result
     std::fs::write(path, content)
 }
 
-pub(crate) fn normalize_output_path(path: PathBuf, format: &CheckOutputFormat) -> PathBuf {
+pub(crate) fn normalize_output_path(path: PathBuf, format: &CheckReportFormat) -> PathBuf {
     if path.extension().is_some() {
         return path;
     }
 
     let suffix = match format {
-        CheckOutputFormat::Terminal => "txt",
-        CheckOutputFormat::Json => "json",
+        CheckReportFormat::Terminal => "txt",
+        CheckReportFormat::Json => "json",
     };
 
     path.with_extension(suffix)

@@ -29,7 +29,7 @@ pub struct FtlExtractConfig {
 #[serde(rename_all = "kebab-case")]
 pub struct ExtractPyprojectConfig {
     pub code_path: Option<PathBuf>,
-    pub output_path: Option<PathBuf>,
+    pub locales_path: Option<PathBuf>,
     pub languages: Option<Vec<String>>,
     pub i18n_keys: Option<Vec<String>>,
     pub i18n_keys_append: Option<Vec<String>>,
@@ -52,8 +52,8 @@ pub struct ExtractPyprojectConfig {
 #[derive(Debug, Clone, Default, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub struct StubPyprojectConfig {
-    pub ftl_path: Option<PathBuf>,
-    pub output_path: Option<PathBuf>,
+    pub locales_path: Option<PathBuf>,
+    pub stub_path: Option<PathBuf>,
     pub export_tree: Option<bool>,
 }
 
@@ -66,8 +66,8 @@ pub struct CheckPyprojectConfig {
     pub checks: Option<Vec<String>>,
     pub suggest_from: Option<Vec<String>>,
     pub fail_on: Option<Vec<String>>,
-    pub output: Option<PathBuf>,
-    pub output_format: Option<String>,
+    pub report_path: Option<PathBuf>,
+    pub report_format: Option<String>,
 }
 
 pub fn load_pyproject_config(path: Option<PathBuf>) -> Result<Option<LoadedProjectConfig>> {
@@ -133,7 +133,7 @@ static FULL_SAMPLE: LazyLock<String> =
 
 const EXTRACT_SAMPLE: &str = r#"[tool.ftl-extract.extract]
 code-path = "app/bot"
-output-path = "app/bot/locales"
+locales-path = "app/bot/locales"
 languages = ["en", "uk"]
 i18n-keys-append = ["LF", "LazyProxy"]
 ignore-attributes-append = ["core"]
@@ -146,8 +146,8 @@ cache = true
 "#;
 
 const STUB_SAMPLE: &str = r#"[tool.ftl-extract.stub]
-ftl-path = "app/bot/locales/en"
-output-path = "app/bot/stub.pyi"
+locales-path = "app/bot/locales/en"
+stub-path = "app/bot/stub.pyi"
 export-tree = false
 "#;
 
@@ -158,8 +158,8 @@ languages = ["uk", "pl"]
 checks = ["all"]
 suggest-from = ["en"]
 fail-on = ["error"]
-output = "reports/ftl-check"
-output-format = "json"
+report-path = "reports/ftl-check"
+report-format = "json"
 
 # Check presets:
 # checks = ["all"]
@@ -201,19 +201,19 @@ mod tests {
             r#"
 [tool.ftl-extract.extract]
 code-path = "app"
-output-path = "locales"
+locales-path = "locales"
 languages = ["en", "uk"]
 comment-keys-mode = "warn"
 
 [tool.ftl-extract.stub]
-ftl-path = "locales/en"
-output-path = "app/stub.pyi"
+locales-path = "locales/en"
+stub-path = "app/stub.pyi"
 
 [tool.ftl-extract.check]
 locales-path = "locales"
 code-path = "app"
 checks = ["all"]
-output-format = "json"
+report-format = "json"
 "#,
         )
         .unwrap();
@@ -223,19 +223,19 @@ output-format = "json"
         assert_eq!(loaded.base_dir, temp.path());
         let extract = loaded.config.extract.unwrap();
         assert_eq!(extract.code_path, Some(PathBuf::from("app")));
-        assert_eq!(extract.output_path, Some(PathBuf::from("locales")));
+        assert_eq!(extract.locales_path, Some(PathBuf::from("locales")));
         assert_eq!(
             extract.languages,
             Some(vec!["en".to_string(), "uk".to_string()])
         );
         assert_eq!(extract.comment_keys_mode, Some("warn".to_string()));
         assert_eq!(
-            loaded.config.stub.unwrap().output_path,
+            loaded.config.stub.unwrap().stub_path,
             Some(PathBuf::from("app/stub.pyi"))
         );
         let check = loaded.config.check.unwrap();
         assert_eq!(check.code_path, Some(PathBuf::from("app")));
-        assert_eq!(check.output_format, Some("json".to_string()));
+        assert_eq!(check.report_format, Some("json".to_string()));
     }
 
     #[test]

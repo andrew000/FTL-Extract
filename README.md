@@ -46,7 +46,7 @@ You can also keep command defaults in `pyproject.toml`:
 ```toml
 [tool.ftl-extract.extract]
 code-path = "project_path/code_path"
-output-path = "project_path/locales"
+locales-path = "project_path/locales"
 languages = ["en", "uk"]
 i18n-keys-append = ["LF", "LazyProxy"]
 ignore-attributes-append = ["core"]

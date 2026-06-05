@@ -29,8 +29,8 @@ test-term-reference = Check this: { -warn-emoji }
         fs::write(ftl_dir.join("test.ftl"), test_ftl)?;
 
         let config = StubConfig {
-            ftl_path: ftl_dir,
-            output_path: output_file.clone(),
+            locales_path: ftl_dir,
+            stub_path: output_file.clone(),
             export_tree: false,
         };
 
@@ -68,8 +68,8 @@ test-term-reference = Check this: { -warn-emoji }
         fs::write(ftl_dir.join("test.ftl"), test_ftl)?;
 
         let config = StubConfig {
-            ftl_path: ftl_dir,
-            output_path: output_file.clone(),
+            locales_path: ftl_dir,
+            stub_path: output_file.clone(),
             export_tree: true,
         };
 
@@ -93,8 +93,8 @@ test-term-reference = Check this: { -warn-emoji }
         fs::create_dir(&ftl_dir)?;
 
         let config = StubConfig {
-            ftl_path: ftl_dir,
-            output_path: output_file.clone(),
+            locales_path: ftl_dir,
+            stub_path: output_file.clone(),
             export_tree: false,
         };
 

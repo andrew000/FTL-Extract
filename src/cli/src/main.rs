@@ -3,7 +3,7 @@ mod check_runner;
 mod config;
 mod options;
 
-use crate::args::{CheckOutputFormat, Cli, Commands, ConfigCommands, FailSeverity};
+use crate::args::{CheckReportFormat, Cli, Commands, ConfigCommands, FailSeverity};
 use crate::check_runner::{CheckRunConfig, expand_check_kinds, run_check};
 use crate::config::{load_pyproject_config, render_config_sample};
 use crate::options::{
@@ -65,7 +65,7 @@ fn main() {
         }
         Some(Commands::Extract {
             code_path,
-            output_path,
+            locales_path,
             language,
             i18n_keys,
             i18n_keys_append,
@@ -101,11 +101,11 @@ fn main() {
                 Ok(path) => path,
                 Err(e) => exit_config_error(e),
             };
-            let output_path = match resolve_required_path(
-                output_path,
-                pyproject.output_path,
+            let locales_path = match resolve_required_path(
+                locales_path,
+                pyproject.locales_path,
                 base_dir,
-                "Missing output path. Pass it as an argument or set tool.ftl-extract.extract.output-path",
+                "Missing locales path. Pass locales path as an argument or set tool.ftl-extract.extract.locales-path",
             ) {
                 Ok(path) => path,
                 Err(e) => exit_config_error(e),
@@ -131,7 +131,7 @@ fn main() {
                 .unwrap_or(LineEndings::Default);
 
             info!(target: "cli", "Code path: {}", code_path.display());
-            info!(target: "cli", "Output path: {}", output_path.display());
+            info!(target: "cli", "Locales path: {}", locales_path.display());
 
             let mut i18n_keys_set: FastHashSet<String> = FastHashSet::from_iter(cli_or_config_vec(
                 i18n_keys,
@@ -170,7 +170,7 @@ fn main() {
 
             let config = ExtractConfig {
                 code_path,
-                output_path,
+                locales_path,
                 languages: cli_or_config_vec(language, pyproject.languages, vec!["en".to_string()]),
                 i18n_keys: i18n_keys_set,
                 i18n_keys_prefix: FastHashSet::from_iter(cli_or_config_vec(
@@ -219,8 +219,8 @@ fn main() {
             Some(start_time.elapsed())
         }
         Some(Commands::Stub {
-            ftl_path,
-            output_path,
+            locales_path,
+            stub_path,
             export_tree,
         }) => {
             let config_source = project_config.as_ref();
@@ -230,31 +230,31 @@ fn main() {
             let base_dir = config_source
                 .map(|loaded| loaded.base_dir.as_path())
                 .unwrap_or_else(|| Path::new("."));
-            let ftl_path = match resolve_required_path(
-                ftl_path,
-                pyproject.ftl_path,
+            let locales_path = match resolve_required_path(
+                locales_path,
+                pyproject.locales_path,
                 base_dir,
-                "Missing FTL path. Pass it as an argument or set tool.ftl-extract.stub.ftl-path",
+                "Missing locales path. Pass it as an argument or set tool.ftl-extract.stub.locales-path",
             ) {
                 Ok(path) => path,
                 Err(e) => exit_config_error(e),
             };
-            let output_path = match resolve_required_path(
-                output_path,
-                pyproject.output_path,
+            let stub_path = match resolve_required_path(
+                stub_path,
+                pyproject.stub_path,
                 base_dir,
-                "Missing output path. Pass it as an argument or set tool.ftl-extract.stub.output-path",
+                "Missing stub path. Pass it as an argument or set tool.ftl-extract.stub.stub-path",
             ) {
                 Ok(path) => path,
                 Err(e) => exit_config_error(e),
             };
 
-            info!(target: "cli", "FTL path: {}", ftl_path.display());
-            info!(target: "cli", "Output path: {}", output_path.display());
+            info!(target: "cli", "Locales path: {}", locales_path.display());
+            info!(target: "cli", "Stub path: {}", stub_path.display());
 
             let config = StubConfig {
-                ftl_path,
-                output_path,
+                locales_path,
+                stub_path,
                 export_tree: export_tree || pyproject.export_tree.unwrap_or(false),
             };
 
@@ -277,8 +277,8 @@ fn main() {
             language,
             suggest_from,
             fail_on,
-            output,
-            output_format,
+            report_path,
+            report_format,
         }) => {
             let config_source = project_config.as_ref();
             let pyproject = config_source
@@ -315,13 +315,13 @@ fn main() {
             );
             let cache_path =
                 cli_or_config_path(None, extract_pyproject.cache_path.clone(), base_dir);
-            let output_format =
-                match cli_or_config_enum(output_format, pyproject.output_format, "output-format") {
-                    Ok(output_format) => output_format,
+            let report_format =
+                match cli_or_config_enum(report_format, pyproject.report_format, "report-format") {
+                    Ok(report_format) => report_format,
                     Err(e) => exit_config_error(e),
                 };
-            let output_format = output_format.unwrap_or(CheckOutputFormat::Json);
-            let output = cli_or_config_path(output, pyproject.output, base_dir);
+            let report_format = report_format.unwrap_or(CheckReportFormat::Json);
+            let report = cli_or_config_path(report_path, pyproject.report_path, base_dir);
             let fail_on = match cli_or_config_enum_vec(
                 fail_on,
                 pyproject.fail_on,
@@ -393,24 +393,24 @@ fn main() {
                 Ok(result) => {
                     println!("{}", render_check_terminal(&result));
 
-                    if let Some(output_path) = output {
-                        let output_path = normalize_output_path(output_path, &output_format);
-                        let output_content = match output_format {
-                            CheckOutputFormat::Terminal => render_check_terminal(&result),
-                            CheckOutputFormat::Json => render_check_json(&result),
+                    if let Some(report_path) = report {
+                        let report_path = normalize_output_path(report_path, &report_format);
+                        let report_content = match report_format {
+                            CheckReportFormat::Terminal => render_check_terminal(&result),
+                            CheckReportFormat::Json => render_check_json(&result),
                         };
 
-                        if let Err(e) = write_output_file(&output_path, output_content) {
+                        if let Err(e) = write_output_file(&report_path, report_content) {
                             error!(
                                 target: "cli",
-                                "Failed to write output file `{}`: {}",
-                                output_path.display(),
+                                "Failed to write report file `{}`: {}",
+                                report_path.display(),
                                 e
                             );
                             std::process::exit(1);
                         }
 
-                        info!(target: "cli", "Saved report to {}", output_path.display());
+                        info!(target: "cli", "Saved report to {}", report_path.display());
                     }
 
                     if has_failing_diagnostics(&result, &fail_on) {

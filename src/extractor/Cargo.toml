@@ -22,7 +22,6 @@ log.workspace = true
 ruff_python_ast.workspace = true
 ruff_python_parser.workspace = true
 
-globset.workspace = true
 bincode-next = { version = "3.0.0-rc.15", features = ["derive"] }
 memchr = { version = "2.8.1" }
 memmap2 = { version = "0.9.10" }

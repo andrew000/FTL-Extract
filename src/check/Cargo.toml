@@ -16,7 +16,6 @@ name = "check"
 anyhow.workspace = true
 extractor = { path = "../extractor" }
 fluent-syntax.workspace = true
-globset.workspace = true
 ignore.workspace = true
 serde_json.workspace = true
 

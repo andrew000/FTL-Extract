@@ -1,4 +1,6 @@
-use crate::ftl::code_extractor::{extract_fluent_keys, sort_fluent_keys_by_path};
+use crate::ftl::code_extractor::{
+    build_exclude_matcher, extract_fluent_keys, sort_fluent_keys_by_path,
+};
 use crate::ftl::consts::{CommentsKeyModes, LineEndings};
 use crate::ftl::ftl_importer::import_ftl_from_dir;
 use crate::ftl::matcher::{FluentEntry, FluentKey};
@@ -7,7 +9,6 @@ use crate::ftl::process::kwargs_extractor::extract_kwargs;
 use crate::ftl::process::serializer::generate_ftl;
 use crate::ftl::utils::{ExtractionStatistics, FastHashMap, FastHashSet};
 use anyhow::Result;
-use globset::{Glob, GlobSetBuilder};
 use log::{debug, info, warn};
 use rayon::prelude::{IntoParallelRefIterator, ParallelIterator};
 use std::fs;
@@ -42,19 +43,14 @@ pub fn extract(config: ExtractConfig) -> Result<ExtractionStatistics> {
         statistics.init_lang(lang);
     }
 
-    // GlobSet for exclusions
-    let mut ignore_builder = GlobSetBuilder::new();
-    for exclude in &config.exclude_dirs {
-        ignore_builder.add(Glob::new(exclude.as_str())?);
-    }
-    let ignore_set = ignore_builder.build()?;
+    let exclude_matcher = build_exclude_matcher(&config.code_path, &config.exclude_dirs)?;
 
     let start = std::time::Instant::now();
     let in_code_fluent_keys = extract_fluent_keys(
         &config.code_path,
         config.i18n_keys.clone(),
         config.i18n_keys_prefix.clone(),
-        &ignore_set,
+        &exclude_matcher,
         config.ignore_attributes.clone(),
         config.ignore_kwargs.clone(),
         &config.default_ftl_file,

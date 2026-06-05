@@ -7,10 +7,11 @@ use crate::ftl::diagnostics::{
 };
 use crate::ftl::matcher::{FluentEntry, FluentKey, I18nMatcher};
 use crate::ftl::utils::{ExtractionStatistics, FastHashMap, FastHashSet};
+use anyhow::Result;
 use fluent::types::AnyEq;
-use globset::GlobSet;
-use ignore::WalkBuilder;
+use ignore::overrides::{Override, OverrideBuilder};
 use ignore::types::TypesBuilder;
+use ignore::{WalkBuilder, WalkState};
 use log::error;
 use memchr::memmem;
 use memmap2::Mmap;
@@ -20,6 +21,7 @@ use std::collections::hash_map::Entry;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use std::sync::Mutex;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 #[derive(Clone, Debug)]
@@ -29,7 +31,23 @@ struct PyFile {
     modified_ns: u128,
 }
 
-fn find_py_files(search_path: &Path, ignore_set: &GlobSet) -> Vec<PyFile> {
+pub type ExcludeMatcher = Override;
+
+pub fn build_exclude_matcher(
+    root: &Path,
+    exclude_dirs: &FastHashSet<String>,
+) -> Result<ExcludeMatcher> {
+    let mut builder = OverrideBuilder::new(root);
+    for exclude in exclude_dirs {
+        builder.add(&format!("!{exclude}"))?;
+        if let Some(directory_exclude) = exclude.strip_suffix("/**") {
+            builder.add(&format!("!{directory_exclude}"))?;
+        }
+    }
+    Ok(builder.build()?)
+}
+
+fn find_py_files(search_path: &Path, exclude_matcher: &ExcludeMatcher) -> Vec<PyFile> {
     let mut result_paths: Vec<PyFile> = Vec::new();
 
     if search_path.is_dir() {
@@ -37,35 +55,44 @@ fn find_py_files(search_path: &Path, ignore_set: &GlobSet) -> Vec<PyFile> {
         type_builder.add("py", "*.py").unwrap();
         type_builder.select("py");
 
-        let walker = WalkBuilder::new(search_path)
+        let result_paths_parallel = Arc::new(Mutex::new(Vec::new()));
+        WalkBuilder::new(search_path)
             .parents(false)
             .ignore(false)
             .git_global(false)
             .git_exclude(false)
             .require_git(false)
+            .overrides(exclude_matcher.clone())
             .types(type_builder.build().unwrap())
-            .build();
-
-        for result in walker {
-            match result {
-                Ok(entry) => {
-                    let path = entry.path();
-                    if entry.file_type().is_some_and(|ft| ft.is_file())
-                        && !ignore_set.is_match(path)
-                        && let Ok(metadata) = entry.metadata()
-                    {
-                        result_paths.push(PyFile {
-                            path: path.to_path_buf(),
-                            size: metadata.len(),
-                            modified_ns: file_modified_ns(&metadata),
-                        });
+            .build_parallel()
+            .run(|| {
+                let result_paths = Arc::clone(&result_paths_parallel);
+                Box::new(move |result| {
+                    match result {
+                        Ok(entry) => {
+                            let path = entry.path();
+                            if entry.file_type().is_some_and(|ft| ft.is_file())
+                                && let Ok(metadata) = entry.metadata()
+                            {
+                                result_paths.lock().unwrap().push(PyFile {
+                                    path: path.to_path_buf(),
+                                    size: metadata.len(),
+                                    modified_ns: file_modified_ns(&metadata),
+                                });
+                            }
+                        }
+                        Err(err) => error!(target: "extractor:code", "{}", err),
                     }
-                }
-                Err(err) => error!(target: "extractor:code", "{}", err),
-            }
-        }
+                    WalkState::Continue
+                })
+            });
+        result_paths = Arc::into_inner(result_paths_parallel)
+            .unwrap()
+            .into_inner()
+            .unwrap();
     } else if search_path.is_file()
         && search_path.extension().unwrap_or_default() == "py"
+        && !exclude_matcher.matched(search_path, false).is_ignore()
         && let Ok(metadata) = fs::metadata(search_path)
     {
         result_paths.push(PyFile {
@@ -75,6 +102,7 @@ fn find_py_files(search_path: &Path, ignore_set: &GlobSet) -> Vec<PyFile> {
         });
     }
 
+    result_paths.sort_by(|a, b| a.path.cmp(&b.path));
     result_paths
 }
 fn parse_file(
@@ -394,7 +422,7 @@ pub(crate) fn extract_fluent_keys<'a>(
     path: &'a Path,
     i18n_keys: FastHashSet<String>,
     i18n_keys_prefix: FastHashSet<String>,
-    exclude_dirs: &GlobSet,
+    exclude_dirs: &ExcludeMatcher,
     ignore_attributes: FastHashSet<String>,
     ignore_kwargs: FastHashSet<String>,
     default_ftl_file: &'a Path,
@@ -565,7 +593,7 @@ pub fn extract_code_with_diagnostics(
     path: &Path,
     i18n_keys: FastHashSet<String>,
     i18n_keys_prefix: FastHashSet<String>,
-    exclude_dirs: &GlobSet,
+    exclude_dirs: &ExcludeMatcher,
     ignore_attributes: FastHashSet<String>,
     ignore_kwargs: FastHashSet<String>,
     default_ftl_file: &Path,
@@ -589,7 +617,7 @@ pub fn extract_code_with_diagnostics_cached(
     path: &Path,
     i18n_keys: FastHashSet<String>,
     i18n_keys_prefix: FastHashSet<String>,
-    exclude_dirs: &GlobSet,
+    exclude_dirs: &ExcludeMatcher,
     ignore_attributes: FastHashSet<String>,
     ignore_kwargs: FastHashSet<String>,
     default_ftl_file: &Path,
@@ -727,9 +755,8 @@ mod tests {
     use crate::ftl::diagnostics::ExtractionDiagnosticKind;
     use crate::ftl::matcher::{FluentEntry, FluentKey};
     use crate::ftl::utils::{FastHashMap, FastHashSet};
-    use globset::GlobSet;
     use pretty_assertions::assert_eq;
-    use std::path::PathBuf;
+    use std::path::{Path, PathBuf};
     use std::sync::Arc;
     use tempfile::TempDir;
 
@@ -788,6 +815,10 @@ class Mock:
         std::fs::write(dir.join("classlike.py"), CLASSLIKE_PY).unwrap();
     }
 
+    fn empty_exclude_matcher(root: &Path) -> super::ExcludeMatcher {
+        super::build_exclude_matcher(root, &FastHashSet::default()).unwrap()
+    }
+
     #[test]
     fn test_find_py_files_dir() {
         let temp = TempDir::new().unwrap();
@@ -795,9 +826,30 @@ class Mock:
         std::fs::create_dir_all(&code_path).unwrap();
         write_python_fixture(&code_path);
 
-        let ignore_set = GlobSet::empty();
-        let py_files = super::find_py_files(&code_path, &ignore_set);
+        let py_files = super::find_py_files(&code_path, &empty_exclude_matcher(&code_path));
         assert_eq!(py_files.len(), 3);
+    }
+
+    #[test]
+    fn test_find_py_files_applies_exclude_dirs() {
+        let temp = TempDir::new().unwrap();
+        let code_path = temp.path().join("py");
+        let ignored_dir = code_path.join(".venv");
+        std::fs::create_dir_all(&ignored_dir).unwrap();
+        write_python_fixture(&code_path);
+        std::fs::write(ignored_dir.join("ignored.py"), r#"i18n.get("ignored")"#).unwrap();
+
+        let excludes = FastHashSet::from_iter(["**/.venv/**".to_string()]);
+        let matcher = super::build_exclude_matcher(&code_path, &excludes).unwrap();
+        let py_files = super::find_py_files(&code_path, &matcher);
+
+        assert_eq!(py_files.len(), 3);
+        assert!(py_files.iter().all(|file| {
+            !file
+                .path
+                .components()
+                .any(|part| part.as_os_str() == ".venv")
+        }));
     }
 
     #[test]
@@ -808,8 +860,7 @@ class Mock:
         write_python_fixture(&code_dir);
 
         let code_path = code_dir.join("default.py");
-        let ignore_set = GlobSet::empty();
-        let py_files = super::find_py_files(&code_path, &ignore_set);
+        let py_files = super::find_py_files(&code_path, &empty_exclude_matcher(&code_path));
         assert_eq!(py_files.len(), 1);
         assert_eq!(py_files[0].path, code_path);
     }
@@ -830,7 +881,7 @@ class Mock:
             &code_path,
             key_prefixes.clone(),
             FastHashSet::default(),
-            &GlobSet::empty(),
+            &empty_exclude_matcher(&code_path),
             FastHashSet::default(),
             FastHashSet::default(),
             &PathBuf::from("locales/en.ftl"),
@@ -894,7 +945,7 @@ unknown("ignored")
             &code_path,
             i18n_keys,
             prefixes,
-            &GlobSet::empty(),
+            &empty_exclude_matcher(&code_path),
             ignore_attributes,
             ignore_kwargs,
             &PathBuf::from("_default.ftl"),
@@ -947,7 +998,7 @@ unknown("ignored")
             &code_path,
             i18n_keys,
             FastHashSet::default(),
-            &GlobSet::empty(),
+            &empty_exclude_matcher(&code_path),
             FastHashSet::default(),
             FastHashSet::default(),
             &PathBuf::from("_default.ftl"),
@@ -985,7 +1036,7 @@ i18n.get("hello", _path="two.ftl")
             &code_path,
             i18n_keys,
             FastHashSet::default(),
-            &GlobSet::empty(),
+            &empty_exclude_matcher(&code_path),
             FastHashSet::default(),
             FastHashSet::default(),
             &PathBuf::from("_default.ftl"),
@@ -1018,7 +1069,7 @@ i18n.get("hello", _path="two.ftl")
             &code_dir,
             i18n_keys,
             FastHashSet::default(),
-            &GlobSet::empty(),
+            &empty_exclude_matcher(&code_dir),
             FastHashSet::default(),
             FastHashSet::default(),
             &PathBuf::from("_default.ftl"),

@@ -86,7 +86,7 @@ fn extract_reads_command_config_from_pyproject() {
         r#"
 [tool.ftl-extract.extract]
 code-path = "code"
-output-path = "locales"
+locales-path = "locales"
 languages = ["en", "uk"]
 line-endings = "lf"
 "#,
@@ -122,7 +122,7 @@ fn extract_cli_arguments_override_pyproject_config() {
         r#"
 [tool.ftl-extract.extract]
 code-path = "code"
-output-path = "locales"
+locales-path = "locales"
 languages = ["en"]
 "#,
     );
@@ -153,8 +153,8 @@ fn stub_reads_command_config_from_pyproject() {
         &pyproject(&temp),
         r#"
 [tool.ftl-extract.stub]
-ftl-path = "locales/en"
-output-path = "code/stub.pyi"
+locales-path = "locales/en"
+stub-path = "code/stub.pyi"
 "#,
     );
 
@@ -192,8 +192,8 @@ languages = ["uk"]
 checks = ["untranslated"]
 suggest-from = ["en"]
 fail-on = []
-output = "reports/ftl-check"
-output-format = "json"
+report-path = "reports/ftl-check"
+report-format = "json"
 "#,
     );
 
@@ -256,8 +256,8 @@ locales-path = "locales"
 languages = ["en"]
 checks = ["syntax"]
 fail-on = []
-output = "reports/ftl-check"
-output-format = "json"
+report-path = "reports/ftl-check"
+report-format = "json"
 "#,
     );
 
@@ -290,8 +290,8 @@ locales-path = "locales"
 languages = ["en"]
 checks = ["references"]
 fail-on = []
-output = "reports/ftl-check"
-output-format = "json"
+report-path = "reports/ftl-check"
+report-format = "json"
 "#,
     );
 
@@ -331,8 +331,8 @@ code-path = "code"
 languages = ["uk"]
 checks = ["missing"]
 fail-on = []
-output = "reports/ftl-check"
-output-format = "json"
+report-path = "reports/ftl-check"
+report-format = "json"
 "#,
     );
 
@@ -391,8 +391,8 @@ code-path = "code"
 languages = ["uk"]
 checks = ["stale"]
 fail-on = []
-output = "reports/ftl-check"
-output-format = "json"
+report-path = "reports/ftl-check"
+report-format = "json"
 "#,
     );
 
@@ -453,8 +453,8 @@ code-path = "code"
 languages = ["uk"]
 checks = ["kwargs"]
 fail-on = []
-output = "reports/ftl-check"
-output-format = "json"
+report-path = "reports/ftl-check"
+report-format = "json"
 "#,
     );
 
@@ -515,8 +515,8 @@ locales-path = "locales"
 code-path = "code"
 languages = ["uk"]
 fail-on = []
-output = "reports/ftl-check"
-output-format = "json"
+report-path = "reports/ftl-check"
+report-format = "json"
 "#,
     );
 
@@ -696,8 +696,8 @@ code-path = "code"
 languages = ["uk"]
 checks = ["kwargs", "missing", "syntax"]
 fail-on = []
-output = "reports/ftl-check"
-output-format = "json"
+report-path = "reports/ftl-check"
+report-format = "json"
 "#,
     );
 
@@ -774,8 +774,8 @@ code-path = "code"
 languages = ["uk"]
 checks = ["all"]
 fail-on = []
-output = "reports/ftl-check"
-output-format = "json"
+report-path = "reports/ftl-check"
+report-format = "json"
 "#,
     );
 
@@ -813,8 +813,8 @@ code-path = "code"
 languages = ["uk"]
 checks = ["missing", "stale", "kwargs"]
 fail-on = []
-output = "reports/ftl-check"
-output-format = "json"
+report-path = "reports/ftl-check"
+report-format = "json"
 "#,
     );
 
@@ -831,11 +831,4 @@ output-format = "json"
         count_occurrences(&report, "Fluent key hello has different paths"),
         1
     );
-}
-
-#[test]
-fn old_untranslated_command_is_removed() {
-    let output = ftl().arg("untranslated").output().unwrap();
-
-    assert!(!output.status.success());
 }

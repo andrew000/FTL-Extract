@@ -249,9 +249,9 @@ impl FluentVisitor {
     }
 }
 
-pub fn parse_ftl_files<P: AsRef<Path>>(ftl_path: P) -> Result<IndexMap<String, Message>> {
-    let ftl_path = ftl_path.as_ref();
-    debug!("Parsing FTL files from: {}", ftl_path.display());
+pub fn parse_ftl_files<P: AsRef<Path>>(locales_path: P) -> Result<IndexMap<String, Message>> {
+    let locales_path = locales_path.as_ref();
+    debug!("Parsing FTL files from: {}", locales_path.display());
 
     let mut visitor = FluentVisitor::new();
     let mut file_count = 0;
@@ -260,7 +260,7 @@ pub fn parse_ftl_files<P: AsRef<Path>>(ftl_path: P) -> Result<IndexMap<String, M
     type_builder.add("ftl", "*.ftl")?;
     type_builder.select("ftl");
 
-    let walker = WalkBuilder::new(ftl_path)
+    let walker = WalkBuilder::new(locales_path)
         .standard_filters(false)
         .types(type_builder.build()?)
         .build();

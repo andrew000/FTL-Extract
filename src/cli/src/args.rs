@@ -29,9 +29,9 @@ pub(crate) enum Commands {
         #[arg()]
         code_path: Option<PathBuf>,
 
-        /// Path to the output directory
+        /// Path to the locales directory
         #[arg()]
-        output_path: Option<PathBuf>,
+        locales_path: Option<PathBuf>,
 
         /// Language codes to extract
         #[arg(short = 'l', long)]
@@ -104,11 +104,11 @@ pub(crate) enum Commands {
     Stub {
         /// Path to the FTL files directory
         #[arg()]
-        ftl_path: Option<PathBuf>,
+        locales_path: Option<PathBuf>,
 
-        /// Output path for the .pyi stub file
+        /// Path for the .pyi stub file
         #[arg()]
-        output_path: Option<PathBuf>,
+        stub_path: Option<PathBuf>,
 
         /// Export intermediate tree structure as JSON
         #[arg(long, default_value_t = false)]
@@ -139,13 +139,13 @@ pub(crate) enum Commands {
         #[arg(long, value_enum, default_values_t = Vec::<FailSeverity>::new())]
         fail_on: Vec<FailSeverity>,
 
-        /// Output report path for batch processing
+        /// Report path for batch processing
         #[arg(long)]
-        output: Option<PathBuf>,
+        report_path: Option<PathBuf>,
 
-        /// Output format for report file
+        /// Format for report file
         #[arg(long, value_enum)]
-        output_format: Option<CheckOutputFormat>,
+        report_format: Option<CheckReportFormat>,
     },
 }
 
@@ -170,7 +170,7 @@ pub(crate) enum CheckKind {
 }
 
 #[derive(PartialEq, Clone, Debug, clap::ValueEnum)]
-pub(crate) enum CheckOutputFormat {
+pub(crate) enum CheckReportFormat {
     Terminal,
     Json,
 }

@@ -128,12 +128,9 @@ pub fn build_tree(messages: IndexMap<String, Message>) -> Result<IndexMap<String
     Ok(tree)
 }
 
-pub fn export_tree_json<P: AsRef<Path>>(
-    tree: &IndexMap<String, TreeNode>,
-    output_path: P,
-) -> Result<()> {
+pub fn export_tree_json<P: AsRef<Path>>(tree: &IndexMap<String, TreeNode>, path: P) -> Result<()> {
     let json = serde_json::to_string_pretty(tree)?;
-    std::fs::write(output_path, json)?;
+    std::fs::write(path, json)?;
     Ok(())
 }
 

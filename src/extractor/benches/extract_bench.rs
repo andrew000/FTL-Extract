@@ -10,14 +10,14 @@ use gen_fixtures::setup_large_fixtures;
 use std::path::PathBuf;
 use tempfile::TempDir;
 
-fn make_config(code_path: PathBuf, output_path: PathBuf, languages: Vec<&str>) -> ExtractConfig {
+fn make_config(code_path: PathBuf, locales_path: PathBuf, languages: Vec<&str>) -> ExtractConfig {
     let mut i18n_keys = DEFAULT_I18N_KEYS.clone();
     i18n_keys.insert("self".to_string());
     i18n_keys.insert("cls".to_string());
 
     ExtractConfig {
         code_path,
-        output_path,
+        locales_path,
         languages: languages.into_iter().map(String::from).collect(),
         i18n_keys,
         i18n_keys_prefix: FastHashSet::default(),

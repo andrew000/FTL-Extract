@@ -18,7 +18,7 @@ use std::sync::Arc;
 #[derive(Debug, Clone)]
 pub struct ExtractConfig {
     pub code_path: PathBuf,
-    pub output_path: PathBuf,
+    pub locales_path: PathBuf,
     pub languages: Vec<String>,
     pub i18n_keys: FastHashSet<String>,
     pub i18n_keys_prefix: FastHashSet<String>,
@@ -95,10 +95,10 @@ fn process_language(
     statistics: &mut ExtractionStatistics,
 ) -> Result<()> {
     let (mut stored_fluent_keys, mut stored_terms, mut leave_as_is) =
-        import_ftl_from_dir(&config.output_path, lang, statistics)?;
+        import_ftl_from_dir(&config.locales_path, lang, statistics)?;
 
     // Normalize paths relative to the language directory
-    let lang_dir = config.output_path.join(lang);
+    let lang_dir = config.locales_path.join(lang);
     normalize_paths(&mut stored_fluent_keys, &lang_dir);
     normalize_paths(&mut stored_terms, &lang_dir);
 
@@ -330,10 +330,10 @@ mod tests {
     use pretty_assertions::assert_eq;
     use tempfile::TempDir;
 
-    fn config(code_path: PathBuf, output_path: PathBuf) -> ExtractConfig {
+    fn config(code_path: PathBuf, locales_path: PathBuf) -> ExtractConfig {
         ExtractConfig {
             code_path,
-            output_path,
+            locales_path,
             languages: vec!["en".to_string()],
             i18n_keys: DEFAULT_I18N_KEYS.clone(),
             i18n_keys_prefix: FastHashSet::default(),
@@ -355,7 +355,7 @@ mod tests {
     fn test_extract_writes_new_keys_and_reuses_cache() {
         let temp = TempDir::new().unwrap();
         let code_path = temp.path().join("code");
-        let output_path = temp.path().join("locales");
+        let locales_path = temp.path().join("locales");
         let cache_path = temp.path().join("cache");
         fs::create_dir_all(&code_path).unwrap();
 
@@ -368,7 +368,7 @@ i18n.page.title(_path="pages/main.ftl")
         )
         .unwrap();
 
-        let mut first = config(code_path.clone(), output_path.clone());
+        let mut first = config(code_path.clone(), locales_path.clone());
         first.cache = true;
         first.cache_path = Some(cache_path.clone());
         first.clear_cache = true;
@@ -382,16 +382,16 @@ i18n.page.title(_path="pages/main.ftl")
         assert!(cache_path.join("extract-0.11.0-v2.bin").exists());
 
         let default_content =
-            fs::read_to_string(output_path.join("en").join("_default.ftl")).unwrap();
+            fs::read_to_string(locales_path.join("en").join("_default.ftl")).unwrap();
         assert!(default_content.contains("hello = hello"));
         assert!(default_content.contains("{ $name }"));
         assert!(default_content.contains("\r\n"));
 
         let nested_content =
-            fs::read_to_string(output_path.join("en").join("pages").join("main.ftl")).unwrap();
+            fs::read_to_string(locales_path.join("en").join("pages").join("main.ftl")).unwrap();
         assert!(nested_content.contains("page-title = page-title"));
 
-        let mut second = config(code_path, output_path);
+        let mut second = config(code_path, locales_path);
         second.cache = true;
         second.cache_path = Some(cache_path);
 
@@ -407,8 +407,8 @@ i18n.page.title(_path="pages/main.ftl")
     fn test_extract_updates_kwargs_and_comments_obsolete_keys() {
         let temp = TempDir::new().unwrap();
         let code_path = temp.path().join("code");
-        let output_path = temp.path().join("locales");
-        let locale_path = output_path.join("en");
+        let locales_path = temp.path().join("locales");
+        let locale_path = locales_path.join("en");
         fs::create_dir_all(&code_path).unwrap();
         fs::create_dir_all(&locale_path).unwrap();
 
@@ -423,12 +423,12 @@ i18n.page.title(_path="pages/main.ftl")
         )
         .unwrap();
 
-        let stats = extract(config(code_path, output_path.clone())).unwrap();
+        let stats = extract(config(code_path, locales_path.clone())).unwrap();
 
         assert_eq!(stats.ftl_keys_updated["en"], 1);
         assert_eq!(stats.ftl_keys_commented["en"], 2);
 
-        let output = fs::read_to_string(output_path.join("en").join("_default.ftl")).unwrap();
+        let output = fs::read_to_string(locales_path.join("en").join("_default.ftl")).unwrap();
         assert!(output.contains("# hello = Hello"));
         assert!(output.contains("hello = hello"));
         assert!(output.contains("{ $name }"));
@@ -439,8 +439,8 @@ i18n.page.title(_path="pages/main.ftl")
     fn test_extract_updates_key_when_path_changes() {
         let temp = TempDir::new().unwrap();
         let code_path = temp.path().join("code");
-        let output_path = temp.path().join("locales");
-        let locale_path = output_path.join("en");
+        let locales_path = temp.path().join("locales");
+        let locale_path = locales_path.join("en");
         fs::create_dir_all(&code_path).unwrap();
         fs::create_dir_all(&locale_path).unwrap();
 
@@ -451,7 +451,7 @@ i18n.page.title(_path="pages/main.ftl")
         .unwrap();
         fs::write(locale_path.join("_default.ftl"), "moved = Old path\n").unwrap();
 
-        let stats = extract(config(code_path, output_path.clone())).unwrap();
+        let stats = extract(config(code_path, locales_path.clone())).unwrap();
 
         assert_eq!(stats.ftl_keys_updated["en"], 1);
         assert_eq!(stats.ftl_keys_commented["en"], 1);
@@ -504,8 +504,8 @@ i18n.page.title(_path="pages/main.ftl")
     fn test_extract_warn_mode_dry_run_does_not_rewrite_file() {
         let temp = TempDir::new().unwrap();
         let code_path = temp.path().join("code");
-        let output_path = temp.path().join("locales");
-        let locale_path = output_path.join("en");
+        let locales_path = temp.path().join("locales");
+        let locale_path = locales_path.join("en");
         fs::create_dir_all(&code_path).unwrap();
         fs::create_dir_all(&locale_path).unwrap();
 
@@ -513,7 +513,7 @@ i18n.page.title(_path="pages/main.ftl")
         let ftl_path = locale_path.join("_default.ftl");
         fs::write(&ftl_path, "obsolete = Obsolete\n").unwrap();
 
-        let mut cfg = config(code_path, output_path);
+        let mut cfg = config(code_path, locales_path);
         cfg.comment_keys_mode = CommentsKeyModes::Warn;
         cfg.dry_run = true;
 

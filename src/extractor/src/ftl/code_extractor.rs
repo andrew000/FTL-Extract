@@ -809,7 +809,7 @@ class Mock:
         cls.cls_i18n.get("cls-get-key", some_kwarg="...", _path="classlike.ftl")
 "#;
 
-    fn write_python_fixture(dir: &std::path::Path) {
+    fn write_python_fixture(dir: &Path) {
         std::fs::write(dir.join("__init__.py"), "").unwrap();
         std::fs::write(dir.join("default.py"), DEFAULT_PY).unwrap();
         std::fs::write(dir.join("classlike.py"), CLASSLIKE_PY).unwrap();

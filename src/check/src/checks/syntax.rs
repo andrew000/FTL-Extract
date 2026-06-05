@@ -84,4 +84,25 @@ mod tests {
         assert!(result.errors.is_empty());
         Ok(())
     }
+
+    #[test]
+    fn test_check_syntax_rejects_variable_term_argument_value() -> Result<()> {
+        let temp_dir = TempDir::new()?;
+        let locales = temp_dir.path().join("locales");
+        fs::create_dir_all(locales.join("en"))?;
+
+        fs::write(
+            locales.join("en").join("_default.ftl"),
+            "title = { -brand(case: $brand_case) }\n-brand = Brand\n",
+        )?;
+
+        let result = check_syntax(CheckSyntaxConfig {
+            locales_path: locales,
+            locales: vec!["en".to_string()],
+        })?;
+
+        assert_eq!(result.errors.len(), 1);
+        assert!(result.errors[0].message.contains("Expected"));
+        Ok(())
+    }
 }

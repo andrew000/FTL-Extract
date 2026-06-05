@@ -239,12 +239,27 @@ report-format = "json"
     }
 
     #[test]
+    fn load_missing_pyproject_config_errors() {
+        let temp = TempDir::new().unwrap();
+        let missing = temp.path().join("missing-pyproject.toml");
+
+        let error = load_pyproject_config(Some(missing)).unwrap_err();
+
+        assert!(error.to_string().contains("does not exist"));
+    }
+
+    #[test]
     fn resolve_relative_config_paths_from_config_directory() {
         let base = Path::new("project");
 
         assert_eq!(
             resolve_config_path(Some(PathBuf::from("locales")), base),
             Some(PathBuf::from("project").join("locales"))
+        );
+        let absolute = std::env::current_dir().unwrap().join("locales");
+        assert_eq!(
+            resolve_config_path(Some(absolute.clone()), base),
+            Some(absolute)
         );
     }
 
@@ -264,5 +279,17 @@ report-format = "json"
         assert!(sample.contains("[tool.ftl-extract.extract]"));
         assert!(!sample.contains("[tool.ftl-extract.stub]"));
         assert!(!sample.contains("[tool.ftl-extract.check]"));
+
+        let sample = render_config_sample(Some(ConfigSampleCommand::Stub));
+
+        assert!(!sample.contains("[tool.ftl-extract.extract]"));
+        assert!(sample.contains("[tool.ftl-extract.stub]"));
+        assert!(!sample.contains("[tool.ftl-extract.check]"));
+
+        let sample = render_config_sample(Some(ConfigSampleCommand::Check));
+
+        assert!(!sample.contains("[tool.ftl-extract.extract]"));
+        assert!(!sample.contains("[tool.ftl-extract.stub]"));
+        assert!(sample.contains("[tool.ftl-extract.check]"));
     }
 }

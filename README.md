@@ -58,7 +58,7 @@ line-endings = "lf"
 cache = true
 
 [tool.ftl-extract.stub]
-ftl-path = "project_path/locales/en"
+locales-path = "project_path/locales/en"
 stub-path = "project_path/code_path/stub.pyi"
 export-tree = false
 

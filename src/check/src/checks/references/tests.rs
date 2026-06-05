@@ -119,6 +119,41 @@ fn test_check_references_accepts_existing_message_attribute() -> Result<()> {
 }
 
 #[test]
+fn test_check_references_reports_missing_references_in_select_variants() -> Result<()> {
+    let temp_dir = TempDir::new()?;
+    let locales = temp_dir.path().join("locales");
+    fs::create_dir_all(locales.join("en"))?;
+    fs::write(
+        locales.join("en").join("_default.ftl"),
+        r#"choice = { $count ->
+    [one] { missing-one }
+   *[other] { -missing-term }
+}
+"#,
+    )?;
+
+    let result = check_references(CheckReferencesConfig {
+        locales_path: locales,
+        locales: vec!["en".to_string()],
+    })?;
+
+    assert_eq!(result.missing_references.len(), 2);
+    assert!(
+        result
+            .missing_references
+            .iter()
+            .any(|item| item.reference == "missing-one")
+    );
+    assert!(
+        result
+            .missing_references
+            .iter()
+            .any(|item| item.reference == "-missing-term")
+    );
+    Ok(())
+}
+
+#[test]
 fn test_check_references_reports_real_source_line() -> Result<()> {
     let temp_dir = TempDir::new()?;
     let locales = temp_dir.path().join("locales");

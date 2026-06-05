@@ -59,7 +59,7 @@ cache = true
 
 [tool.ftl-extract.stub]
 ftl-path = "project_path/locales/en"
-output-path = "project_path/code_path/stub.pyi"
+stub-path = "project_path/code_path/stub.pyi"
 export-tree = false
 
 [tool.ftl-extract.check]
@@ -69,8 +69,8 @@ languages = ["uk"]
 checks = ["all"]
 suggest-from = ["en"]
 fail-on = ["error"]
-output = "reports/ftl-check"
-output-format = "json"
+report-path = "reports/ftl-check"
+report-format = "json"
 ```
 
 Then run commands without repeating the configured paths:
@@ -178,8 +178,8 @@ $ ftl check project_path/locales --code-path project_path/code_path -l uk --sugg
 - `-l` or `--language` - check only selected locales. Can be passed multiple times.
 - `--suggest-from` - locale(s) used to suggest non-placeholder translations for missing items. Can be passed multiple times.
 - `--fail-on` - minimum diagnostic severity that should return exit code `1`, for example `--fail-on error`. `--fail-on warn` also fails on errors.
-- `--output` - optional output file path for batch processing reports. If no extension is provided, `.txt` or `.json` is appended automatically based on `--output-format`.
-- `--output-format` - report file format: `terminal` or `json` (default: `json`).
+- `--report-path` - optional report file path for batch processing reports. If no extension is provided, `.txt` or `.json` is appended automatically based on `--report-format`.
+- `--report-format` - report file format: `terminal` or `json` (default: `json`).
 
 In default/all mode, `ftl check` runs syntax validation first. If syntax errors are found, the remaining checks are
 skipped until the Fluent files are fixed, and the command still returns a normal check report. The process exit code is
@@ -202,8 +202,8 @@ languages = ["uk", "pl"]
 checks = ["all"]
 suggest-from = ["en"]
 fail-on = ["error"]
-output = "reports/ftl-check"
-output-format = "json"
+report-path = "reports/ftl-check"
+report-format = "json"
 ```
 
 Check only untranslated placeholders. This check does not need `code-path`:
@@ -215,7 +215,7 @@ languages = ["uk", "pl"]
 checks = ["untranslated"]
 suggest-from = ["en"]
 fail-on = ["error"]
-output-format = "terminal"
+report-format = "terminal"
 ```
 
 Check only Fluent syntax errors. This check does not need `code-path`:
@@ -226,7 +226,7 @@ locales-path = "app/bot/locales"
 languages = ["uk", "pl"]
 checks = ["syntax"]
 fail-on = ["error"]
-output-format = "terminal"
+report-format = "terminal"
 ```
 
 Check only missing message and term references inside `.ftl` files. This check does not need `code-path`:
@@ -237,7 +237,7 @@ locales-path = "app/bot/locales"
 languages = ["uk", "pl"]
 checks = ["references"]
 fail-on = ["error"]
-output-format = "terminal"
+report-format = "terminal"
 ```
 
 Check keys used in Python but missing from locale files. This check requires `code-path`:
@@ -250,7 +250,7 @@ languages = ["uk", "pl"]
 checks = ["missing"]
 suggest-from = ["en"]
 fail-on = ["error"]
-output-format = "terminal"
+report-format = "terminal"
 ```
 
 Check stale `.ftl` messages that are not used by Python. This check requires `code-path`:
@@ -262,7 +262,7 @@ code-path = "app/bot"
 languages = ["uk", "pl"]
 checks = ["stale"]
 fail-on = ["error"]
-output-format = "terminal"
+report-format = "terminal"
 ```
 
 Check Python keyword arguments against Fluent variables. This check requires `code-path`:
@@ -274,7 +274,7 @@ code-path = "app/bot"
 languages = ["uk", "pl"]
 checks = ["kwargs"]
 fail-on = ["error"]
-output-format = "terminal"
+report-format = "terminal"
 ```
 
 Run a custom subset:
@@ -287,8 +287,8 @@ languages = ["uk", "pl"]
 checks = ["syntax", "references", "missing", "kwargs"]
 suggest-from = ["en"]
 fail-on = ["error"]
-output = "reports/ftl-check"
-output-format = "json"
+report-path = "reports/ftl-check"
+report-format = "json"
 ```
 
 ### 🙈 Ignore marker for intentional placeholders

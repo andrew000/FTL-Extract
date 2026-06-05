@@ -40,7 +40,6 @@ fn main() {
         })
         .filter_module("ignore::walk", log::LevelFilter::Warn)
         .filter_module("ignore::gitignore", log::LevelFilter::Warn)
-        .filter_module("globset", log::LevelFilter::Warn)
         .init();
 
     let project_config = if matches!(cli.command, Some(Commands::Config { .. }) | None) {

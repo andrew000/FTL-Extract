@@ -1,7 +1,7 @@
 [workspace.package]
 version = "0.11.0"
 edition = "2024"
-rust-version = "1.93"
+rust-version = "1.94"
 homepage = "https://github.com/andrew000/FTL-Extract"
 documentation = "https://github.com/andrew000/FTL-Extract"
 repository = "https://github.com/andrew000/FTL-Extract"
@@ -33,13 +33,12 @@ stub = { path = "src/stub" }
 # Shared dependencies
 anyhow = { version = "1.0" }
 clap = { version = "4.6", features = ["derive"] }
-globset = { version = "0.4.18" }
 fluent = { git = "https://github.com/projectfluent/fluent-rs.git", rev = "e0b443552a9b277badc958ab533b506394aad915" }
 fluent-syntax = { git = "https://github.com/projectfluent/fluent-rs.git", rev = "e0b443552a9b277badc958ab533b506394aad915" }
 ignore = { version = "0.4" }
 log = { version = "0.4" }
-ruff_python_ast = { git = "https://github.com/astral-sh/ruff.git", tag = "0.15.14" }
-ruff_python_parser = { git = "https://github.com/astral-sh/ruff.git", tag = "0.15.14" }
+ruff_python_ast = { git = "https://github.com/astral-sh/ruff.git", tag = "0.15.16" }
+ruff_python_parser = { git = "https://github.com/astral-sh/ruff.git", tag = "0.15.16" }
 serde_json = { version = "1.0" }
 serde = { version = "1.0", features = ["derive"] }
 toml = { version = "1.1" }

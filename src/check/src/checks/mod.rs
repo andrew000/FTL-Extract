@@ -27,18 +27,17 @@ use crate::types::{
     CheckLocaleConfig, CheckMissingResult, CheckStaleResult, CodeExtractionError,
 };
 use anyhow::{Result, bail};
-use extractor::ftl::code_extractor::extract_code_with_diagnostics_cached;
+use extractor::ftl::code_extractor::{build_exclude_matcher, extract_code_with_diagnostics_cached};
 use extractor::ftl::diagnostics::ExtractedCode;
-use globset::{Glob, GlobSetBuilder};
 use std::path::{Path, PathBuf};
 
 pub fn extract_check_code(config: CheckCodeConfig) -> Result<ExtractedCode> {
-    let ignore_set = build_ignore_set(&config.exclude_dirs)?;
+    let exclude_matcher = build_exclude_matcher(&config.code_path, &config.exclude_dirs)?;
     Ok(extract_code_with_diagnostics_cached(
         &config.code_path,
         config.i18n_keys,
         config.i18n_keys_prefix,
-        &ignore_set,
+        &exclude_matcher,
         config.ignore_attributes,
         config.ignore_kwargs,
         &config.default_ftl_file,
@@ -129,16 +128,6 @@ pub(super) fn validate_locales(
     }
 
     Ok(())
-}
-
-pub(super) fn build_ignore_set(
-    exclude_dirs: &extractor::ftl::utils::FastHashSet<String>,
-) -> Result<globset::GlobSet> {
-    let mut builder = GlobSetBuilder::new();
-    for exclude in exclude_dirs {
-        builder.add(Glob::new(exclude.as_str())?);
-    }
-    Ok(builder.build()?)
 }
 
 pub(super) struct CodeAwareCheckInputs {

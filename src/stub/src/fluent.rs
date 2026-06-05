@@ -1,5 +1,7 @@
 use anyhow::{Context, Result};
 use fluent_syntax::ast::{Expression, InlineExpression, PatternElement, Resource};
+use ignore::WalkBuilder;
+use ignore::types::TypesBuilder;
 use indexmap::IndexMap;
 use log::debug;
 use std::collections::HashSet;
@@ -254,30 +256,40 @@ pub fn parse_ftl_files<P: AsRef<Path>>(ftl_path: P) -> Result<IndexMap<String, M
     let mut visitor = FluentVisitor::new();
     let mut file_count = 0;
 
-    for entry in walkdir::WalkDir::new(ftl_path) {
+    let mut type_builder = TypesBuilder::new();
+    type_builder.add("ftl", "*.ftl")?;
+    type_builder.select("ftl");
+
+    let walker = WalkBuilder::new(ftl_path)
+        .standard_filters(false)
+        .types(type_builder.build()?)
+        .build();
+    let mut paths = Vec::new();
+    for entry in walker {
         let entry = entry.context("Failed to read directory entry")?;
-        let path = entry.path();
-
-        if path.extension().is_some_and(|ext| ext == "ftl") {
-            debug!("Parsing FTL file: {}", path.display());
-
-            let content = fs::read_to_string(path)
-                .with_context(|| format!("Failed to read FTL file: {}", path.display()))?;
-
-            let resource =
-                fluent_syntax::parser::parse(content).map_err(|(_resource, errors)| {
-                    let error_msgs: Vec<String> =
-                        errors.into_iter().map(|e| format!("{:?}", e)).collect();
-                    anyhow::anyhow!(
-                        "Parser errors in {}: {}",
-                        path.display(),
-                        error_msgs.join(", ")
-                    )
-                })?;
-
-            visitor.visit_resource(&resource);
-            file_count += 1;
+        if entry.file_type().is_some_and(|ft| ft.is_file()) {
+            paths.push(entry.into_path());
         }
+    }
+    paths.sort();
+
+    for path in paths {
+        debug!("Parsing FTL file: {}", path.display());
+
+        let content = fs::read_to_string(&path)
+            .with_context(|| format!("Failed to read FTL file: {}", path.display()))?;
+
+        let resource = fluent_syntax::parser::parse(content).map_err(|(_resource, errors)| {
+            let error_msgs: Vec<String> = errors.into_iter().map(|e| format!("{:?}", e)).collect();
+            anyhow::anyhow!(
+                "Parser errors in {}: {}",
+                path.display(),
+                error_msgs.join(", ")
+            )
+        })?;
+
+        visitor.visit_resource(&resource);
+        file_count += 1;
     }
 
     debug!("Parsed {} FTL files", file_count);
@@ -368,6 +380,27 @@ rocket-message = Blast off { -emoji }
 
         let messages = parse_ftl_files(temp_dir.path())?;
         assert!(messages.is_empty());
+        Ok(())
+    }
+
+    #[test]
+    fn test_parse_ftl_files_includes_hidden_and_gitignored_files() -> Result<()> {
+        let temp_dir = TempDir::new()?;
+        fs::write(
+            temp_dir.path().join(".gitignore"),
+            "ignored.ftl\n.hidden/\n",
+        )?;
+        fs::write(temp_dir.path().join("ignored.ftl"), "ignored = Ignored\n")?;
+        fs::create_dir_all(temp_dir.path().join(".hidden"))?;
+        fs::write(
+            temp_dir.path().join(".hidden").join("hidden.ftl"),
+            "hidden = Hidden\n",
+        )?;
+
+        let messages = parse_ftl_files(temp_dir.path())?;
+
+        assert!(messages.contains_key("ignored"));
+        assert!(messages.contains_key("hidden"));
         Ok(())
     }
 

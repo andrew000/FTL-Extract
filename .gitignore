@@ -15,7 +15,6 @@ __pycache__/
 /build/
 /target/
 /wheelhouse/
-Cargo.lock
 /coverage.xml
 uv.lock
 /lcov.info

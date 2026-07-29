@@ -32,15 +32,24 @@ stub = { path = "src/stub" }
 
 # Shared dependencies
 anyhow = { version = "1.0" }
+bincode-next = { version = "3.1", features = ["derive"] }
 clap = { version = "4.6", features = ["derive"] }
+env_logger = { version = "0.11" }
 fluent = { git = "https://github.com/projectfluent/fluent-rs.git", rev = "e0b443552a9b277badc958ab533b506394aad915" }
 fluent-syntax = { git = "https://github.com/projectfluent/fluent-rs.git", rev = "e0b443552a9b277badc958ab533b506394aad915" }
 ignore = { version = "0.4" }
+indexmap = { version = "2.14", features = ["serde"] }
 log = { version = "0.4" }
-ruff_python_ast = { git = "https://github.com/astral-sh/ruff.git", tag = "0.15.16" }
-ruff_python_parser = { git = "https://github.com/astral-sh/ruff.git", tag = "0.15.16" }
-serde_json = { version = "1.0" }
+memchr = { version = "2.8" }
+memmap2 = { version = "0.9" }
+mimalloc = { version = "0.1" }
+rayon = { version = "1.12" }
+ruff_python_ast = { version = "0.0.6" }
+ruff_python_parser = { version = "0.0.6" }
+rustc-hash = { version = "2.1" }
 serde = { version = "1.0", features = ["derive"] }
+serde_json = { version = "1.0" }
+smallvec = { version = "2.0.0-alpha.12" }
 toml = { version = "1.1" }
 
 [profile.release]

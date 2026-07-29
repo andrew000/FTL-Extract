@@ -14,20 +14,19 @@ name = "extractor"
 
 [dependencies]
 anyhow.workspace = true
+bincode-next.workspace = true
 clap.workspace = true
-fluent.workspace = true
 fluent-syntax.workspace = true
+fluent.workspace = true
 ignore.workspace = true
 log.workspace = true
+memchr.workspace = true
+memmap2.workspace = true
+rayon.workspace = true
 ruff_python_ast.workspace = true
 ruff_python_parser.workspace = true
-
-bincode-next = { version = "3.1", features = ["derive"] }
-memchr = { version = "2.8.2" }
-memmap2 = { version = "0.9" }
-rayon = { version = "1.12" }
-rustc-hash = { version = "2.1" }
-smallvec = { version = "2.0.0-alpha.12" }
+rustc-hash.workspace = true
+smallvec.workspace = true
 
 [dev-dependencies]
 pretty_assertions.workspace = true

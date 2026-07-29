@@ -17,14 +17,13 @@ path = "src/main.rs"
 anyhow.workspace = true
 check.workspace = true
 clap.workspace = true
+env_logger.workspace = true
 extractor.workspace = true
 log.workspace = true
+mimalloc.workspace = true
 serde.workspace = true
 stub.workspace = true
 toml.workspace = true
-
-env_logger = { version = "0.11.10" }
-mimalloc = { version = "0.1.52" }
 
 [dev-dependencies]
 tempfile.workspace = true

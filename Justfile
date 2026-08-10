@@ -34,7 +34,6 @@ bench-cmp name="baseline":
 
 outdated:
     uv tree --universal --outdated --no-cache --depth=1
-    cargo outdated -w
 
 sync:
     uv sync --no-install-project --group dev

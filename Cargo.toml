@@ -1,7 +1,7 @@
 [workspace.package]
 version = "0.12.0"
 edition = "2024"
-rust-version = "1.94"
+rust-version = "1.95"
 homepage = "https://github.com/andrew000/FTL-Extract"
 documentation = "https://github.com/andrew000/FTL-Extract"
 repository = "https://github.com/andrew000/FTL-Extract"
@@ -44,8 +44,8 @@ memchr = { version = "2.8" }
 memmap2 = { version = "0.9" }
 mimalloc = { version = "0.1" }
 rayon = { version = "1.12" }
-ruff_python_ast = { version = "0.0.6" }
-ruff_python_parser = { version = "0.0.6" }
+ruff_python_ast = { version = "0.0.8" }
+ruff_python_parser = { version = "0.0.8" }
 rustc-hash = { version = "2.1" }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = { version = "1.0" }

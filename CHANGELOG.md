@@ -18,8 +18,17 @@
   expression, a message with attributes or one with a comment above it (including the `# ftl-extract: ignore stale`
   marker) used to end up as `#     Rule two.    Rule three.` or `# # ftl-extract: ignore stalestatus-ok = OK`, so the
   commented copy could not be restored by uncommenting it. Every serialized line is now its own `# ` line.
+- `ftl extract` no longer aborts with `key-message-conflict` when the same key is called with the same keyword
+  arguments in a different order (`i18n.get("order", a=1, b=2)` and `i18n.get("order", b=2, a=1)`), in one file or
+  across files. A real conflict (`a, b` versus `a, c`) still aborts, and its message now names the key, both
+  keyword-argument sets and both locations instead of dumping the internal AST:
+  `Fluent key order is used with different keyword arguments: a, b (app/a.py:2:5) and a, c (app/b.py:3:5)`.
 
 ### Behavior changes
+- The placeholder `ftl extract` writes for a new key lists its variables sorted by name (`order = order{ $a }{ $b }`)
+  instead of in call order, which was not even stable across runs because files are extracted in parallel. Existing
+  messages are compared by their set of variables, so nothing already stored is rewritten. The extraction cache keeps
+  its `v3` schema; entries written in call order by an older build are normalized when loaded.
 
 - `ftl extract`: a keyword argument in code that only matches a variable inside a referenced term
   (`-brand = Bot { $suffix }`, `about = About { -brand }`, `i18n.about(suffix=...)`) is now a kwargs mismatch, so the

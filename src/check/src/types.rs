@@ -593,5 +593,5 @@ pub(crate) struct MessageEntry {
     pub(crate) key: String,
     pub(crate) value: Option<String>,
     pub(crate) line: Option<usize>,
-    pub(crate) ignore_untranslated: bool,
+    pub(crate) ignored: crate::parser::IgnoredChecks,
 }

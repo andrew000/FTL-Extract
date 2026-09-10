@@ -60,7 +60,7 @@ pub fn check_untranslated_with_cache(
     let mut untranslated = checked_messages
         .iter()
         .filter(|(entry, value)| {
-            !entry.ignore_untranslated && is_placeholder_translation(&entry.key, value)
+            !entry.ignored.untranslated && is_placeholder_translation(&entry.key, value)
         })
         .map(|(entry, value)| UntranslatedKey {
             locale: entry.locale.clone(),
@@ -284,6 +284,32 @@ mod tests {
         assert_eq!(item.key, "welcome");
         assert_eq!(item.suggestions.len(), 1);
         assert_eq!(item.suggestions[0].locale, "uk");
+        Ok(())
+    }
+
+    #[test]
+    fn test_generalised_ignore_marker_skips_placeholder() -> Result<()> {
+        let temp_dir = TempDir::new()?;
+        let locales = temp_dir.path().join("locales");
+        fs::create_dir_all(locales.join("en"))?;
+
+        fs::write(
+            locales.join("en").join("_default.ftl"),
+            "# ftl-extract: ignore untranslated\nbalance = balance\n# ftl-extract: ignore all\nbrand = brand\n# ftl-extract: ignore stale\nstale-only = stale-only\nnormal = normal\n",
+        )?;
+
+        let result = check_untranslated(CheckUntranslatedConfig {
+            locales_path: locales,
+            locales: vec!["en".to_string()],
+            suggest_from: vec![],
+        })?;
+
+        let keys = result
+            .untranslated
+            .iter()
+            .map(|item| item.key.as_str())
+            .collect::<Vec<_>>();
+        assert_eq!(keys, vec!["normal", "stale-only"]);
         Ok(())
     }
 }

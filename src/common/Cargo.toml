@@ -14,6 +14,7 @@ name = "common"
 
 [dependencies]
 anyhow.workspace = true
+fluent-syntax.workspace = true
 ignore.workspace = true
 memchr.workspace = true
 rustc-hash.workspace = true

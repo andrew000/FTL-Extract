@@ -1,4 +1,3 @@
-mod atomic_write;
 mod cache;
 pub mod code_extractor;
 pub mod consts;

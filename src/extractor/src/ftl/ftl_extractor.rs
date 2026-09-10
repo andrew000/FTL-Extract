@@ -1,4 +1,3 @@
-use crate::ftl::atomic_write::write_atomically;
 use crate::ftl::code_extractor::{extract_fluent_keys, sort_fluent_keys_by_path};
 use crate::ftl::consts::{CommentsKeyModes, LineEndings};
 use crate::ftl::diagnostics::ExtractionDiagnostic;
@@ -9,6 +8,7 @@ use crate::ftl::process::kwargs_extractor::extract_kwargs;
 use crate::ftl::process::serializer::generate_ftl;
 use crate::ftl::utils::{ExtractionStatistics, FastHashMap, FastHashSet};
 use anyhow::{Result, bail};
+use common::write_atomically;
 use log::{debug, info, warn};
 use rayon::prelude::{IntoParallelRefIterator, ParallelIterator};
 use std::fmt::Write as _;

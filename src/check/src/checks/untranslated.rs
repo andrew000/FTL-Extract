@@ -4,7 +4,7 @@ use crate::types::{
     CheckUntranslatedConfig, CheckUntranslatedResult, TranslationSuggestion, UntranslatedKey,
 };
 use anyhow::{Result, bail};
-use extractor::ftl::utils::FastHashMap;
+use common::FastHashMap;
 
 pub fn check_untranslated(config: CheckUntranslatedConfig) -> Result<CheckUntranslatedResult> {
     let available_locales = discover_locales(&config.locales_path)?;

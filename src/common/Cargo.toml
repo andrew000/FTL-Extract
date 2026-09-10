@@ -1,5 +1,5 @@
 [package]
-name = "stub"
+name = "common"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -10,16 +10,11 @@ authors.workspace = true
 license.workspace = true
 
 [lib]
-name = "stub"
+name = "common"
 
 [dependencies]
 anyhow.workspace = true
-common.workspace = true
-fluent-syntax.workspace = true
-indexmap.workspace = true
-log.workspace = true
-serde.workspace = true
-serde_json.workspace = true
-
-[dev-dependencies]
+ignore.workspace = true
+memchr.workspace = true
+rustc-hash.workspace = true
 tempfile.workspace = true

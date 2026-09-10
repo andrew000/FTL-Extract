@@ -1,5 +1,5 @@
 use crate::parser::CheckLocaleCache;
-use extractor::ftl::utils::{FastHashMap, FastHashSet};
+use common::{FastHashMap, FastHashSet};
 use fluent_syntax::ast::{
     Entry, Expression, InlineExpression, Message, Pattern, PatternElement, Term,
 };

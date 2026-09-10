@@ -16,6 +16,7 @@ name = "extractor"
 anyhow.workspace = true
 bincode-next.workspace = true
 clap.workspace = true
+common.workspace = true
 fluent-syntax.workspace = true
 ignore.workspace = true
 log.workspace = true
@@ -24,13 +25,12 @@ memmap2.workspace = true
 rayon.workspace = true
 ruff_python_ast.workspace = true
 ruff_python_parser.workspace = true
-rustc-hash.workspace = true
 smallvec.workspace = true
-tempfile.workspace = true
 
 [dev-dependencies]
 pretty_assertions.workspace = true
 criterion.workspace = true
+tempfile.workspace = true
 
 [[bench]]
 name = "extract_bench"

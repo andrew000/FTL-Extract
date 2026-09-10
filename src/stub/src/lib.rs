@@ -1,10 +1,9 @@
-mod atomic_write;
 pub mod fluent;
 pub mod generator;
 pub mod tree;
 
-use crate::atomic_write::write_atomically;
 use anyhow::{Context, Result};
+use common::write_atomically;
 use std::path::PathBuf;
 
 #[derive(Debug, Clone)]

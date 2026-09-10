@@ -1,7 +1,6 @@
 use anyhow::{Context, Result};
+use common::{FtlWalk, ftl_files};
 use fluent_syntax::ast::{Expression, InlineExpression, PatternElement, Resource};
-use ignore::WalkBuilder;
-use ignore::types::TypesBuilder;
 use indexmap::IndexMap;
 use log::debug;
 use std::collections::HashSet;
@@ -257,22 +256,7 @@ pub fn parse_ftl_files<P: AsRef<Path>>(locales_path: P) -> Result<IndexMap<Strin
     let mut visitor = FluentVisitor::new();
     let mut file_count = 0;
 
-    let mut type_builder = TypesBuilder::new();
-    type_builder.add("ftl", "*.ftl")?;
-    type_builder.select("ftl");
-
-    let walker = WalkBuilder::new(locales_path)
-        .standard_filters(false)
-        .types(type_builder.build()?)
-        .build();
-    let mut paths = Vec::new();
-    for entry in walker {
-        let entry = entry.context("Failed to read directory entry")?;
-        if entry.file_type().is_some_and(|ft| ft.is_file()) {
-            paths.push(entry.into_path());
-        }
-    }
-    paths.sort();
+    let paths = ftl_files(locales_path, FtlWalk::All)?;
 
     for path in paths {
         debug!("Parsing FTL file: {}", path.display());

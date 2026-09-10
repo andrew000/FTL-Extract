@@ -5,9 +5,10 @@ use crate::ftl::cache::{
 use crate::ftl::diagnostics::{
     CodeLocation, ExtractedCode, ExtractedFluentKey, ExtractionDiagnostic, ExtractionDiagnosticKind,
 };
-use crate::ftl::matcher::{FluentEntry, FluentKey, I18nMatcher, LineIndex};
+use crate::ftl::matcher::{FluentEntry, FluentKey, I18nMatcher};
 use crate::ftl::utils::{FastHashMap, FastHashSet};
 use anyhow::Result;
+use common::LineIndex;
 use ignore::overrides::{Override, OverrideBuilder};
 use ignore::types::TypesBuilder;
 use ignore::{WalkBuilder, WalkState};

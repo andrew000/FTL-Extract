@@ -2,8 +2,8 @@ use crate::checks::{run_code_aware_check, run_code_aware_check_with_extracted};
 use crate::parser::CheckLocaleCache;
 use crate::types::{CheckCodeAwareConfig, CheckStaleConfig, CheckStaleResult, StaleKey};
 use anyhow::Result;
+use common::{FastHashMap, FastHashSet};
 use extractor::ftl::diagnostics::ExtractedCode;
-use extractor::ftl::utils::{FastHashMap, FastHashSet};
 use fluent_syntax::ast::{Entry, Expression, InlineExpression, Pattern, PatternElement};
 
 pub fn check_stale(config: CheckStaleConfig) -> Result<CheckStaleResult> {

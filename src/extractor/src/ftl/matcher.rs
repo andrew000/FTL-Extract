@@ -3,7 +3,7 @@
 use crate::ftl::consts;
 use crate::ftl::diagnostics::{CodeLocation, ExtractionDiagnostic, ExtractionDiagnosticKind};
 use crate::ftl::utils::{FastHashMap, FastHashSet};
-use memchr::memchr_iter;
+use common::LineIndex;
 use ruff_python_ast::visitor::source_order::SourceOrderVisitor;
 use smallvec::SmallVec;
 use std::path::PathBuf;
@@ -374,57 +374,4 @@ impl<'a> I18nMatcher<'a> {
             }
         }
     }
-}
-
-/// Byte offsets of every line start in a source file, for O(log n) offset-to-line lookups.
-#[derive(Clone, Debug)]
-pub struct LineIndex {
-    line_starts: Vec<usize>,
-}
-
-impl LineIndex {
-    pub fn new(content: &str) -> Self {
-        let mut line_starts = Vec::with_capacity(content.len() / 40 + 1);
-        line_starts.push(0);
-        line_starts.extend(memchr_iter(b'\n', content.as_bytes()).map(|offset| offset + 1));
-        Self { line_starts }
-    }
-
-    /// 1-based line and column of `byte_index` in `content`. The column counts characters
-    /// from the start of the line, matching [`line_column`].
-    pub fn line_column(&self, content: &str, byte_index: usize) -> (usize, usize) {
-        let target = byte_index.min(content.len());
-        let line = self
-            .line_starts
-            .partition_point(|&start| start <= target)
-            .max(1);
-        let line_start = self.line_starts[line - 1];
-        let column = content
-            .get(line_start..target)
-            .map_or(target - line_start, |prefix| prefix.chars().count())
-            + 1;
-
-        (line, column)
-    }
-}
-
-pub fn line_column(content: &str, byte_index: usize) -> (usize, usize) {
-    let target = byte_index.min(content.len());
-    let mut line = 1;
-    let mut column = 1;
-
-    for (offset, ch) in content.char_indices() {
-        if offset >= target {
-            break;
-        }
-
-        if ch == '\n' {
-            line += 1;
-            column = 1;
-        } else {
-            column += 1;
-        }
-    }
-
-    (line, column)
 }

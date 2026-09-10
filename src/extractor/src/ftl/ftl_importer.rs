@@ -1,9 +1,8 @@
 use crate::ftl::matcher::{FluentEntry, FluentKey};
 use crate::ftl::utils::{ExtractionStatistics, FastHashMap, FastHashSet};
 use anyhow::{Context, Result, bail};
+use common::{FtlWalk, ftl_files};
 use fluent_syntax::ast::Entry;
-use ignore::WalkBuilder;
-use ignore::types::TypesBuilder;
 use rayon::prelude::{IntoParallelRefIterator, ParallelIterator};
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -151,21 +150,7 @@ pub(crate) fn import_ftl_from_dir(
     locale: &String,
     statistics: &mut ExtractionStatistics,
 ) -> Result<ImportResult> {
-    let mut type_builder = TypesBuilder::new();
-    type_builder.add("ftl", "*.ftl")?;
-    type_builder.select("ftl");
-
-    let walker = WalkBuilder::new(path.join(locale))
-        .types(type_builder.build()?)
-        .parents(false)
-        .git_global(false)
-        .build();
-
-    let paths: Vec<PathBuf> = walker
-        .filter_map(|entry| entry.ok())
-        .filter(|entry| entry.file_type().is_some_and(|ft| ft.is_file()))
-        .map(|entry| entry.path().to_path_buf())
-        .collect();
+    let paths = ftl_files(&path.join(locale), FtlWalk::Filtered)?;
 
     let files_count = paths.len();
     *statistics.ftl_files_count.get_mut(locale).unwrap() += files_count;

@@ -1,8 +1,10 @@
+mod atomic_write;
 pub mod fluent;
 pub mod generator;
 pub mod tree;
 
-use anyhow::Result;
+use crate::atomic_write::write_atomically;
+use anyhow::{Context, Result};
 use std::path::PathBuf;
 
 #[derive(Debug, Clone)]
@@ -37,7 +39,8 @@ pub fn generate_stub(config: StubConfig) -> Result<()> {
         stub_content.len()
     );
 
-    std::fs::write(&config.stub_path, stub_content)?;
+    write_atomically(&config.stub_path, stub_content.as_bytes())
+        .with_context(|| format!("Failed to write stub file {}", config.stub_path.display()))?;
     log::info!(
         "Successfully wrote stub file to {}",
         config.stub_path.display()

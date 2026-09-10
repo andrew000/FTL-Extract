@@ -890,4 +890,48 @@ i18n.get("nested", _path="pages/main.ftl")
             "b = B\n    .title = Title { $x }\na = See { b.title }\n",
         );
     }
+
+    #[test]
+    fn test_extract_keeps_non_ascii_messages_byte_for_byte() {
+        // Same three cases with Ukrainian text, compared as bytes so that encoding problems
+        // cannot hide behind a lossy string comparison.
+        let cases: [(&str, &str); 3] = [
+            (
+                "i18n.about()\n",
+                "-brand =\n    { $case ->\n        [gen] Бота\n       *[nom] Бот\n    }\nabout = Про { -brand(case: \"gen\") }\n",
+            ),
+            (
+                "i18n.items(count=5)\n",
+                "items = У вас { NUMBER($count) } елементів\n",
+            ),
+            (
+                "i18n.a(x=1)\ni18n.b(x=1)\n",
+                "b = Кнопка { $x }\n    .title = Підказка { $x }\na = Див. { b.title }\n",
+            ),
+        ];
+
+        for (code, ftl) in cases {
+            let temp = TempDir::new().unwrap();
+            let code_path = temp.path().join("code");
+            let locale_path = temp.path().join("locales").join("en");
+            fs::create_dir_all(&code_path).unwrap();
+            fs::create_dir_all(&locale_path).unwrap();
+            fs::write(code_path.join("app.py"), code).unwrap();
+            let ftl_path = locale_path.join("_default.ftl");
+            fs::write(&ftl_path, ftl.as_bytes()).unwrap();
+
+            let stats = extract(config(code_path, temp.path().join("locales"))).unwrap();
+
+            assert_eq!(
+                stats.ftl_keys_commented["en"], 0,
+                "commented keys in {ftl:?}"
+            );
+            assert_eq!(stats.ftl_keys_updated["en"], 0, "updated keys in {ftl:?}");
+            assert_eq!(
+                fs::read(&ftl_path).unwrap(),
+                ftl.as_bytes(),
+                "bytes changed in {ftl:?}"
+            );
+        }
+    }
 }

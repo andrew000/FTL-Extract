@@ -799,4 +799,95 @@ i18n.get("nested", _path="pages/main.ftl")
             "ab\r\n"
         );
     }
+
+    /// Runs `extract` on one Python file and one `_default.ftl`; returns the statistics and the
+    /// file content afterwards.
+    fn extract_fixture(code: &str, ftl: &str) -> (ExtractionStatistics, String, TempDir) {
+        let temp = TempDir::new().unwrap();
+        let code_path = temp.path().join("code");
+        let locales_path = temp.path().join("locales");
+        let locale_path = locales_path.join("en");
+        fs::create_dir_all(&code_path).unwrap();
+        fs::create_dir_all(&locale_path).unwrap();
+        fs::write(code_path.join("app.py"), code).unwrap();
+        let ftl_path = locale_path.join("_default.ftl");
+        fs::write(&ftl_path, ftl).unwrap();
+
+        let stats = extract(config(code_path, locales_path)).unwrap();
+
+        let output = fs::read_to_string(&ftl_path).unwrap();
+        (stats, output, temp)
+    }
+
+    /// Asserts that `extract` neither comments out nor rewrites anything in `ftl`. The fixture
+    /// has to be in the serializer's canonical form (no blank lines between entries), otherwise
+    /// re-serialization alone would change the bytes.
+    fn assert_extract_leaves_unchanged(code: &str, ftl: &str) {
+        let (stats, output, _temp) = extract_fixture(code, ftl);
+
+        assert_eq!(
+            stats.ftl_keys_commented["en"], 0,
+            "commented keys in {ftl:?}"
+        );
+        assert_eq!(stats.ftl_keys_updated["en"], 0, "updated keys in {ftl:?}");
+        assert_eq!(stats.ftl_keys_added["en"], 0, "added keys in {ftl:?}");
+        assert_eq!(output, ftl);
+    }
+
+    #[test]
+    fn test_extract_unchanged_harness_detects_a_rewrite() {
+        // Control for the tests below: a real kwargs mismatch is still commented and replaced.
+        let (stats, output, _temp) =
+            extract_fixture("i18n.items()\n", "items = You have { $count } items\n");
+
+        assert_eq!(stats.ftl_keys_commented["en"], 1);
+        assert_eq!(stats.ftl_keys_updated["en"], 1);
+        assert_eq!(
+            output,
+            "# items = You have { $count } items\n\nitems = items\n"
+        );
+    }
+
+    #[test]
+    fn test_extract_keeps_message_whose_variable_is_a_function_argument() {
+        assert_extract_leaves_unchanged(
+            "i18n.items(count=5)\n",
+            "items = You have { NUMBER($count) } items\n",
+        );
+    }
+
+    #[test]
+    fn test_extract_keeps_message_whose_variable_is_only_in_a_function_selector() {
+        assert_extract_leaves_unchanged(
+            "i18n.items(count=5)\n",
+            "items =\n    { NUMBER($count) ->\n        [one] One item\n       *[other] Many items\n    }\n",
+        );
+    }
+
+    #[test]
+    fn test_extract_keeps_message_using_a_parameterized_term() {
+        let term = "-brand =\n    { $case ->\n        [gen] Bota\n       *[nom] Bot\n    }\n";
+        let with_argument = format!("{term}about = Pro {{ -brand(case: \"gen\") }}\n");
+        let without_argument = format!("{term}about = Pro {{ -brand }}\n");
+
+        assert_extract_leaves_unchanged("i18n.about()\n", &with_argument);
+        assert_extract_leaves_unchanged("i18n.about()\n", &without_argument);
+    }
+
+    #[test]
+    fn test_extract_keeps_message_referencing_an_attribute() {
+        assert_extract_leaves_unchanged(
+            "i18n.a(x=1)\ni18n.b()\n",
+            "b = B\n    .title = Title { $x }\na = See { b.title }\n",
+        );
+    }
+
+    #[test]
+    fn test_extract_keeps_message_reached_only_through_an_attribute_reference() {
+        // `b` is not called from code, but `a` depends on `b.title`, so it is not stale.
+        assert_extract_leaves_unchanged(
+            "i18n.a(x=1)\n",
+            "b = B\n    .title = Title { $x }\na = See { b.title }\n",
+        );
+    }
 }

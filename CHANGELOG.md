@@ -1,5 +1,31 @@
 # Changelog
 
+## 0.12.1 — Unreleased
+
+### Fixed
+
+- `ftl extract` no longer comments out and replaces a valid translation whose variable appears only inside a Fluent
+  function call (`{ NUMBER($count) }`, also as a selector), only through a parameterized term
+  (`{ -brand(case: "gen") }`), or only through a message attribute reference (`{ btn.title }`). The extractor
+  compared the stored message's variables with its own walk that skipped function arguments, counted every variable
+  inside a term and followed `{ msg.attr }` to the value; `ftl check` used a different walk and passed, so the
+  rewrite went unnoticed.
+- `ftl extract` and `ftl check` now decide with one shared collector (`common::message_variables`) which variables a
+  stored message needs, following the `fluent-bundle` resolver: function arguments count, `{ msg }` pulls in only the
+  value and `{ msg.attr }` only that attribute, and nothing inside a term is a caller variable because terms resolve
+  variables against their own call arguments.
+
+### Behavior changes
+
+- `ftl check --check kwargs` no longer requires a term's variables from code. `{ -brand }` with
+  `-brand = { $case -> ... }` used to report `case` as missing; unbound term variables fall back to the default variant
+  and never read the caller's arguments. A kwarg that only matches a variable inside a term is now reported as
+  unused.
+- `ftl check --check kwargs` follows `{ msg.attr }` to that attribute only and `{ msg }` to the value only. It used to
+  count the value plus every attribute of a referenced message.
+- Unchanged and still open: `ftl check` counts the variables of the called message's own attributes, `ftl extract`
+  does not. See the "own attributes" note in the shared collector.
+
 ## 0.12.0 — 2026-09-10
 
 ### Breaking changes
@@ -14,7 +40,7 @@ Command and configuration renames (already shipped in `0.12.0a1`):
 - `ftl extract`: the `output-path` config key is now `locales-path`.
 - `ftl stub`: `ftl-path` / `output-path` are now `locales-path` / `stub-path`.
 
-Behaviour changes new in `0.12.0`:
+Behavior changes new in `0.12.0`:
 
 - `ftl extract` refuses to write any `.ftl` file and exits `1` when a Python file cannot be read, is not valid UTF-8,
   or does not parse, and when the same key is used with different `_path=` values or different keyword arguments.
@@ -30,9 +56,9 @@ Behaviour changes new in `0.12.0`:
 - A stored `.ftl` message or term that references a message or term that does not exist makes `ftl extract` exit `1`
   with a message naming the entry, the file and the reference. Previously this crashed with a stack trace.
 - In the JSON check report, `key` is `null` for file-level extraction errors and `severity` can now be `"warn"`.
-- `.gitignore` files inside the locales directory are honoured by `ftl extract` and `ftl check` whether or not the
+- `.gitignore` files inside the locales directory are honored by `ftl extract` and `ftl check` whether the
   project is a git repository (previously only inside one), and `.git/info/exclude` is no longer consulted. Nothing
-  above the locales directory or the code directory is read any more, which removes a directory scan per locale.
+  above the locales directory or the code directory is read anymore, which removes a directory scan per locale.
 
 ### Added
 
@@ -113,7 +139,7 @@ code-path = "app/bot"                  # needed by the missing, stale and kwargs
 languages = ["uk"]
 checks = ["untranslated"]              # or ["all"] to run every check
 suggest-from = ["en"]
-fail-on = ["warn"]                     # untranslated keys are warnings now; "warn" keeps the old failing behaviour
+fail-on = ["warn"]                     # untranslated keys are warnings now; "warn" keeps the old failing behavior
 severity = { untranslated = "error" }  # alternatively, make just this check an error and keep fail-on = ["error"]
 report-path = "reports/ftl-check"
 report-format = "json"
@@ -121,9 +147,9 @@ report-format = "json"
 
 Command-line equivalents:
 
-| `0.11`                                                | `0.12`                                                         |
-|-------------------------------------------------------|----------------------------------------------------------------|
+| `0.11`                                                | `0.12`                                                           |
+|-------------------------------------------------------|------------------------------------------------------------------|
 | `ftl untranslated locales -l uk --suggest-from en`    | `ftl check locales --check untranslated -l uk --suggest-from en` |
-| `ftl untranslated ... --fail-on-untranslated`         | `ftl check ... --fail-on warn`                                  |
-| `ftl untranslated ... --output r --output-format txt` | `ftl check ... --report-path r --report-format terminal`        |
-| `ftl stub locales/en app/stub.pyi`                    | unchanged (positional arguments), only the config keys renamed |
+| `ftl untranslated ... --fail-on-untranslated`         | `ftl check ... --fail-on warn`                                   |
+| `ftl untranslated ... --output r --output-format txt` | `ftl check ... --report-path r --report-format terminal`         |
+| `ftl stub locales/en app/stub.pyi`                    | unchanged (positional arguments), only the config keys renamed   |

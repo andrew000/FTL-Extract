@@ -934,4 +934,82 @@ i18n.get("nested", _path="pages/main.ftl")
             );
         }
     }
+
+    #[test]
+    fn test_extract_comments_unused_entries_line_by_line() {
+        // One unused entry of each shape; the commented copy must keep every line.
+        let cases: [(&str, &str); 6] = [
+            (
+                "hello = Hello\n\nold-rules =\n    Rule one.\n    Rule two.\n    Rule three.\n",
+                "hello = Hello\n\n# old-rules =\n#     Rule one.\n#     Rule two.\n#     Rule three.\n\n",
+            ),
+            (
+                "hello = Hello\n\nitems =\n    { $n ->\n        [one] One item\n       *[other] { $n } items\n    }\n",
+                "hello = Hello\n\n# items =\n#     { $n ->\n#         [one] One item\n#        *[other] { $n } items\n#     }\n\n",
+            ),
+            (
+                "hello = Hello\n\nbtn = Click\n    .title = Tooltip\n",
+                "hello = Hello\n\n# btn = Click\n#     .title = Tooltip\n\n",
+            ),
+            (
+                "hello = Hello\n\n# ftl-extract: ignore stale\nstatus-ok = OK\n",
+                "hello = Hello\n\n# # ftl-extract: ignore stale\n# status-ok = OK\n\n",
+            ),
+            (
+                "hello = Hello\n\nold-rules =\n    Правило перше.\n    Правило друге.\n",
+                "hello = Hello\n\n# old-rules =\n#     Правило перше.\n#     Правило друге.\n\n",
+            ),
+            (
+                "hello = Hello\n\n# Shown on the legacy screen\nlegacy = Legacy text\n",
+                "hello = Hello\n\n# # Shown on the legacy screen\n# legacy = Legacy text\n\n",
+            ),
+        ];
+
+        for (ftl, expected) in cases {
+            let (stats, output, _temp) = extract_fixture("i18n.hello()\n", ftl);
+
+            assert_eq!(
+                stats.ftl_keys_commented["en"], 1,
+                "commented keys for {ftl:?}"
+            );
+            assert_eq!(output, expected);
+        }
+    }
+
+    #[test]
+    fn test_comment_junks_keeps_every_junk_line() {
+        // `import_ftl_from_dir` refuses files with junk, so `comment_junks` is only reachable
+        // with keys built in memory; it goes through the same `comment_ftl_key`.
+        let mut config = config(PathBuf::from("code"), PathBuf::from("locales"));
+        config.comment_junks = true;
+        let mut statistics = ExtractionStatistics::new();
+        statistics.init_lang("en");
+        let mut leave_as_is = vec![FluentKey::new(
+            Arc::new(PathBuf::new()),
+            String::new(),
+            FluentEntry::Junk("bad = {\nstill bad\n\n\n".to_string()),
+            Arc::new(PathBuf::from("_default.ftl")),
+            Some("en".to_string()),
+            Some(0),
+            FastHashSet::default(),
+        )];
+
+        handle_comments_and_junk(
+            &mut FastHashMap::default(),
+            &mut FastHashMap::default(),
+            &mut leave_as_is,
+            Path::new("locales/en"),
+            &config,
+            &mut statistics,
+            "en",
+        );
+
+        assert_eq!(
+            leave_as_is[0].entry.as_ref(),
+            &FluentEntry::Comment(fluent_syntax::ast::Comment {
+                content: vec!["bad = {".to_string(), "still bad".to_string()],
+            })
+        );
+        assert_eq!(generate_ftl(leave_as_is), "# bad = {\n# still bad\n\n");
+    }
 }

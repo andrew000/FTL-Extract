@@ -5,6 +5,7 @@ use ignore::types::TypesBuilder;
 use indexmap::IndexMap;
 use log::debug;
 use std::collections::HashSet;
+use std::fmt::Write as _;
 use std::fs;
 use std::path::Path;
 
@@ -176,13 +177,13 @@ impl FluentVisitor {
                 }
                 PatternElement::Placeable { expression } => match expression {
                     Expression::Inline(InlineExpression::VariableReference { id }) => {
-                        result.push_str(&format!("{{ ${} }}", id.name));
+                        let _ = write!(result, "{{ ${} }}", id.name);
                     }
                     Expression::Inline(InlineExpression::MessageReference { id, .. }) => {
-                        result.push_str(&format!("{{{}}}", id.name));
+                        let _ = write!(result, "{{{}}}", id.name);
                     }
                     Expression::Inline(InlineExpression::TermReference { id, .. }) => {
-                        result.push_str(&format!("{{ -{} }}", id.name));
+                        let _ = write!(result, "{{ -{} }}", id.name);
                     }
                     Expression::Inline(InlineExpression::Placeable { expression }) => {
                         result.push_str(&self.expression_to_text(expression));

@@ -5,6 +5,7 @@ use std::hash::BuildHasherDefault;
 pub type FastHashMap<K, V> = HashMap<K, V, BuildHasherDefault<FxHasher>>;
 pub type FastHashSet<K> = HashSet<K, BuildHasherDefault<FxHasher>>;
 
+#[derive(Debug)]
 pub struct ExtractionStatistics {
     pub py_files_count: usize,
     pub ftl_files_count: FastHashMap<String, usize>,

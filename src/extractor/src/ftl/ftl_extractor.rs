@@ -1,16 +1,16 @@
-use crate::ftl::code_extractor::{
-    build_exclude_matcher, extract_fluent_keys, sort_fluent_keys_by_path,
-};
+use crate::ftl::code_extractor::{extract_fluent_keys, sort_fluent_keys_by_path};
 use crate::ftl::consts::{CommentsKeyModes, LineEndings};
+use crate::ftl::diagnostics::ExtractionDiagnostic;
 use crate::ftl::ftl_importer::import_ftl_from_dir;
 use crate::ftl::matcher::{FluentEntry, FluentKey};
 use crate::ftl::process::commentator::comment_ftl_key;
 use crate::ftl::process::kwargs_extractor::extract_kwargs;
 use crate::ftl::process::serializer::generate_ftl;
 use crate::ftl::utils::{ExtractionStatistics, FastHashMap, FastHashSet};
-use anyhow::Result;
+use anyhow::{Result, bail};
 use log::{debug, info, warn};
 use rayon::prelude::{IntoParallelRefIterator, ParallelIterator};
+use std::fmt::Write as _;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -33,6 +33,7 @@ pub struct ExtractConfig {
     pub cache: bool,
     pub cache_path: Option<PathBuf>,
     pub clear_cache: bool,
+    pub allow_parse_errors: bool,
 }
 
 pub fn extract(config: ExtractConfig) -> Result<ExtractionStatistics> {
@@ -43,24 +44,28 @@ pub fn extract(config: ExtractConfig) -> Result<ExtractionStatistics> {
         statistics.init_lang(lang);
     }
 
-    let exclude_matcher = build_exclude_matcher(&config.code_path, &config.exclude_dirs)?;
-
     let start = std::time::Instant::now();
-    let in_code_fluent_keys = extract_fluent_keys(
+    let extraction = extract_fluent_keys(
         &config.code_path,
         config.i18n_keys.clone(),
         config.i18n_keys_prefix.clone(),
-        &exclude_matcher,
+        &config.exclude_dirs,
         config.ignore_attributes.clone(),
         config.ignore_kwargs.clone(),
         &config.default_ftl_file,
         config.cache,
         config.cache_path.as_deref(),
         config.clear_cache,
-        &mut statistics,
-    );
-    statistics.ftl_in_code_keys_count = in_code_fluent_keys.len();
+    )?;
+    statistics.py_files_count += extraction.py_files_with_keys;
     info!(target: "extractor::ftl", "FTL Extraction completed in {:.3?}s.", start.elapsed().as_secs_f64());
+
+    // Abort before touching any .ftl file: keys from an unparseable file would otherwise look
+    // unused and get commented out of every locale.
+    check_extraction_diagnostics(&extraction.diagnostics, config.allow_parse_errors)?;
+
+    let in_code_fluent_keys = extraction.keys;
+    statistics.ftl_in_code_keys_count = in_code_fluent_keys.len();
 
     let start = std::time::Instant::now();
     let results: Result<Vec<ExtractionStatistics>> = config
@@ -86,6 +91,53 @@ pub fn extract(config: ExtractConfig) -> Result<ExtractionStatistics> {
     }
 
     Ok(statistics)
+}
+
+/// Fails when extraction reported problems that make the key set untrustworthy
+fn check_extraction_diagnostics(
+    diagnostics: &[ExtractionDiagnostic],
+    allow_parse_errors: bool,
+) -> Result<()> {
+    if diagnostics.is_empty() {
+        return Ok(());
+    }
+
+    let (file_errors, conflicts): (Vec<_>, Vec<_>) = diagnostics
+        .iter()
+        .partition(|diagnostic| diagnostic.is_file_error());
+
+    let failing = if allow_parse_errors {
+        for diagnostic in &file_errors {
+            warn!(target: "extractor::ftl", "Skipping Python file: {diagnostic}");
+        }
+        conflicts
+    } else {
+        diagnostics.iter().collect()
+    };
+
+    if failing.is_empty() {
+        return Ok(());
+    }
+
+    let noun = if failing.len() == 1 {
+        "problem"
+    } else {
+        "problems"
+    };
+    let mut message = format!(
+        "Extraction aborted: {} {noun} found in Python sources, no .ftl files were written.",
+        failing.len()
+    );
+    for diagnostic in &failing {
+        let _ = write!(message, "\n  - {diagnostic}");
+    }
+    if !allow_parse_errors && !file_errors.is_empty() {
+        message.push_str(
+            "\nPass --allow-parse-errors to skip unreadable or unparseable files and continue.",
+        );
+    }
+
+    bail!(message)
 }
 
 fn process_language(
@@ -348,7 +400,87 @@ mod tests {
             cache: false,
             cache_path: None,
             clear_cache: false,
+            allow_parse_errors: false,
         }
+    }
+
+    #[test]
+    fn test_extract_refuses_to_write_when_python_file_does_not_parse() {
+        let temp = TempDir::new().unwrap();
+        let code_path = temp.path().join("code");
+        let locales_path = temp.path().join("locales");
+        let locale_path = locales_path.join("en");
+        fs::create_dir_all(&code_path).unwrap();
+        fs::create_dir_all(&locale_path).unwrap();
+
+        fs::write(code_path.join("good.py"), r#"i18n.get("hello")"#).unwrap();
+        fs::write(code_path.join("broken.py"), "i18n.get(\"keep-me\"\n").unwrap();
+        let ftl_path = locale_path.join("_default.ftl");
+        fs::write(&ftl_path, "keep-me = Keep me\n").unwrap();
+
+        let error = extract(config(code_path.clone(), locales_path.clone())).unwrap_err();
+
+        let message = error.to_string();
+        assert!(message.contains("Extraction aborted"), "{message}");
+        assert!(message.contains("broken.py"), "{message}");
+        assert!(message.contains("--allow-parse-errors"), "{message}");
+        assert_eq!(
+            fs::read_to_string(&ftl_path).unwrap(),
+            "keep-me = Keep me\n",
+            "existing .ftl must be left untouched"
+        );
+        assert!(!locale_path.join("hello.ftl").exists());
+    }
+
+    #[test]
+    fn test_extract_allow_parse_errors_skips_broken_files_and_writes() {
+        let temp = TempDir::new().unwrap();
+        let code_path = temp.path().join("code");
+        let locales_path = temp.path().join("locales");
+        fs::create_dir_all(&code_path).unwrap();
+
+        fs::write(code_path.join("good.py"), r#"i18n.get("hello")"#).unwrap();
+        fs::write(code_path.join("broken.py"), "i18n.get(").unwrap();
+
+        let mut cfg = config(code_path, locales_path.clone());
+        cfg.allow_parse_errors = true;
+
+        let stats = extract(cfg).unwrap();
+
+        assert_eq!(stats.ftl_in_code_keys_count, 1);
+        let content = fs::read_to_string(locales_path.join("en").join("_default.ftl")).unwrap();
+        assert!(content.contains("hello = hello"));
+    }
+
+    #[test]
+    fn test_extract_conflicting_paths_abort_even_with_allow_parse_errors() {
+        let temp = TempDir::new().unwrap();
+        let code_path = temp.path().join("code");
+        let locales_path = temp.path().join("locales");
+        fs::create_dir_all(&code_path).unwrap();
+
+        fs::write(
+            code_path.join("a.py"),
+            r#"i18n.get("hello", _path="one.ftl")"#,
+        )
+        .unwrap();
+        fs::write(
+            code_path.join("b.py"),
+            r#"i18n.get("hello", _path="two.ftl")"#,
+        )
+        .unwrap();
+
+        let mut cfg = config(code_path.clone(), locales_path.clone());
+        cfg.allow_parse_errors = true;
+
+        let error = extract(cfg).unwrap_err();
+
+        let message = error.to_string();
+        assert!(message.contains("key-path-conflict"), "{message}");
+        assert!(message.contains("a.py:1:1"), "{message}");
+        assert!(message.contains("b.py:1:1"), "{message}");
+        assert!(!message.contains("--allow-parse-errors"), "{message}");
+        assert!(!locales_path.exists(), "nothing may be written on conflict");
     }
 
     #[test]

@@ -330,5 +330,5 @@ i18n.get("hello", _path="two.ftl")
     let result = check_kwargs(config(&temp, vec!["uk".to_string()])).unwrap();
 
     assert_eq!(result.extraction_errors.len(), 1);
-    assert_eq!(result.extraction_errors[0].key, "hello");
+    assert_eq!(result.extraction_errors[0].key.as_deref(), Some("hello"));
 }

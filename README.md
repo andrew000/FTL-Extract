@@ -149,6 +149,11 @@ $ ftl extract project_path/code_path project_path/locales
 - `--cache-path` - custom cache directory or file path. Directory paths store the cache as
   `extract-<package-version>-v<schema-version>.bin`. Passing this option enables the cache.
 - `--clear-cache` - delete the existing extraction cache before running.
+- `--allow-parse-errors` - continue when a Python file cannot be read or parsed. By default, `ftl extract` refuses to
+  write any `.ftl` file when such a file is found, because keys used in that file would otherwise look unused and be
+  commented out. With this flag, the affected files are reported as warnings and skipped. Conflicting key usage
+  (the same key with different `_path=` values or different kwargs) always aborts the run.
+  Config key: `allow-parse-errors = true`.
 
 ***
 
@@ -187,6 +192,10 @@ controlled by `fail-on`.
 
 The `stale` check treats a message referenced by another `.ftl` message as used, even when Python code does not call it
 directly.
+
+Python files that cannot be read or parsed are reported as `extraction` errors by the `missing`, `stale`, and `kwargs`
+checks, since their results cannot be trusted while such files exist. The report names each file with the line and
+column of the syntax error.
 
 Breaking change: `ftl untranslated` has been removed. Use `ftl check --check untranslated` instead.
 

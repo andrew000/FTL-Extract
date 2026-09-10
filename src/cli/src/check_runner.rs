@@ -202,7 +202,7 @@ fn add_extraction_diagnostics_once(
                     severity: Severity::Error,
                     kind: DiagnosticKind::Extraction,
                     locale: None,
-                    key: Some(item.key),
+                    key: item.key,
                     ftl_location: None,
                     code_location: item.locations.first().cloned(),
                     message: item.message,
@@ -409,7 +409,7 @@ mod tests {
                 keys: Vec::new(),
                 diagnostics: vec![ExtractionDiagnostic {
                     kind: ExtractionDiagnosticKind::KeyPathConflict,
-                    key: "hello".to_string(),
+                    key: Some("hello".to_string()),
                     message: "Fluent key hello has different paths".to_string(),
                     locations: vec![CodeLocation {
                         path: code_path.join("app.py"),

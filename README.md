@@ -415,8 +415,9 @@ the key. Run either command with `--verbose` to see which keys are affected:
 key "welcome" is called with **kwargs at app/a.py:3:5; its variables cannot be verified
 ```
 
-Explicit keyword arguments are still compared between calls of the same key, and every other check treats the key as
-usual.
+Calls with `**` never take part in the `key-message-conflict` comparison: only calls without `**` are compared with
+each other, and the placeholder for a new key takes its variables from the first call without `**` (or, when every
+call uses `**`, from the first one). Every other check treats the key as usual.
 
 ***
 

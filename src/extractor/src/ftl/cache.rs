@@ -480,4 +480,38 @@ mod tests {
         );
         assert_eq!(cached_file_to_keys(&plain)["hello"].kwargs_unknown, None);
     }
+
+    #[test]
+    fn test_kept_call_double_star_flag_survives_a_cache_round_trip() {
+        // The flag is derived from `kwargs_unknown == source_location`; both locations are
+        // cached, so a `**`-only key still yields to an explicit call from another file after
+        // being loaded from the cache.
+        let mut double_star_only = fluent_key();
+        double_star_only.source_location = Some(CodeLocation {
+            path: double_star_only.code_path.as_ref().clone(),
+            line: 3,
+            column: 1,
+        });
+        double_star_only.kwargs_unknown = double_star_only.source_location.clone();
+        assert!(double_star_only.kept_call_has_double_star());
+
+        let mut explicit = fluent_key();
+        explicit.source_location = Some(CodeLocation {
+            path: explicit.code_path.as_ref().clone(),
+            line: 1,
+            column: 1,
+        });
+        explicit.kwargs_unknown = Some(CodeLocation {
+            path: explicit.code_path.as_ref().clone(),
+            line: 9,
+            column: 1,
+        });
+        assert!(!explicit.kept_call_has_double_star());
+
+        for (key, expected) in [(double_star_only, true), (explicit, false)] {
+            let keys = FastHashMap::from_iter([(key.key.clone(), key)]);
+            let loaded = cached_file_to_keys(&keys_to_cached_file(1, 2, &keys));
+            assert_eq!(loaded["hello"].kept_call_has_double_star(), expected);
+        }
+    }
 }

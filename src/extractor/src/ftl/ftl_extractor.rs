@@ -1120,4 +1120,26 @@ i18n.get("nested", _path="pages/main.ftl")
             "greeting = Hi\nwelcome = { greeting }, { $name }\n",
         );
     }
+
+    #[test]
+    fn test_extract_writes_the_explicit_call_variables_next_to_a_double_star_call() {
+        let temp = TempDir::new().unwrap();
+        let code_path = temp.path().join("code");
+        let locales_path = temp.path().join("locales");
+        fs::create_dir_all(&code_path).unwrap();
+        fs::create_dir_all(&locales_path).unwrap();
+        fs::write(
+            code_path.join("app.py"),
+            "def f(i18n, user, data):\n    i18n.get(\"welcome\", name=user.name)\n    i18n.get(\"welcome\", **data)\n",
+        )
+        .unwrap();
+
+        let stats = extract(config(code_path, locales_path.clone())).unwrap();
+
+        assert_eq!(stats.ftl_keys_added["en"], 1);
+        assert_eq!(
+            fs::read_to_string(locales_path.join("en").join("_default.ftl")).unwrap(),
+            "welcome = welcome{ $name }\n"
+        );
+    }
 }

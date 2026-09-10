@@ -62,6 +62,8 @@ Behaviour changes new in `0.12.0`:
   `self.i18n("key")`, which is now extracted like `i18n("key")`.
 - Changing `--exclude-dirs` now invalidates the extraction cache.
 - `ftl check` with only warnings no longer reports `FTL check failed`.
+- The source distribution builds again. It shipped the extractor's `Cargo.toml`, which declares the benchmark
+  target, without the `benches/` directory, so cargo refused to parse it and `pip install` from the sdist failed.
 
 ### Internal
 

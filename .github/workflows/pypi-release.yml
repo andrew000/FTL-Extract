@@ -116,6 +116,14 @@ jobs:
         shell: bash
         run: uv build --sdist --out-dir wheelhouse
 
+      # The wheels above are built from the source tree. Building one from the sdist is the
+      # only thing that proves the sdist itself is complete (e.g. every cargo target it
+      # declares is shipped), which is what source installs from PyPI rely on.
+      - name: Build a wheel from the sdist
+        if: runner.os == 'Linux' && matrix.arch == 'x86_64' && matrix.libc == 'manylinux'
+        shell: bash
+        run: uv build --wheel --out-dir sdist-check wheelhouse/*.tar.gz
+
       - name: Store artifacts
         uses: actions/upload-artifact@v7
         with:

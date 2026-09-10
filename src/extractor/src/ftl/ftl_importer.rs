@@ -102,7 +102,9 @@ fn import_from_ftl(path: &Path, locale_dir: &Path, locale: &str) -> Result<Impor
         anyhow::anyhow!("Failed to parse FTL file {}: {:?}", path.display(), err.1)
     })?;
 
-    let mut keys = FastHashMap::default();
+    // Nearly every entry is a message, so the body length is a good size for the key map
+    // and saves the rehashes that growing it from empty would take.
+    let mut keys = FastHashMap::with_capacity_and_hasher(resource.body.len(), Default::default());
     let mut terms = FastHashMap::default();
     let mut misc = Vec::new();
 
@@ -161,25 +163,45 @@ pub(crate) fn import_ftl_from_dir(
         .map(|file_path| import_from_ftl(file_path, &locale_dir, locale))
         .try_fold(
             || (FastHashMap::default(), FastHashMap::default(), Vec::new()),
-            |mut acc, result| {
-                let (keys, terms, misc) = result?;
-                acc.0.extend(keys);
-                acc.1.extend(terms);
-                acc.2.extend(misc);
-                Ok::<ImportResult, anyhow::Error>(acc)
-            },
+            |acc, result| Ok::<ImportResult, anyhow::Error>(merge_imports(acc, result?)),
         )
         .try_reduce(
             || (FastHashMap::default(), FastHashMap::default(), Vec::new()),
-            |mut a, b| {
-                a.0.extend(b.0);
-                a.1.extend(b.1);
-                a.2.extend(b.2);
-                Ok(a)
-            },
+            |a, b| Ok(merge_imports(a, b)),
         )?;
 
     Ok((stored_keys, stored_terms, stored_misc))
+}
+
+/// Merges `b` into `a`. The common case is one `.ftl` file per locale, where `a` is still
+/// the empty accumulator: the file's maps are then moved over instead of being re-inserted
+/// entry by entry.
+fn merge_imports(a: ImportResult, b: ImportResult) -> ImportResult {
+    fn merge_map<V>(
+        mut a: FastHashMap<String, V>,
+        b: FastHashMap<String, V>,
+    ) -> FastHashMap<String, V> {
+        if a.is_empty() {
+            b
+        } else {
+            a.extend(b);
+            a
+        }
+    }
+    fn merge_vec<V>(mut a: Vec<V>, mut b: Vec<V>) -> Vec<V> {
+        if a.is_empty() {
+            b
+        } else {
+            a.append(&mut b);
+            a
+        }
+    }
+
+    (
+        merge_map(a.0, b.0),
+        merge_map(a.1, b.1),
+        merge_vec(a.2, b.2),
+    )
 }
 
 #[cfg(test)]
@@ -381,6 +403,40 @@ JUNK!!!
                 .values()
                 .all(|key| key.path.as_path() == std::path::Path::new("_default.ftl"))
         );
+    }
+
+    #[test]
+    fn test_import_ftl_from_dir_merges_several_files() {
+        let temp = TempDir::new().unwrap();
+        let path = temp.path().join("locales");
+        let locale_dir = path.join("en");
+        std::fs::create_dir_all(locale_dir.join("pages")).unwrap();
+        std::fs::write(
+            locale_dir.join("_default.ftl"),
+            "# Default\n\nhello = Hello\n-brand = Brand\n",
+        )
+        .unwrap();
+        std::fs::write(
+            locale_dir.join("pages").join("main.ftl"),
+            "# Main\n\ntitle = Main\n-product = Product\n",
+        )
+        .unwrap();
+        std::fs::write(locale_dir.join("empty.ftl"), "").unwrap();
+        let locale = "en".to_string();
+        let mut statistics = super::ExtractionStatistics::new();
+        statistics.ftl_files_count.insert(locale.clone(), 0);
+
+        let (ftl_keys, terms, leave_as_is_keys) =
+            super::import_ftl_from_dir(&path, &locale, &mut statistics).unwrap();
+
+        let mut key_names: Vec<&str> = ftl_keys.keys().map(String::as_str).collect();
+        key_names.sort_unstable();
+        assert_eq!(key_names, ["hello", "title"]);
+        let mut term_names: Vec<&str> = terms.keys().map(String::as_str).collect();
+        term_names.sort_unstable();
+        assert_eq!(term_names, ["brand", "product"]);
+        assert_eq!(leave_as_is_keys.len(), 2);
+        assert_eq!(*statistics.ftl_files_count.get(&locale).unwrap(), 3);
     }
 
     #[test]

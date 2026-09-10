@@ -52,7 +52,7 @@ Behaviour changes new in `0.12.0`:
 ### Fixed
 
 - `.ftl` files, the stub file and the `--export-tree` JSON are written atomically: the content goes to a temporary
-  file in the same directory, is flushed, then renamed over the target. An interrupted run leaves the previous file or
+  file in the same directory, then is renamed over the target. An interrupted run leaves the previous file or
   the complete new one, never a truncated one. Write errors are reported for every affected file and exit `1` instead
   of panicking.
 - `ftl extract` no longer panics on the same key with two different `_path=` values, on a dangling message or term

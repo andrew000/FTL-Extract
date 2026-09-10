@@ -302,4 +302,23 @@ mod tests {
             );
         }
     }
+
+    #[test]
+    fn test_blank_line_inside_a_pattern_survives_as_a_bare_hash_line() {
+        // Only trailing blank lines are dropped. The serializer indents the blank line inside the
+        // pattern, `serialize_comment` writes a whitespace-only line as a bare `#`, and
+        // uncommenting restores the blank line.
+        let source = "msg =\n    Line one.\n\n    Line two.\n";
+        assert_eq!(
+            commented_content(source),
+            vec!["msg =", "    Line one.", "    ", "    Line two."]
+        );
+        let mut key = key_from_source(source);
+        super::comment_ftl_key(&mut key);
+        assert_eq!(
+            generate_ftl(vec![key]),
+            "# msg =\n#     Line one.\n#\n#     Line two.\n\n"
+        );
+        assert_round_trip(source);
+    }
 }

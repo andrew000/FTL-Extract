@@ -94,7 +94,7 @@ fn process_raw_ftl(
     Ok(())
 }
 
-fn import_from_ftl(path: &Path, locale: &str) -> Result<ImportResult> {
+fn import_from_ftl(path: &Path, locale_dir: &Path, locale: &str) -> Result<ImportResult> {
     let content = fs::read_to_string(path)
         .with_context(|| format!("Failed to read FTL file: {}", path.display()))?;
 
@@ -106,7 +106,7 @@ fn import_from_ftl(path: &Path, locale: &str) -> Result<ImportResult> {
     let mut terms = FastHashMap::default();
     let mut misc = Vec::new();
 
-    let path_arc = Arc::new(path.to_path_buf());
+    let path_arc = Arc::new(path.strip_prefix(locale_dir).unwrap_or(path).to_path_buf());
     // Empty code path for imported keys
     let code_path_arc = Arc::new(PathBuf::new());
 
@@ -150,14 +150,15 @@ pub(crate) fn import_ftl_from_dir(
     locale: &String,
     statistics: &mut ExtractionStatistics,
 ) -> Result<ImportResult> {
-    let paths = ftl_files(&path.join(locale), FtlWalk::Filtered)?;
+    let locale_dir = path.join(locale);
+    let paths = ftl_files(&locale_dir, FtlWalk::Filtered)?;
 
     let files_count = paths.len();
     *statistics.ftl_files_count.get_mut(locale).unwrap() += files_count;
 
     let (stored_keys, stored_terms, stored_misc) = paths
         .par_iter()
-        .map(|file_path| import_from_ftl(file_path, locale))
+        .map(|file_path| import_from_ftl(file_path, &locale_dir, locale))
         .try_fold(
             || (FastHashMap::default(), FastHashMap::default(), Vec::new()),
             |mut acc, result| {
@@ -261,11 +262,17 @@ JUNK!!!
         let temp = TempDir::new().unwrap();
         let path = write_locale_fixture(temp.path());
         let locale = "en".to_string();
-        let (ftl_keys, terms, leave_as_is_keys) = super::import_from_ftl(&path, &locale).unwrap();
+        let (ftl_keys, terms, leave_as_is_keys) =
+            super::import_from_ftl(&path, path.parent().unwrap(), &locale).unwrap();
 
         assert_eq!(ftl_keys.len(), 13);
         assert_eq!(terms.len(), 5);
         assert_eq!(leave_as_is_keys.len(), 3);
+        // Paths are relative to the locale directory, for every kind of entry.
+        let relative = PathBuf::from("_default.ftl");
+        assert!(ftl_keys.values().all(|key| *key.path == relative));
+        assert!(terms.values().all(|key| *key.path == relative));
+        assert!(leave_as_is_keys.iter().all(|key| *key.path == relative));
     }
 
     #[test]
@@ -351,7 +358,7 @@ JUNK!!!
         std::fs::write(&path, JUNK_FTL).unwrap();
         let locale = "en".to_string();
         let (_ftl_keys, _terms, _leave_as_is_keys) =
-            super::import_from_ftl(&path, &locale).unwrap();
+            super::import_from_ftl(&path, temp.path(), &locale).unwrap();
     }
 
     #[test]
@@ -369,5 +376,30 @@ JUNK!!!
         assert_eq!(terms.len(), 5);
         assert_eq!(leave_as_is_keys.len(), 3);
         assert_eq!(*statistics.ftl_files_count.get(&locale).unwrap(), 1);
+        assert!(
+            ftl_keys
+                .values()
+                .all(|key| key.path.as_path() == std::path::Path::new("_default.ftl"))
+        );
+    }
+
+    #[test]
+    fn test_import_ftl_from_dir_keeps_subdirectories_in_relative_paths() {
+        let temp = TempDir::new().unwrap();
+        let path = temp.path().join("locales");
+        let nested = path.join("en").join("pages");
+        std::fs::create_dir_all(&nested).unwrap();
+        std::fs::write(nested.join("main.ftl"), "title = Main\n").unwrap();
+        let locale = "en".to_string();
+        let mut statistics = super::ExtractionStatistics::new();
+        statistics.ftl_files_count.insert(locale.clone(), 0);
+
+        let (ftl_keys, _terms, _leave_as_is_keys) =
+            super::import_ftl_from_dir(&path, &locale, &mut statistics).unwrap();
+
+        assert_eq!(
+            *ftl_keys["title"].path,
+            PathBuf::from("pages").join("main.ftl")
+        );
     }
 }

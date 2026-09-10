@@ -1,5 +1,6 @@
 use common::FastHashSet;
 use extractor::ftl::diagnostics as extractor_diagnostics;
+use std::fmt;
 use std::path::PathBuf;
 
 #[derive(Debug, Clone)]
@@ -173,6 +174,19 @@ pub struct SourceLocation {
     pub column: Option<usize>,
 }
 
+impl fmt::Display for SourceLocation {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.path.display())?;
+        if let Some(line) = self.line {
+            write!(f, ":{line}")?;
+            if let Some(column) = self.column {
+                write!(f, ":{column}")?;
+            }
+        }
+        Ok(())
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TranslationSuggestion {
     pub locale: String,
@@ -339,6 +353,37 @@ impl From<extractor_diagnostics::CodeLocation> for SourceLocation {
     }
 }
 
+impl CodeExtractionError {
+    /// The check-report diagnostic for an extraction error. The report has one
+    /// `code_location`; a conflict between two call sites keeps the second one visible by
+    /// naming all sites in the message.
+    pub fn into_diagnostic(self) -> Diagnostic {
+        let message = if self.locations.len() > 1 {
+            let sites = self
+                .locations
+                .iter()
+                .map(SourceLocation::to_string)
+                .collect::<Vec<_>>()
+                .join(", ");
+            format!("{} ({sites})", self.message)
+        } else {
+            self.message
+        };
+        Diagnostic {
+            severity: DiagnosticKind::Extraction.default_severity(),
+            kind: DiagnosticKind::Extraction,
+            locale: None,
+            key: self.key,
+            ftl_location: None,
+            code_location: self.locations.first().cloned(),
+            message,
+            suggestions: Vec::new(),
+            missing_kwargs: Vec::new(),
+            unused_kwargs: Vec::new(),
+        }
+    }
+}
+
 impl From<extractor_diagnostics::ExtractionDiagnostic> for CodeExtractionError {
     fn from(diagnostic: extractor_diagnostics::ExtractionDiagnostic) -> Self {
         Self {
@@ -474,18 +519,12 @@ impl From<CheckMissingResult> for CheckResult {
             })
             .collect::<Vec<_>>();
 
-        diagnostics.extend(result.extraction_errors.into_iter().map(|item| Diagnostic {
-            severity: DiagnosticKind::Extraction.default_severity(),
-            kind: DiagnosticKind::Extraction,
-            locale: None,
-            key: item.key,
-            ftl_location: None,
-            code_location: item.locations.first().cloned(),
-            message: item.message,
-            suggestions: Vec::new(),
-            missing_kwargs: Vec::new(),
-            unused_kwargs: Vec::new(),
-        }));
+        diagnostics.extend(
+            result
+                .extraction_errors
+                .into_iter()
+                .map(CodeExtractionError::into_diagnostic),
+        );
 
         Self {
             checked_kinds: vec![DiagnosticKind::Missing],
@@ -520,18 +559,12 @@ impl From<CheckStaleResult> for CheckResult {
             })
             .collect::<Vec<_>>();
 
-        diagnostics.extend(result.extraction_errors.into_iter().map(|item| Diagnostic {
-            severity: DiagnosticKind::Extraction.default_severity(),
-            kind: DiagnosticKind::Extraction,
-            locale: None,
-            key: item.key,
-            ftl_location: None,
-            code_location: item.locations.first().cloned(),
-            message: item.message,
-            suggestions: Vec::new(),
-            missing_kwargs: Vec::new(),
-            unused_kwargs: Vec::new(),
-        }));
+        diagnostics.extend(
+            result
+                .extraction_errors
+                .into_iter()
+                .map(CodeExtractionError::into_diagnostic),
+        );
 
         Self {
             checked_kinds: vec![DiagnosticKind::Stale],
@@ -566,18 +599,12 @@ impl From<CheckKwargsResult> for CheckResult {
             })
             .collect::<Vec<_>>();
 
-        diagnostics.extend(result.extraction_errors.into_iter().map(|item| Diagnostic {
-            severity: DiagnosticKind::Extraction.default_severity(),
-            kind: DiagnosticKind::Extraction,
-            locale: None,
-            key: item.key,
-            ftl_location: None,
-            code_location: item.locations.first().cloned(),
-            message: item.message,
-            suggestions: Vec::new(),
-            missing_kwargs: Vec::new(),
-            unused_kwargs: Vec::new(),
-        }));
+        diagnostics.extend(
+            result
+                .extraction_errors
+                .into_iter()
+                .map(CodeExtractionError::into_diagnostic),
+        );
 
         Self {
             checked_kinds: vec![DiagnosticKind::Kwargs],

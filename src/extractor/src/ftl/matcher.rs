@@ -102,27 +102,80 @@ pub(crate) fn code_message(
     }
 }
 
-/// Message text of a `KeyMessageConflict`: the two keyword-argument sets with their locations,
-/// in the same order as the diagnostic's `locations` (existing first).
-pub(crate) fn kwargs_conflict_message(existing: &FluentKey, new_fluent_key: &FluentKey) -> String {
+/// The two occurrences of a conflicting key, ordered by call site (path, line, column), so
+/// the message and the `locations` of the diagnostic do not depend on which file the parallel
+/// extraction reduced first. Within one file this is source order.
+pub(crate) fn order_conflict_sides<'k>(
+    a: &'k FluentKey,
+    b: &'k FluentKey,
+) -> (&'k FluentKey, &'k FluentKey) {
+    if b.source_location < a.source_location {
+        (b, a)
+    } else {
+        (a, b)
+    }
+}
+
+/// The call sites of the two ordered occurrences, for the diagnostic's `locations`.
+pub(crate) fn conflict_locations(first: &FluentKey, second: &FluentKey) -> Vec<CodeLocation> {
+    [first, second]
+        .into_iter()
+        .filter_map(|key| key.source_location.clone())
+        .collect()
+}
+
+/// Builds a conflict diagnostic for `existing` and `new_fluent_key`. `message` receives the
+/// two occurrences ordered by call site, matching the order of `locations`.
+pub(crate) fn conflict_diagnostic(
+    kind: ExtractionDiagnosticKind,
+    existing: &FluentKey,
+    new_fluent_key: &FluentKey,
+    message: impl FnOnce(&FluentKey, &FluentKey) -> String,
+) -> ExtractionDiagnostic {
+    let (first, second) = order_conflict_sides(existing, new_fluent_key);
+    ExtractionDiagnostic {
+        kind,
+        key: Some(new_fluent_key.key.clone()),
+        message: message(first, second),
+        locations: conflict_locations(first, second),
+    }
+}
+
+/// Message text of a `KeyMessageConflict`: the two keyword-argument sets, in the same order as
+/// the diagnostic's `locations`. The call sites themselves are only in `locations`.
+pub(crate) fn kwargs_conflict_message(first: &FluentKey, second: &FluentKey) -> String {
     fn describe(key: &FluentKey) -> String {
         let kwargs = kwargs_from_key(key);
-        let kwargs = if kwargs.is_empty() {
+        if kwargs.is_empty() {
             "no keyword arguments".to_string()
         } else {
             kwargs.join(", ")
-        };
-        match &key.source_location {
-            Some(location) => format!("{kwargs} ({location})"),
-            None => kwargs,
         }
     }
 
     format!(
         "Fluent key {} is used with different keyword arguments: {} and {}",
-        new_fluent_key.key,
-        describe(existing),
-        describe(new_fluent_key)
+        first.key,
+        describe(first),
+        describe(second)
+    )
+}
+
+/// Message text of a `KeyPathConflict`, sides ordered like `locations`.
+pub(crate) fn path_conflict_message(first: &FluentKey, second: &FluentKey) -> String {
+    format!(
+        "Fluent key {} has different paths: {} and {}",
+        first.key,
+        first.path.display(),
+        second.path.display()
+    )
+}
+
+/// Message text of a `KeyTypeConflict`.
+pub(crate) fn type_conflict_message(first: &FluentKey, _second: &FluentKey) -> String {
+    format!(
+        "Fluent key {} is not a Message in one of the entries.",
+        first.key
     )
 }
 
@@ -348,29 +401,6 @@ impl<'a> I18nMatcher<'a> {
         }
     }
 
-    fn add_conflict_diagnostic(
-        &mut self,
-        kind: ExtractionDiagnosticKind,
-        existing: &FluentKey,
-        new_fluent_key: &FluentKey,
-        message: String,
-    ) {
-        let mut locations = Vec::new();
-        if let Some(location) = existing.source_location.clone() {
-            locations.push(location);
-        }
-        if let Some(location) = new_fluent_key.source_location.clone() {
-            locations.push(location);
-        }
-
-        self.diagnostics.push(ExtractionDiagnostic {
-            kind,
-            key: Some(new_fluent_key.key.clone()),
-            message,
-            locations,
-        });
-    }
-
     #[inline]
     fn add_fluent_key(&mut self, expr: &ruff_python_ast::ExprCall, key: String) {
         let new_fluent_key = self.create_fluent_key(expr, key);
@@ -386,44 +416,33 @@ impl<'a> I18nMatcher<'a> {
         let existing = existing.clone();
 
         if existing.path != new_fluent_key.path {
-            let message = format!(
-                "Fluent key {} has different paths: {} and {}",
-                new_fluent_key.key,
-                new_fluent_key.path.display(),
-                existing.path.display()
-            );
-            self.add_conflict_diagnostic(
+            self.diagnostics.push(conflict_diagnostic(
                 ExtractionDiagnosticKind::KeyPathConflict,
                 &existing,
                 &new_fluent_key,
-                message,
-            );
+                path_conflict_message,
+            ));
             return;
         }
 
         match (existing.entry.as_ref(), new_fluent_key.entry.as_ref()) {
             (FluentEntry::Message(existing_message), FluentEntry::Message(new_message)) => {
                 if existing_message != new_message {
-                    let message = kwargs_conflict_message(&existing, &new_fluent_key);
-                    self.add_conflict_diagnostic(
+                    self.diagnostics.push(conflict_diagnostic(
                         ExtractionDiagnosticKind::KeyMessageConflict,
                         &existing,
                         &new_fluent_key,
-                        message,
-                    );
+                        kwargs_conflict_message,
+                    ));
                 }
             }
             _ => {
-                let message = format!(
-                    "Fluent key {} is not a Message in one of the entries.",
-                    new_fluent_key.key
-                );
-                self.add_conflict_diagnostic(
+                self.diagnostics.push(conflict_diagnostic(
                     ExtractionDiagnosticKind::KeyTypeConflict,
                     &existing,
                     &new_fluent_key,
-                    message,
-                );
+                    type_conflict_message,
+                ));
             }
         }
     }
@@ -504,11 +523,11 @@ mod tests {
         assert_eq!(diagnostics[0].locations.len(), 2);
         assert_eq!(
             diagnostics[0].message,
-            "Fluent key order is used with different keyword arguments: a, b (app.py:2:5) and a, c (app.py:3:5)"
+            "Fluent key order is used with different keyword arguments: a, b and a, c"
         );
         assert_eq!(
             diagnostics[0].to_string(),
-            "[key-message-conflict] Fluent key order is used with different keyword arguments: a, b (app.py:2:5) and a, c (app.py:3:5) (app.py:2:5, app.py:3:5)"
+            "[key-message-conflict] Fluent key order is used with different keyword arguments: a, b and a, c (app.py:2:5, app.py:3:5)"
         );
     }
 
@@ -519,7 +538,7 @@ mod tests {
         assert_eq!(diagnostics.len(), 1);
         assert_eq!(
             diagnostics[0].message,
-            "Fluent key k is used with different keyword arguments: no keyword arguments (app.py:1:1) and a (app.py:2:1)"
+            "Fluent key k is used with different keyword arguments: no keyword arguments and a"
         );
     }
 
@@ -584,7 +603,7 @@ mod tests {
         );
         assert_eq!(
             diagnostics[0].message,
-            "Fluent key k is used with different keyword arguments: a, b (app.py:1:1) and a, c (app.py:3:1)"
+            "Fluent key k is used with different keyword arguments: a, b and a, c"
         );
         assert_eq!(keys["k"].kwargs_unknown, Some(location(2, 1)));
     }

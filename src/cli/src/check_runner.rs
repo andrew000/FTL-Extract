@@ -1,8 +1,8 @@
 use crate::args::{CheckKind, FailSeverity};
 use anyhow::{Context, Result};
 use check::{
-    CheckCodeConfig, CheckLocaleCache, CheckResult, Diagnostic, DiagnosticKind, Severity,
-    SeverityOverrides, check_kwargs_with_cache, check_missing_with_cache,
+    CheckCodeConfig, CheckLocaleCache, CheckResult, CodeExtractionError, Diagnostic,
+    DiagnosticKind, Severity, SeverityOverrides, check_kwargs_with_cache, check_missing_with_cache,
     check_references_with_cache, check_stale_with_cache, check_syntax_with_cache,
     check_untranslated_with_cache, code_extraction_errors, extract_check_code,
     validate_check_locales,
@@ -232,24 +232,11 @@ fn add_extraction_diagnostics_once(
         return;
     }
 
-    result
-        .diagnostics
-        .extend(
-            code_extraction_errors(extracted)
-                .into_iter()
-                .map(|item| Diagnostic {
-                    severity: DiagnosticKind::Extraction.default_severity(),
-                    kind: DiagnosticKind::Extraction,
-                    locale: None,
-                    key: item.key,
-                    ftl_location: None,
-                    code_location: item.locations.first().cloned(),
-                    message: item.message,
-                    suggestions: Vec::new(),
-                    missing_kwargs: Vec::new(),
-                    unused_kwargs: Vec::new(),
-                }),
-        );
+    result.diagnostics.extend(
+        code_extraction_errors(extracted)
+            .into_iter()
+            .map(CodeExtractionError::into_diagnostic),
+    );
     *added = true;
 }
 

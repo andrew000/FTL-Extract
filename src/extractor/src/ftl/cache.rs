@@ -9,7 +9,8 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::UNIX_EPOCH;
 
-pub(super) const CACHE_SCHEMA_VERSION: u32 = 2;
+// Bump whenever `CacheOptions` or the cached key layout changes; older files are then ignored.
+pub(super) const CACHE_SCHEMA_VERSION: u32 = 3;
 
 #[derive(Clone, Debug, PartialEq, Eq, Encode, Decode)]
 pub(super) struct CacheOptions {
@@ -17,6 +18,7 @@ pub(super) struct CacheOptions {
     i18n_keys_prefix: Vec<String>,
     ignore_attributes: Vec<String>,
     ignore_kwargs: Vec<String>,
+    exclude_dirs: Vec<String>,
     default_ftl_file: PathBuf,
 }
 
@@ -60,6 +62,7 @@ pub(super) fn cache_options(
     i18n_keys_prefix: &FastHashSet<String>,
     ignore_attributes: &FastHashSet<String>,
     ignore_kwargs: &FastHashSet<String>,
+    exclude_dirs: &FastHashSet<String>,
     default_ftl_file: &Path,
 ) -> CacheOptions {
     CacheOptions {
@@ -67,6 +70,7 @@ pub(super) fn cache_options(
         i18n_keys_prefix: sorted_values(i18n_keys_prefix),
         ignore_attributes: sorted_values(ignore_attributes),
         ignore_kwargs: sorted_values(ignore_kwargs),
+        exclude_dirs: sorted_values(exclude_dirs),
         default_ftl_file: default_ftl_file.to_path_buf(),
     }
 }
@@ -254,6 +258,7 @@ mod tests {
             &FastHashSet::default(),
             &FastHashSet::default(),
             &FastHashSet::default(),
+            &FastHashSet::default(),
             &PathBuf::from(default_ftl_file),
         )
     }
@@ -316,12 +321,12 @@ mod tests {
         assert_eq!(
             cache_file_path(None),
             PathBuf::from(".ftl-extract-cache")
-                .join(format!("extract-{}-v2.bin", env!("CARGO_PKG_VERSION")))
+                .join(format!("extract-{}-v3.bin", env!("CARGO_PKG_VERSION")))
         );
         assert_eq!(
             cache_file_path(Some(Path::new("cache-dir"))),
             PathBuf::from("cache-dir")
-                .join(format!("extract-{}-v2.bin", env!("CARGO_PKG_VERSION")))
+                .join(format!("extract-{}-v3.bin", env!("CARGO_PKG_VERSION")))
         );
         assert_eq!(
             cache_file_path(Some(Path::new("custom.bin"))),
@@ -393,5 +398,41 @@ mod tests {
 
         assert!(loaded.files.is_empty());
         assert!(!path.exists());
+    }
+
+    #[test]
+    fn test_cache_rejects_different_exclude_dirs() {
+        let temp = TempDir::new().unwrap();
+        let path = temp.path().join("cache.bin");
+        let keys = FastHashSet::from_iter(["i18n".to_string()]);
+        let empty = FastHashSet::default();
+        let with_excludes = |excludes: &FastHashSet<String>| {
+            cache_options(
+                &keys,
+                &empty,
+                &empty,
+                &empty,
+                excludes,
+                &PathBuf::from("_default.ftl"),
+            )
+        };
+        let none = with_excludes(&FastHashSet::default());
+        let tests = with_excludes(&FastHashSet::from_iter(["**/tests/**".to_string()]));
+
+        let mut cache = CacheFile {
+            schema_version: CACHE_SCHEMA_VERSION,
+            options: none.clone(),
+            files: FastHashMap::default(),
+        };
+        let mut keys_map = FastHashMap::default();
+        let key = fluent_key();
+        keys_map.insert(key.key.clone(), key);
+        cache
+            .files
+            .insert("app.py".to_string(), keys_to_cached_file(1, 2, &keys_map));
+        save_cache(&path, &cache);
+
+        assert_eq!(load_cache(&path, &none, false).files.len(), 1);
+        assert!(load_cache(&path, &tests, false).files.is_empty());
     }
 }

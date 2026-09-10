@@ -376,6 +376,7 @@ pub(crate) fn extract_fluent_keys(
         &i18n_keys_prefix,
         &ignore_attributes,
         &ignore_kwargs,
+        exclude_dirs,
         default_ftl_file,
     );
     let cache_file_path = cache_file_path(cache_path);
@@ -1066,6 +1067,7 @@ i18n.get("hello", _path="two.ftl")
                 &FastHashSet::default(),
                 &FastHashSet::default(),
                 &FastHashSet::default(),
+                &FastHashSet::default(),
                 &PathBuf::from("_default.ftl"),
             ),
             files: FastHashMap::default(),
@@ -1159,5 +1161,57 @@ i18n.get("hello", _path="two.ftl")
         assert_eq!(sorted.len(), 2);
         assert!(sorted.contains_key(&ftl_path1.clone()));
         assert!(sorted.contains_key(&ftl_path2.clone()));
+    }
+
+    #[test]
+    fn test_cache_is_not_shared_between_different_exclude_dirs() {
+        let temp = TempDir::new().unwrap();
+        let code_dir = temp.path().join("py");
+        let cache_dir = temp.path().join("cache");
+        std::fs::create_dir_all(code_dir.join("tests")).unwrap();
+        std::fs::write(code_dir.join("app.py"), r#"i18n.get("hello")"#).unwrap();
+        std::fs::write(
+            code_dir.join("tests").join("test_app.py"),
+            r#"i18n.get("only-in-tests")"#,
+        )
+        .unwrap();
+
+        let run = |exclude_dirs: &FastHashSet<String>| {
+            extract_fluent_keys(
+                &code_dir,
+                I18N_ONLY.clone(),
+                FastHashSet::default(),
+                exclude_dirs,
+                FastHashSet::default(),
+                FastHashSet::default(),
+                &DEFAULT_FTL,
+                true,
+                Some(&cache_dir),
+                false,
+            )
+            .unwrap()
+        };
+
+        let everything = FastHashSet::default();
+        let without_tests = FastHashSet::from_iter(["tests/**".to_string()]);
+
+        assert_eq!(run(&everything).keys.len(), 2);
+        assert_eq!(run(&without_tests).keys.len(), 1);
+
+        // The second run rebuilt the cache with its own options: the entry for the excluded
+        // test file is gone rather than carried over from the first run.
+        let options = super::cache_options(
+            &I18N_ONLY,
+            &FastHashSet::default(),
+            &FastHashSet::default(),
+            &FastHashSet::default(),
+            &without_tests,
+            &DEFAULT_FTL,
+        );
+        let cache = super::load_cache(&super::cache_file_path(Some(&cache_dir)), &options, false);
+        assert_eq!(cache.files.len(), 1);
+        assert!(cache.files.keys().all(|file| file.ends_with("app.py")));
+
+        assert_eq!(run(&everything).keys.len(), 2);
     }
 }

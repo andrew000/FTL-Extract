@@ -4,7 +4,6 @@ use crate::ftl::consts;
 use crate::ftl::diagnostics::{CodeLocation, ExtractionDiagnostic, ExtractionDiagnosticKind};
 use crate::ftl::utils::{FastHashMap, FastHashSet};
 use anyhow::{Result, bail};
-use fluent::types::AnyEq;
 use ruff_python_ast::visitor::source_order::SourceOrderVisitor;
 use smallvec::SmallVec;
 use std::path::PathBuf;
@@ -333,7 +332,7 @@ impl<'a> I18nMatcher<'a> {
 
     fn code_location(&self, expr: &ruff_python_ast::ExprCall) -> Option<CodeLocation> {
         let source = self.source?;
-        let (line, column) = line_column(source, expr.range.start().to_u32() as usize);
+        let (line, column) = line_column(source, expr.range_start.to_u32() as usize);
 
         Some(CodeLocation {
             path: self.code_path.as_ref().clone(),
@@ -391,7 +390,7 @@ impl<'a> I18nMatcher<'a> {
             if let (FluentEntry::Message(existing_message), FluentEntry::Message(new_message)) =
                 (existing.entry.as_ref(), new_fluent_key.entry.as_ref())
             {
-                if !existing_message.clone().equals(new_message) {
+                if existing_message != new_message {
                     let message = format!(
                         "Fluent key {} has different translations:\n{:?}\nand\n{:?}",
                         new_fluent_key.key, new_message, existing_message

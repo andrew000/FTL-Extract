@@ -17,7 +17,6 @@ anyhow.workspace = true
 bincode-next.workspace = true
 clap.workspace = true
 fluent-syntax.workspace = true
-fluent.workspace = true
 ignore.workspace = true
 log.workspace = true
 memchr.workspace = true

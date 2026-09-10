@@ -235,6 +235,7 @@ dependencies = [
  "common",
  "extractor",
  "fluent-syntax",
+ "log",
  "serde_json",
  "tempfile",
 ]

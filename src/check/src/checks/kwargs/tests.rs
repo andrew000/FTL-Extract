@@ -455,3 +455,25 @@ fn test_check_kwargs_kwarg_matching_only_an_own_attribute_is_unused() {
     assert!(result.mismatches[0].missing_kwargs.is_empty());
     assert_eq!(result.mismatches[0].unused_kwargs, vec!["x"]);
 }
+
+#[test]
+fn test_check_kwargs_skips_keys_called_with_double_star_kwargs() {
+    // `**data` can pass `name`, so the key cannot be verified and is not a mismatch.
+    let temp = TempDir::new().unwrap();
+    write(
+        &temp.path().join("code/app.py"),
+        r#"i18n.get("welcome", **data)
+i18n.get("bye", name=user.name)
+"#,
+    );
+    write(
+        &temp.path().join("locales/uk/_default.ftl"),
+        "welcome = Welcome, { $name }!\nbye = Bye { $username }\n",
+    );
+
+    let result = check_kwargs(config(&temp, vec!["uk".to_string()])).unwrap();
+
+    // Only the verifiable key is reported.
+    assert_eq!(result.mismatches.len(), 1);
+    assert_eq!(result.mismatches[0].key, "bye");
+}

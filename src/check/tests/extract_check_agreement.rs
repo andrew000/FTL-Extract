@@ -101,6 +101,12 @@ const AGREED: &[Fixture] = &[
         ftl: "b = B { $x }\n    .title = Title { $x }\n",
     },
     Fixture {
+        // `**data` can pass `name`; neither command can verify the key, so both leave it alone.
+        name: "kwargs unpacked with **data",
+        code: "def f(i18n, data): i18n.welcome(**data)\n",
+        ftl: "welcome = Welcome, { $name }!\n",
+    },
+    Fixture {
         name: "message chain",
         code: "i18n.a(x=1, y=2, z=3)\ni18n.b(y=2, z=3)\ni18n.c(z=3)\n",
         ftl: "c = C { $z }\nb = B { $y } { c }\na = A { $x } { b }\n",

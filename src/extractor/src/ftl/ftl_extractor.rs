@@ -66,6 +66,7 @@ pub fn extract(config: ExtractConfig) -> Result<ExtractionStatistics> {
 
     let in_code_fluent_keys = extraction.keys;
     statistics.ftl_in_code_keys_count = in_code_fluent_keys.len();
+    log_kwargs_unknown(&in_code_fluent_keys);
 
     let start = std::time::Instant::now();
     let results: Result<Vec<ExtractionStatistics>> = config
@@ -91,6 +92,25 @@ pub fn extract(config: ExtractConfig) -> Result<ExtractionStatistics> {
     }
 
     Ok(statistics)
+}
+
+/// One verbose line per key whose variables cannot be verified because some call passes
+/// `**kwargs`. Sorted by key so the output is stable.
+fn log_kwargs_unknown(in_code_fluent_keys: &FastHashMap<String, FluentKey>) {
+    let mut unknown: Vec<(&String, &FluentKey)> = in_code_fluent_keys
+        .iter()
+        .filter(|(_, fluent_key)| fluent_key.kwargs_unknown.is_some())
+        .collect();
+    unknown.sort_by(|a, b| a.0.cmp(b.0));
+
+    for (key, fluent_key) in unknown {
+        if let Some(location) = &fluent_key.kwargs_unknown {
+            debug!(
+                target: "extractor::ftl",
+                "key \"{key}\" is called with **kwargs at {location}; its variables cannot be verified"
+            );
+        }
+    }
 }
 
 /// Fails when extraction reported problems that make the key set untrustworthy
@@ -188,17 +208,25 @@ fn process_language(
             continue;
         };
 
-        let code_args = extract_kwargs(
-            fluent_key,
-            &stored_terms,
-            in_code_fluent_keys,
-            &mut depend_keys,
-        )?;
-
+        // Walked for every key: this is what records the messages the stored message
+        // references, so they are not treated as stale.
         let stored_args = extract_kwargs(
             stored_key,
             &stored_terms,
             &stored_fluent_keys,
+            &mut depend_keys,
+        )?;
+
+        // A call with `**kwargs` can pass any variable, so the stored message cannot be
+        // checked against the code and is left alone.
+        if fluent_key.kwargs_unknown.is_some() {
+            continue;
+        }
+
+        let code_args = extract_kwargs(
+            fluent_key,
+            &stored_terms,
+            in_code_fluent_keys,
             &mut depend_keys,
         )?;
 
@@ -536,7 +564,7 @@ i18n.page.title(_path="pages/main.ftl")
         assert_eq!(first_stats.ftl_keys_added["en"], 2);
         assert!(
             cache_path
-                .join(format!("extract-{}-v3.bin", env!("CARGO_PKG_VERSION")))
+                .join(format!("extract-{}-v4.bin", env!("CARGO_PKG_VERSION")))
                 .exists()
         );
 
@@ -1032,6 +1060,64 @@ i18n.get("nested", _path="pages/main.ftl")
         assert_eq!(
             fs::read_to_string(locales_path.join("en").join("_default.ftl")).unwrap(),
             "order = order{ $a }{ $b }\n"
+        );
+    }
+
+    #[test]
+    fn test_extract_leaves_stored_message_alone_when_code_passes_double_star_kwargs() {
+        // X1: `**data` can pass `name`, so the stored translation is not a mismatch.
+        assert_extract_leaves_unchanged(
+            "def f(i18n, data): i18n.get(\"welcome\", **data)\n",
+            "welcome = Welcome, { $name }!\n",
+        );
+        assert_extract_leaves_unchanged(
+            "def f(i18n, data): i18n.get(\"welcome\", **data)\n",
+            "welcome = Ласкаво просимо, { $name }!\n",
+        );
+    }
+
+    #[test]
+    fn test_extract_writes_explicit_kwargs_only_for_a_new_key_with_double_star() {
+        let (stats, output, _temp) =
+            extract_fixture("def f(i18n, data): i18n.get(\"welcome\", **data)\n", "");
+        assert_eq!(stats.ftl_keys_added["en"], 1);
+        assert_eq!(output, "welcome = welcome\n");
+
+        let (stats, output, _temp) =
+            extract_fixture("def f(i18n, data): i18n.get(\"k\", a=1, **data)\n", "");
+        assert_eq!(stats.ftl_keys_added["en"], 1);
+        assert_eq!(output, "k = k{ $a }\n");
+    }
+
+    #[test]
+    fn test_extract_keeps_the_users_edit_of_a_double_star_placeholder() {
+        let code = "def f(i18n, data): i18n.get(\"welcome\", **data)\n";
+        let (_, output, temp) = extract_fixture(code, "");
+        assert_eq!(output, "welcome = welcome\n");
+
+        // The user fills in the translation; the next run must not undo it.
+        let ftl_path = temp.path().join("locales").join("en").join("_default.ftl");
+        let edited = "welcome = Welcome, { $name }!\n";
+        fs::write(&ftl_path, edited).unwrap();
+
+        let stats = extract(config(
+            temp.path().join("code"),
+            temp.path().join("locales"),
+        ))
+        .unwrap();
+
+        assert_eq!(stats.ftl_keys_commented["en"], 0);
+        assert_eq!(stats.ftl_keys_updated["en"], 0);
+        assert_eq!(fs::read_to_string(&ftl_path).unwrap(), edited);
+    }
+
+    #[test]
+    fn test_extract_keeps_messages_referenced_from_a_double_star_key() {
+        // `greeting` is not called from code; it is alive only through `welcome`, whose
+        // variables are not verified, but whose references still count.
+        assert_extract_leaves_unchanged(
+            "def f(i18n, data): i18n.get(\"welcome\", **data)\n",
+            "greeting = Hi\nwelcome = { greeting }, { $name }\n",
         );
     }
 }

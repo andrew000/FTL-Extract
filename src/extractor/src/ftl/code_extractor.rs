@@ -296,7 +296,10 @@ fn merge_fluent_key(
     val: FluentKey,
 ) {
     match target.entry(key) {
-        Entry::Occupied(entry) => {
+        Entry::Occupied(mut entry) => {
+            // The kept occurrence carries the `**kwargs` marker of every occurrence; explicit
+            // keyword arguments are still compared below, independently of it.
+            entry.get_mut().absorb_kwargs_unknown(&val);
             let existing_key: &FluentKey = entry.get();
             if existing_key.path != val.path {
                 diagnostics.push(conflict_diagnostic(
@@ -503,6 +506,7 @@ fn extracted_key_from_fluent_key(fluent_key: FluentKey) -> ExtractedFluentKey {
         key: fluent_key.key,
         ftl_path: fluent_key.path.as_ref().clone(),
         code_location: fluent_key.source_location,
+        kwargs_unknown: fluent_key.kwargs_unknown,
     }
 }
 
@@ -1357,5 +1361,37 @@ i18n.get("ok")
             "unexpected message: {}",
             diagnostic.message
         );
+    }
+
+    #[test]
+    fn test_double_star_kwargs_in_another_file_mark_the_extracted_key() {
+        let temp = TempDir::new().unwrap();
+        let code_dir = temp.path().join("py");
+        std::fs::create_dir_all(&code_dir).unwrap();
+        let b_py = code_dir.join("b.py");
+        std::fs::write(code_dir.join("a.py"), r#"i18n.get("welcome")"#).unwrap();
+        std::fs::write(&b_py, r#"i18n.get("welcome", **data)"#).unwrap();
+
+        let extracted = super::extract_code_with_diagnostics(
+            &code_dir,
+            I18N_ONLY.clone(),
+            FastHashSet::default(),
+            &FastHashSet::default(),
+            FastHashSet::default(),
+            FastHashSet::default(),
+            &PathBuf::from("_default.ftl"),
+        )
+        .unwrap();
+
+        assert!(
+            extracted.diagnostics.is_empty(),
+            "{:?}",
+            extracted.diagnostics
+        );
+        assert_eq!(extracted.keys.len(), 1);
+        assert!(extracted.keys[0].kwargs.is_empty());
+        let unknown = extracted.keys[0].kwargs_unknown.as_ref().unwrap();
+        assert_eq!(unknown.path, b_py);
+        assert_eq!((unknown.line, unknown.column), (1, 1));
     }
 }

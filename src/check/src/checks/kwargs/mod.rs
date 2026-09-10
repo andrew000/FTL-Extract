@@ -8,8 +8,9 @@ use crate::parser::CheckLocaleCache;
 use crate::types::{CheckCodeAwareConfig, CheckKwargsConfig, CheckKwargsResult, KwargsMismatch};
 use anyhow::Result;
 use common::FastHashSet;
-use extractor::ftl::diagnostics::ExtractedCode;
+use extractor::ftl::diagnostics::{ExtractedCode, ExtractedFluentKey};
 use locale::read_locale_messages_with_ast;
+use log::debug;
 
 pub fn check_kwargs(config: CheckKwargsConfig) -> Result<CheckKwargsResult> {
     run_code_aware_check(config, check_kwargs_with_cache)
@@ -26,11 +27,32 @@ pub fn check_kwargs_with_cache(
     cache: &CheckLocaleCache,
     extracted: &ExtractedCode,
 ) -> Result<CheckKwargsResult> {
+    // A call with `**kwargs` can pass any variable, so such a key cannot be checked. It is
+    // skipped for every locale and mentioned once in verbose mode.
+    let mut unverifiable: Vec<&ExtractedFluentKey> = extracted
+        .keys
+        .iter()
+        .filter(|code_key| code_key.kwargs_unknown.is_some())
+        .collect();
+    unverifiable.sort_by(|a, b| a.key.cmp(&b.key));
+    for code_key in &unverifiable {
+        if let Some(location) = &code_key.kwargs_unknown {
+            debug!(
+                target: "check::kwargs",
+                "key \"{}\" is called with **kwargs at {location}; its variables cannot be verified",
+                code_key.key
+            );
+        }
+    }
+
     let mut mismatches = Vec::new();
     for locale in cache.checked_locales() {
         let locale_messages = read_locale_messages_with_ast(cache, locale);
 
         for code_key in &extracted.keys {
+            if code_key.kwargs_unknown.is_some() {
+                continue;
+            }
             let Some(locale_message) = locale_messages
                 .by_expected_path
                 .get(&(code_key.key.clone(), code_key.ftl_path.clone()))

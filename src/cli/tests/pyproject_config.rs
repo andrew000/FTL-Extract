@@ -1145,3 +1145,63 @@ fn syntax_errors_still_stop_the_run_when_downgraded_to_warnings() {
     assert!(!stdout.contains("references:"), "{stdout}");
     assert!(!stdout.contains("untranslated:"), "{stdout}");
 }
+
+#[test]
+fn check_json_reports_kwargs_conflict_with_both_call_sites() {
+    let temp = TempDir::new().unwrap();
+    write(
+        &temp.path().join("code/a.py"),
+        r#"i18n.get("order", a=1, b=2)"#,
+    );
+    write(
+        &temp.path().join("code/b.py"),
+        r#"i18n.get("order", a=1, c=3)"#,
+    );
+    write(
+        &temp.path().join("locales/uk/_default.ftl"),
+        "order = Order { $a } { $b }\n",
+    );
+
+    let output = ftl()
+        .arg("check")
+        .arg(temp.path().join("locales"))
+        .arg("--code-path")
+        .arg(temp.path().join("code"))
+        .arg("--check")
+        .arg("kwargs")
+        .arg("--report-path")
+        .arg(temp.path().join("reports/ftl-check"))
+        .arg("--report-format")
+        .arg("json")
+        .output()
+        .unwrap();
+
+    assert_eq!(output.status.code(), Some(1));
+    let report = std::fs::read_to_string(temp.path().join("reports/ftl-check.json")).unwrap();
+    let json: serde_json::Value = serde_json::from_str(&report).unwrap();
+    let diagnostics = json["diagnostics"].as_array().unwrap();
+    let extraction = diagnostics
+        .iter()
+        .find(|diagnostic| diagnostic["kind"] == "extraction")
+        .unwrap_or_else(|| panic!("no extraction diagnostic in {report}"));
+
+    let a_py = temp.path().join("code").join("a.py");
+    let b_py = temp.path().join("code").join("b.py");
+    assert_eq!(extraction["key"], "order");
+    // The report has one structured `code_location` (the first call site, in path order);
+    // the message names both sites so the second one stays visible.
+    assert_eq!(
+        extraction["message"],
+        format!(
+            "Fluent key order is used with different keyword arguments: a, b and a, c ({}:1:1, {}:1:1)",
+            a_py.display(),
+            b_py.display()
+        )
+    );
+    assert_eq!(
+        extraction["code_location"]["path"],
+        a_py.display().to_string()
+    );
+    assert_eq!(extraction["code_location"]["line"], 1);
+    assert_eq!(extraction["code_location"]["column"], 1);
+}

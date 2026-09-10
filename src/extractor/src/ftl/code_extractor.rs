@@ -5,7 +5,10 @@ use crate::ftl::cache::{
 use crate::ftl::diagnostics::{
     CodeLocation, ExtractedCode, ExtractedFluentKey, ExtractionDiagnostic, ExtractionDiagnosticKind,
 };
-use crate::ftl::matcher::{FluentEntry, FluentKey, I18nMatcher, kwargs_conflict_message};
+use crate::ftl::matcher::{
+    FluentEntry, FluentKey, I18nMatcher, conflict_diagnostic, kwargs_conflict_message,
+    path_conflict_message, type_conflict_message,
+};
 use crate::ftl::utils::{FastHashMap, FastHashSet};
 use anyhow::Result;
 use common::LineIndex;
@@ -145,7 +148,7 @@ fn read_error(file: &Path, err: &std::io::Error) -> ExtractionDiagnostic {
     file_diagnostic(
         ExtractionDiagnosticKind::ReadError,
         file,
-        format!("Failed to read {}: {err}", file.display()),
+        format!("Failed to read Python file: {err}"),
         (1, 1),
     )
 }
@@ -190,7 +193,7 @@ fn parse_file(file: &Path, file_size: u64, options: ParseOptions<'_>) -> ParsedF
                 vec![file_diagnostic(
                     ExtractionDiagnosticKind::InvalidUtf8,
                     file,
-                    format!("Invalid UTF-8 in {}: {err}", file.display()),
+                    format!("Python file is not valid UTF-8: {err}"),
                     location,
                 )],
             );
@@ -205,7 +208,7 @@ fn parse_file(file: &Path, file_size: u64, options: ParseOptions<'_>) -> ParsedF
                 vec![file_diagnostic(
                     ExtractionDiagnosticKind::ParseError,
                     file,
-                    format!("Failed to parse {}: {}", file.display(), err.error),
+                    format!("Failed to parse Python file: {}", err.error),
                     location,
                 )],
             );
@@ -263,32 +266,6 @@ fn extract_from_file(
     )
 }
 
-fn conflict_locations(existing: &FluentKey, new_fluent_key: &FluentKey) -> Vec<CodeLocation> {
-    let mut locations = Vec::new();
-    if let Some(location) = existing.source_location.clone() {
-        locations.push(location);
-    }
-    if let Some(location) = new_fluent_key.source_location.clone() {
-        locations.push(location);
-    }
-    locations
-}
-
-fn conflict_diagnostic(
-    kind: ExtractionDiagnosticKind,
-    key: &str,
-    message: String,
-    existing: &FluentKey,
-    new_fluent_key: &FluentKey,
-) -> ExtractionDiagnostic {
-    ExtractionDiagnostic {
-        kind,
-        key: Some(key.to_string()),
-        message,
-        locations: conflict_locations(existing, new_fluent_key),
-    }
-}
-
 fn merge_fluent_key(
     target: &mut FastHashMap<String, FluentKey>,
     diagnostics: &mut Vec<ExtractionDiagnostic>,
@@ -304,15 +281,9 @@ fn merge_fluent_key(
             if existing_key.path != val.path {
                 diagnostics.push(conflict_diagnostic(
                     ExtractionDiagnosticKind::KeyPathConflict,
-                    entry.key(),
-                    format!(
-                        "Fluent key {} has different paths: {} and {}",
-                        entry.key(),
-                        val.path.display(),
-                        existing_key.path.display()
-                    ),
                     existing_key,
                     &val,
+                    path_conflict_message,
                 ));
                 return;
             }
@@ -321,22 +292,17 @@ fn merge_fluent_key(
                 (FluentEntry::Message(a), FluentEntry::Message(b)) if a != b => {
                     diagnostics.push(conflict_diagnostic(
                         ExtractionDiagnosticKind::KeyMessageConflict,
-                        entry.key(),
-                        kwargs_conflict_message(existing_key, &val),
                         existing_key,
                         &val,
+                        kwargs_conflict_message,
                     ));
                 }
                 (a, b) if a != b => {
                     diagnostics.push(conflict_diagnostic(
                         ExtractionDiagnosticKind::KeyTypeConflict,
-                        entry.key(),
-                        format!(
-                            "Fluent key {} is not a Message in one of the entries.",
-                            entry.key()
-                        ),
                         existing_key,
                         &val,
+                        type_conflict_message,
                     ));
                 }
                 _ => {}
@@ -460,11 +426,14 @@ pub(crate) fn extract_fluent_keys(
         save_cache(&cache_file_path, &cache);
     }
 
+    // Every field takes part, so the order (and the full `Extraction aborted` text) is the
+    // same on every run once the messages themselves are deterministic.
     diagnostics.sort_by(|a, b| {
         a.key
             .cmp(&b.key)
             .then_with(|| a.message.cmp(&b.message))
             .then_with(|| a.kind.as_str().cmp(b.kind.as_str()))
+            .then_with(|| a.locations.cmp(&b.locations))
     });
 
     Ok(CodeExtraction {
@@ -1040,7 +1009,13 @@ i18n.get("ok")
         assert_eq!(diagnostics.len(), 1);
         assert_eq!(diagnostics[0].kind, ExtractionDiagnosticKind::InvalidUtf8);
         assert_eq!(diagnostics[0].key, None);
-        assert!(diagnostics[0].message.contains("invalid_utf8.py"));
+        assert!(
+            diagnostics[0]
+                .message
+                .starts_with("Python file is not valid UTF-8: "),
+            "{}",
+            diagnostics[0].message
+        );
         assert_eq!(diagnostics[0].locations.len(), 1);
         assert_eq!(diagnostics[0].locations[0].path, invalid_utf8);
         assert_eq!(diagnostics[0].locations[0].line, 2);
@@ -1063,7 +1038,13 @@ i18n.get("ok")
         assert_eq!(diagnostics.len(), 1);
         assert_eq!(diagnostics[0].kind, ExtractionDiagnosticKind::ParseError);
         assert_eq!(diagnostics[0].key, None);
-        assert!(diagnostics[0].message.contains("invalid_python.py"));
+        assert!(
+            diagnostics[0]
+                .message
+                .starts_with("Failed to parse Python file: "),
+            "{}",
+            diagnostics[0].message
+        );
         assert_eq!(diagnostics[0].locations.len(), 1);
         assert_eq!(diagnostics[0].locations[0].path, invalid_python);
         assert!(diagnostics[0].locations[0].line >= 3);
@@ -1079,7 +1060,13 @@ i18n.get("ok")
         assert!(keys.is_empty());
         assert_eq!(diagnostics.len(), 1);
         assert_eq!(diagnostics[0].kind, ExtractionDiagnosticKind::ReadError);
-        assert!(diagnostics[0].message.contains("missing.py"));
+        assert!(
+            diagnostics[0]
+                .message
+                .starts_with("Failed to read Python file: "),
+            "{}",
+            diagnostics[0].message
+        );
         assert_eq!(diagnostics[0].locations[0].path, missing);
     }
 
@@ -1349,17 +1336,19 @@ i18n.get("ok")
         assert_eq!(diagnostic.key.as_deref(), Some("order"));
         assert_eq!(diagnostic.locations.len(), 2);
 
-        // Either file can be reduced first, so both orders are exact matches.
-        let a = format!("a, b ({}:1:1)", a_py.display());
-        let c = format!("a, c ({}:1:1)", b_py.display());
-        let expected = [
-            format!("Fluent key order is used with different keyword arguments: {a} and {c}"),
-            format!("Fluent key order is used with different keyword arguments: {c} and {a}"),
-        ];
-        assert!(
-            expected.contains(&diagnostic.message),
-            "unexpected message: {}",
-            diagnostic.message
+        // The sides are ordered by call site, so the text does not depend on which file the
+        // parallel fold reduced first.
+        assert_eq!(
+            diagnostic.message,
+            "Fluent key order is used with different keyword arguments: a, b and a, c"
+        );
+        assert_eq!(
+            diagnostic.to_string(),
+            format!(
+                "[key-message-conflict] Fluent key order is used with different keyword arguments: a, b and a, c ({}:1:1, {}:1:1)",
+                a_py.display(),
+                b_py.display()
+            )
         );
     }
 
@@ -1393,5 +1382,59 @@ i18n.get("ok")
         let unknown = extracted.keys[0].kwargs_unknown.as_ref().unwrap();
         assert_eq!(unknown.path, b_py);
         assert_eq!((unknown.line, unknown.column), (1, 1));
+    }
+
+    #[test]
+    fn test_cross_file_conflict_diagnostics_are_identical_across_runs() {
+        let temp = TempDir::new().unwrap();
+        let code_dir = temp.path().join("py");
+        std::fs::create_dir_all(&code_dir).unwrap();
+        // Two conflicts on two keys, so both the per-diagnostic text and the overall order
+        // have to be stable.
+        std::fs::write(
+            code_dir.join("a.py"),
+            "i18n.get(\"order\", a=1, b=2)\ni18n.get(\"title\", x=1)\n",
+        )
+        .unwrap();
+        std::fs::write(
+            code_dir.join("b.py"),
+            "i18n.get(\"title\", y=2)\ni18n.get(\"order\", a=1, c=3)\n",
+        )
+        .unwrap();
+
+        let run = || {
+            super::extract_code_with_diagnostics(
+                &code_dir,
+                I18N_ONLY.clone(),
+                FastHashSet::default(),
+                &FastHashSet::default(),
+                FastHashSet::default(),
+                FastHashSet::default(),
+                &PathBuf::from("_default.ftl"),
+            )
+            .unwrap()
+            .diagnostics
+        };
+
+        let first = run();
+        assert_eq!(first.len(), 2, "{first:?}");
+        let rendered = first.iter().map(ToString::to_string).collect::<Vec<_>>();
+        let a = code_dir.join("a.py").display().to_string();
+        let b = code_dir.join("b.py").display().to_string();
+        assert_eq!(
+            rendered,
+            vec![
+                format!(
+                    "[key-message-conflict] Fluent key order is used with different keyword arguments: a, b and a, c ({a}:1:1, {b}:2:1)"
+                ),
+                format!(
+                    "[key-message-conflict] Fluent key title is used with different keyword arguments: x and y ({a}:2:1, {b}:1:1)"
+                ),
+            ]
+        );
+
+        for _ in 0..7 {
+            assert_eq!(run(), first);
+        }
     }
 }

@@ -319,6 +319,7 @@ dependencies = [
  "log",
  "mimalloc",
  "serde",
+ "serde_json",
  "stub",
  "tempfile",
  "toml",

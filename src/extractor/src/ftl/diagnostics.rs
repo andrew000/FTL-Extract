@@ -1,7 +1,9 @@
 use std::fmt;
 use std::path::PathBuf;
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+/// Ordered by path, then line, then column, so conflicts can list their call sites in a
+/// stable order.
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct CodeLocation {
     pub path: PathBuf,
     pub line: usize,
@@ -107,7 +109,7 @@ mod tests {
         let diagnostic = ExtractionDiagnostic {
             kind: ExtractionDiagnosticKind::ParseError,
             key: None,
-            message: "Failed to parse app.py: unexpected EOF".to_string(),
+            message: "Failed to parse Python file: unexpected EOF".to_string(),
             locations: vec![CodeLocation {
                 path: PathBuf::from("app.py"),
                 line: 3,
@@ -117,7 +119,7 @@ mod tests {
 
         assert_eq!(
             diagnostic.to_string(),
-            "[parse-error] Failed to parse app.py: unexpected EOF (app.py:3:7)"
+            "[parse-error] Failed to parse Python file: unexpected EOF (app.py:3:7)"
         );
         assert!(diagnostic.is_file_error());
     }

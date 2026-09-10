@@ -143,6 +143,10 @@ pub(crate) enum Commands {
         #[arg(long, value_enum, default_values_t = Vec::<FailSeverity>::new())]
         fail_on: Vec<FailSeverity>,
 
+        /// Override the severity of a check, e.g. `--severity stale=error`
+        #[arg(long, value_name = "CHECK=SEVERITY", default_values_t = Vec::<String>::new())]
+        severity: Vec<String>,
+
         /// Report path for batch processing
         #[arg(long)]
         report_path: Option<PathBuf>,

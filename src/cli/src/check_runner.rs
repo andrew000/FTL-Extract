@@ -2,9 +2,10 @@ use crate::args::{CheckKind, FailSeverity};
 use anyhow::{Context, Result};
 use check::{
     CheckCodeConfig, CheckLocaleCache, CheckResult, Diagnostic, DiagnosticKind, Severity,
-    check_kwargs_with_cache, check_missing_with_cache, check_references_with_cache,
-    check_stale_with_cache, check_syntax_with_cache, check_untranslated_with_cache,
-    code_extraction_errors, extract_check_code, validate_check_locales,
+    SeverityOverrides, check_kwargs_with_cache, check_missing_with_cache,
+    check_references_with_cache, check_stale_with_cache, check_syntax_with_cache,
+    check_untranslated_with_cache, code_extraction_errors, extract_check_code,
+    validate_check_locales,
 };
 use extractor::ftl::diagnostics::ExtractedCode;
 use extractor::ftl::utils::FastHashSet;
@@ -25,6 +26,8 @@ pub(crate) struct CheckRunConfig {
     pub(crate) cache: bool,
     pub(crate) cache_path: Option<PathBuf>,
     pub(crate) clear_cache: bool,
+    /// Per-kind severity overrides on top of [`DiagnosticKind::default_severity`].
+    pub(crate) severity_overrides: SeverityOverrides,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -160,6 +163,8 @@ where
         }
     }
 
+    // Overrides go before dedup, whose key includes the severity.
+    result.apply_severity_overrides(&config.severity_overrides);
     dedup_diagnostics(&mut result);
 
     Ok(result)
@@ -233,7 +238,7 @@ fn add_extraction_diagnostics_once(
             code_extraction_errors(extracted)
                 .into_iter()
                 .map(|item| Diagnostic {
-                    severity: Severity::Error,
+                    severity: DiagnosticKind::Extraction.default_severity(),
                     kind: DiagnosticKind::Extraction,
                     locale: None,
                     key: item.key,
@@ -281,10 +286,13 @@ pub(crate) fn expand_check_kinds(checks: Vec<CheckKind>) -> ExpandedChecks {
     ExpandedChecks { checks: expanded }
 }
 
+/// Syntax problems stop the run regardless of their configured severity: the remaining checks
+/// cannot parse the broken files anyway.
 fn has_fatal_syntax_diagnostics(result: &CheckResult) -> bool {
-    result.diagnostics.iter().any(|diagnostic| {
-        diagnostic.kind == DiagnosticKind::Syntax && diagnostic.severity == Severity::Error
-    })
+    result
+        .diagnostics
+        .iter()
+        .any(|diagnostic| diagnostic.kind == DiagnosticKind::Syntax)
 }
 
 fn dedup_diagnostics(result: &mut CheckResult) {
@@ -444,6 +452,7 @@ mod tests {
             cache: false,
             cache_path: None,
             clear_cache: false,
+            severity_overrides: SeverityOverrides::default(),
         };
 
         let mut extraction_calls = 0;

@@ -8,7 +8,8 @@ use crate::check_runner::{CheckRunConfig, expand_check_kinds, run_check};
 use crate::config::{load_pyproject_config, render_config_sample};
 use crate::options::{
     cli_or_config_enum, cli_or_config_enum_vec, cli_or_config_path, cli_or_config_vec,
-    exit_config_error, normalize_output_path, resolve_required_path, write_output_file,
+    exit_config_error, normalize_output_path, resolve_required_path, severity_overrides,
+    write_output_file,
 };
 use check::{has_failing_diagnostics, render_check_json, render_check_terminal};
 use clap::Parser;
@@ -280,6 +281,7 @@ fn main() {
             language,
             suggest_from,
             fail_on,
+            severity,
             report_path,
             report_format,
         }) => {
@@ -332,6 +334,10 @@ fn main() {
                 vec![FailSeverity::Error],
             ) {
                 Ok(fail_on) => fail_on.into_iter().map(Into::into).collect::<Vec<_>>(),
+                Err(e) => exit_config_error(e),
+            };
+            let severity_overrides = match severity_overrides(&severity, pyproject.severity) {
+                Ok(overrides) => overrides,
                 Err(e) => exit_config_error(e),
             };
 
@@ -389,6 +395,7 @@ fn main() {
                     || extract_pyproject.clear_cache.unwrap_or(false),
                 cache_path,
                 clear_cache: extract_pyproject.clear_cache.unwrap_or(false),
+                severity_overrides,
             };
 
             let start_time = std::time::Instant::now();

@@ -60,11 +60,20 @@ pub enum Severity {
 }
 
 impl Severity {
+    pub const ALL: [Self; 2] = [Self::Error, Self::Warn];
+
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Error => "error",
             Self::Warn => "warn",
         }
+    }
+
+    /// Parses the CLI / config spelling (`error`, `warn`), case-insensitively.
+    pub fn parse(value: &str) -> Option<Self> {
+        Self::ALL
+            .into_iter()
+            .find(|severity| severity.as_str().eq_ignore_ascii_case(value.trim()))
     }
 }
 
@@ -80,6 +89,16 @@ pub enum DiagnosticKind {
 }
 
 impl DiagnosticKind {
+    pub const ALL: [Self; 7] = [
+        Self::Extraction,
+        Self::Kwargs,
+        Self::Missing,
+        Self::References,
+        Self::Stale,
+        Self::Syntax,
+        Self::Untranslated,
+    ];
+
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Extraction => "extraction",
@@ -90,6 +109,60 @@ impl DiagnosticKind {
             Self::Syntax => "syntax",
             Self::Untranslated => "untranslated",
         }
+    }
+
+    /// Parses the CLI / config spelling (`stale`, `untranslated`, ...), case-insensitively.
+    pub fn parse(value: &str) -> Option<Self> {
+        Self::ALL
+            .into_iter()
+            .find(|kind| kind.as_str().eq_ignore_ascii_case(value.trim()))
+    }
+
+    /// Severity a diagnostic of this kind gets unless overridden.
+    ///
+    /// Errors mean the application is broken or will break at runtime: invalid Fluent
+    /// syntax, dangling references, keys used in code but missing from a locale, kwargs
+    /// that do not match, and Python files that could not be analysed. Warnings mean the
+    /// catalogue is untidy: stale keys and untranslated placeholders.
+    pub fn default_severity(self) -> Severity {
+        match self {
+            Self::Extraction | Self::Kwargs | Self::Missing | Self::References | Self::Syntax => {
+                Severity::Error
+            }
+            Self::Stale | Self::Untranslated => Severity::Warn,
+        }
+    }
+}
+
+/// Per-kind severity overrides applied on top of [`DiagnosticKind::default_severity`].
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct SeverityOverrides {
+    overrides: Vec<(DiagnosticKind, Severity)>,
+}
+
+impl SeverityOverrides {
+    /// Sets the severity for `kind`, replacing any earlier override for the same kind.
+    pub fn set(&mut self, kind: DiagnosticKind, severity: Severity) {
+        match self.overrides.iter_mut().find(|(k, _)| *k == kind) {
+            Some(entry) => entry.1 = severity,
+            None => self.overrides.push((kind, severity)),
+        }
+    }
+
+    pub fn get(&self, kind: DiagnosticKind) -> Option<Severity> {
+        self.overrides
+            .iter()
+            .find(|(k, _)| *k == kind)
+            .map(|(_, severity)| *severity)
+    }
+
+    /// The severity `kind` ends up with: the override if any, otherwise the default.
+    pub fn severity_for(&self, kind: DiagnosticKind) -> Severity {
+        self.get(kind).unwrap_or_else(|| kind.default_severity())
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.overrides.is_empty()
     }
 }
 
@@ -139,6 +212,18 @@ impl CheckResult {
             .iter()
             .filter(|diagnostic| diagnostic.severity == Severity::Warn)
             .count()
+    }
+
+    /// Re-labels every diagnostic whose kind has an override.
+    pub fn apply_severity_overrides(&mut self, overrides: &SeverityOverrides) {
+        if overrides.is_empty() {
+            return;
+        }
+        for diagnostic in &mut self.diagnostics {
+            if let Some(severity) = overrides.get(diagnostic.kind) {
+                diagnostic.severity = severity;
+            }
+        }
     }
 }
 
@@ -270,7 +355,7 @@ impl From<CheckUntranslatedResult> for CheckResult {
             .untranslated
             .into_iter()
             .map(|item| Diagnostic {
-                severity: Severity::Error,
+                severity: DiagnosticKind::Untranslated.default_severity(),
                 kind: DiagnosticKind::Untranslated,
                 locale: Some(item.locale.clone()),
                 key: Some(item.key.clone()),
@@ -303,7 +388,7 @@ impl From<CheckSyntaxResult> for CheckResult {
             .errors
             .into_iter()
             .map(|item| Diagnostic {
-                severity: Severity::Error,
+                severity: DiagnosticKind::Syntax.default_severity(),
                 kind: DiagnosticKind::Syntax,
                 locale: Some(item.locale.clone()),
                 key: None,
@@ -336,7 +421,7 @@ impl From<CheckReferencesResult> for CheckResult {
             .missing_references
             .into_iter()
             .map(|item| Diagnostic {
-                severity: Severity::Error,
+                severity: DiagnosticKind::References.default_severity(),
                 kind: DiagnosticKind::References,
                 locale: Some(item.locale.clone()),
                 key: item.key.clone(),
@@ -369,7 +454,7 @@ impl From<CheckMissingResult> for CheckResult {
             .missing_keys
             .into_iter()
             .map(|item| Diagnostic {
-                severity: Severity::Error,
+                severity: DiagnosticKind::Missing.default_severity(),
                 kind: DiagnosticKind::Missing,
                 locale: Some(item.locale.clone()),
                 key: Some(item.key.clone()),
@@ -390,7 +475,7 @@ impl From<CheckMissingResult> for CheckResult {
             .collect::<Vec<_>>();
 
         diagnostics.extend(result.extraction_errors.into_iter().map(|item| Diagnostic {
-            severity: Severity::Error,
+            severity: DiagnosticKind::Extraction.default_severity(),
             kind: DiagnosticKind::Extraction,
             locale: None,
             key: item.key,
@@ -415,7 +500,7 @@ impl From<CheckStaleResult> for CheckResult {
             .stale_keys
             .into_iter()
             .map(|item| Diagnostic {
-                severity: Severity::Error,
+                severity: DiagnosticKind::Stale.default_severity(),
                 kind: DiagnosticKind::Stale,
                 locale: Some(item.locale.clone()),
                 key: Some(item.key.clone()),
@@ -436,7 +521,7 @@ impl From<CheckStaleResult> for CheckResult {
             .collect::<Vec<_>>();
 
         diagnostics.extend(result.extraction_errors.into_iter().map(|item| Diagnostic {
-            severity: Severity::Error,
+            severity: DiagnosticKind::Extraction.default_severity(),
             kind: DiagnosticKind::Extraction,
             locale: None,
             key: item.key,
@@ -461,7 +546,7 @@ impl From<CheckKwargsResult> for CheckResult {
             .mismatches
             .into_iter()
             .map(|item| Diagnostic {
-                severity: Severity::Error,
+                severity: DiagnosticKind::Kwargs.default_severity(),
                 kind: DiagnosticKind::Kwargs,
                 locale: Some(item.locale.clone()),
                 key: Some(item.key.clone()),
@@ -482,7 +567,7 @@ impl From<CheckKwargsResult> for CheckResult {
             .collect::<Vec<_>>();
 
         diagnostics.extend(result.extraction_errors.into_iter().map(|item| Diagnostic {
-            severity: Severity::Error,
+            severity: DiagnosticKind::Extraction.default_severity(),
             kind: DiagnosticKind::Extraction,
             locale: None,
             key: item.key,

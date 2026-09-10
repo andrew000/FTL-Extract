@@ -997,3 +997,151 @@ fn extract_reports_dangling_ftl_reference_instead_of_panicking() {
         "hello = Hello { missing-message }\n"
     );
 }
+
+fn stale_only_project() -> TempDir {
+    let temp = TempDir::new().unwrap();
+    write(&temp.path().join("code/app.py"), r#"i18n.get("hello")"#);
+    write(
+        &temp.path().join("locales/uk/_default.ftl"),
+        "hello = Hello\nold = Old\n",
+    );
+    temp
+}
+
+fn check_stale(temp: &TempDir) -> Command {
+    let mut command = ftl();
+    command
+        .arg("check")
+        .arg(temp.path().join("locales"))
+        .arg("--code-path")
+        .arg(temp.path().join("code"))
+        .arg("--check")
+        .arg("stale");
+    command
+}
+
+#[test]
+fn stale_keys_are_warnings_by_default_and_fail_on_decides_exit_code() {
+    let temp = stale_only_project();
+
+    let output = check_stale(&temp)
+        .arg("--fail-on")
+        .arg("error")
+        .output()
+        .unwrap();
+    assert_success(&output);
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.contains("FTL check passed with warnings: 1 problem"),
+        "{stdout}"
+    );
+    assert!(stdout.contains("warn[stale]"), "{stdout}");
+
+    let output = check_stale(&temp).output().unwrap();
+    assert_success(&output);
+
+    let output = check_stale(&temp)
+        .arg("--fail-on")
+        .arg("warn")
+        .output()
+        .unwrap();
+    assert_eq!(output.status.code(), Some(1));
+}
+
+#[test]
+fn severity_override_from_cli_turns_stale_into_error() {
+    let temp = stale_only_project();
+
+    let output = check_stale(&temp)
+        .arg("--severity")
+        .arg("stale=error")
+        .arg("--report-path")
+        .arg(temp.path().join("reports/ftl-check"))
+        .output()
+        .unwrap();
+
+    assert_eq!(output.status.code(), Some(1));
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("FTL check failed: 1 problem"), "{stdout}");
+    assert!(stdout.contains("error[stale]"), "{stdout}");
+    let report = std::fs::read_to_string(temp.path().join("reports/ftl-check.json")).unwrap();
+    assert!(report.contains(r#""severity": "error""#));
+    assert!(report.contains(r#""ok": false"#));
+}
+
+#[test]
+fn severity_override_reads_from_pyproject_and_cli_wins() {
+    let temp = stale_only_project();
+    write(
+        &pyproject(&temp),
+        r#"
+[tool.ftl-extract.check]
+locales-path = "locales"
+code-path = "code"
+checks = ["stale"]
+severity = { stale = "error" }
+"#,
+    );
+
+    let output = ftl()
+        .arg("--config")
+        .arg(pyproject(&temp))
+        .arg("check")
+        .output()
+        .unwrap();
+    assert_eq!(output.status.code(), Some(1));
+    assert!(String::from_utf8_lossy(&output.stdout).contains("error[stale]"));
+
+    let output = ftl()
+        .arg("--config")
+        .arg(pyproject(&temp))
+        .arg("check")
+        .arg("--severity")
+        .arg("stale=warn")
+        .output()
+        .unwrap();
+    assert_success(&output);
+    assert!(String::from_utf8_lossy(&output.stdout).contains("warn[stale]"));
+}
+
+#[test]
+fn invalid_severity_override_is_a_config_error() {
+    let temp = stale_only_project();
+
+    for value in ["stale=fatal", "bogus=error", "stale"] {
+        let output = check_stale(&temp)
+            .arg("--severity")
+            .arg(value)
+            .output()
+            .unwrap();
+        assert_eq!(output.status.code(), Some(2), "{value}");
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(stderr.contains("Configuration error"), "{value}: {stderr}");
+        assert!(stderr.contains("Invalid"), "{value}: {stderr}");
+    }
+}
+
+#[test]
+fn syntax_errors_still_stop_the_run_when_downgraded_to_warnings() {
+    let temp = TempDir::new().unwrap();
+    write(
+        &temp.path().join("locales/en/_default.ftl"),
+        "valid = Valid\nbroken = {\n",
+    );
+
+    let output = ftl()
+        .arg("check")
+        .arg(temp.path().join("locales"))
+        .arg("--check")
+        .arg("all")
+        .arg("--severity")
+        .arg("syntax=warn")
+        .output()
+        .unwrap();
+
+    assert_success(&output);
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("warn[syntax]"), "{stdout}");
+    assert!(!stdout.contains("references:"), "{stdout}");
+    assert!(!stdout.contains("untranslated:"), "{stdout}");
+}

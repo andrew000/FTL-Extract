@@ -77,7 +77,14 @@ pub fn render_check_terminal(result: &CheckResult) -> String {
     } else {
         "problems"
     };
-    let mut out = format!("FTL check failed: {problem_count} {noun}\n");
+    // "failed" means at least one error. Warnings alone still list every problem, but whether
+    // they affect the exit code is up to `--fail-on`.
+    let verdict = if result.error_count() > 0 {
+        "failed"
+    } else {
+        "passed with warnings"
+    };
+    let mut out = format!("FTL check {verdict}: {problem_count} {noun}\n");
 
     for (locale, diagnostics) in by_locale {
         let _ = writeln!(out, "\nLocale: {locale}");
@@ -285,5 +292,86 @@ mod tests {
         assert!(has_failing_diagnostics(&result(), &[Severity::Error]));
         assert!(has_failing_diagnostics(&result(), &[Severity::Warn]));
         assert!(!has_failing_diagnostics(&result(), &[]));
+    }
+
+    fn diagnostic(kind: DiagnosticKind, key: &str) -> Diagnostic {
+        Diagnostic {
+            severity: kind.default_severity(),
+            kind,
+            locale: Some("uk".to_string()),
+            key: Some(key.to_string()),
+            ftl_location: None,
+            code_location: None,
+            message: format!("{} problem with `{key}`", kind.as_str()),
+            suggestions: Vec::new(),
+            missing_kwargs: Vec::new(),
+            unused_kwargs: Vec::new(),
+        }
+    }
+
+    fn warnings_only() -> CheckResult {
+        CheckResult {
+            checked_kinds: vec![DiagnosticKind::Stale, DiagnosticKind::Missing],
+            diagnostics: vec![
+                diagnostic(DiagnosticKind::Stale, "old"),
+                diagnostic(DiagnosticKind::Stale, "older"),
+            ],
+        }
+    }
+
+    fn mixed() -> CheckResult {
+        let mut result = warnings_only();
+        result
+            .diagnostics
+            .push(diagnostic(DiagnosticKind::Missing, "hello"));
+        result
+    }
+
+    #[test]
+    fn test_fail_on_distinguishes_warnings_from_errors() {
+        assert!(!has_failing_diagnostics(
+            &warnings_only(),
+            &[Severity::Error]
+        ));
+        assert!(has_failing_diagnostics(&warnings_only(), &[Severity::Warn]));
+
+        assert!(has_failing_diagnostics(&mixed(), &[Severity::Error]));
+        assert!(has_failing_diagnostics(&mixed(), &[Severity::Warn]));
+    }
+
+    #[test]
+    fn test_render_terminal_warnings_only_passes_with_warnings() {
+        let rendered = render_check_terminal(&warnings_only());
+
+        assert!(rendered.starts_with("FTL check passed with warnings: 2 problems"));
+        assert!(rendered.contains("warn[stale]"));
+        assert!(!rendered.contains("error["));
+        assert!(rendered.contains("- Errors: 0"));
+        assert!(rendered.contains("- Warnings: 2"));
+        assert!(rendered.contains("stale: failed (0 errors, 2 warnings)"));
+        assert!(rendered.contains("missing: passed"));
+    }
+
+    #[test]
+    fn test_render_terminal_mixed_severities_fails() {
+        let rendered = render_check_terminal(&mixed());
+
+        assert!(rendered.starts_with("FTL check failed: 3 problems"));
+        assert!(rendered.contains("warn[stale]"));
+        assert!(rendered.contains("error[missing]"));
+        assert!(rendered.contains("- Errors: 1"));
+        assert!(rendered.contains("- Warnings: 2"));
+    }
+
+    #[test]
+    fn test_render_json_reports_severity_and_ok_from_errors_only() {
+        let rendered = render_check_json(&warnings_only());
+        assert!(rendered.contains(r#""ok": true"#));
+        assert!(rendered.contains(r#""severity": "warn""#));
+        assert!(rendered.contains(r#""warnings": 2"#));
+
+        let rendered = render_check_json(&mixed());
+        assert!(rendered.contains(r#""ok": false"#));
+        assert!(rendered.contains(r#""severity": "error""#));
     }
 }

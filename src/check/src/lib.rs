@@ -18,5 +18,6 @@ pub use types::{
     CheckReferencesConfig, CheckReferencesResult, CheckResult, CheckStaleConfig, CheckStaleResult,
     CheckSyntaxConfig, CheckSyntaxResult, CheckUntranslatedConfig, CheckUntranslatedResult,
     CodeExtractionError, Diagnostic, DiagnosticKind, KwargsMismatch, MissingKey, MissingReference,
-    Severity, SourceLocation, StaleKey, SyntaxError, TranslationSuggestion, UntranslatedKey,
+    Severity, SeverityOverrides, SourceLocation, StaleKey, SyntaxError, TranslationSuggestion,
+    UntranslatedKey,
 };

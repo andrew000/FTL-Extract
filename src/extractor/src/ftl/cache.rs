@@ -1,6 +1,6 @@
 use crate::ftl::code_extractor::kwargs_from_key;
 use crate::ftl::diagnostics::CodeLocation;
-use crate::ftl::matcher::{FluentEntry, FluentKey};
+use crate::ftl::matcher::{FluentEntry, FluentKey, code_message};
 use crate::ftl::utils::{FastHashMap, FastHashSet};
 use bincode_next::{Decode, Encode};
 use log::error;
@@ -156,31 +156,12 @@ pub(super) fn save_cache(path: &Path, cache: &CacheFile) {
 }
 
 fn cached_key_to_fluent_key(cached: CachedFluentKey) -> FluentKey {
-    let mut elements = vec![fluent_syntax::ast::PatternElement::TextElement {
-        value: cached.key.clone(),
-    }];
-
-    for kwarg in &cached.kwargs {
-        elements.push(fluent_syntax::ast::PatternElement::Placeable {
-            expression: fluent_syntax::ast::Expression::Inline(
-                fluent_syntax::ast::InlineExpression::VariableReference {
-                    id: fluent_syntax::ast::Identifier {
-                        name: kwarg.clone(),
-                    },
-                },
-            ),
-        });
-    }
-
+    // `code_message` sorts the kwargs, so an entry cached in call order by an older build
+    // yields the same message as a fresh parse.
     let mut fluent_key = FluentKey::new(
         Arc::new(cached.code_path),
         cached.key.clone(),
-        FluentEntry::Message(fluent_syntax::ast::Message {
-            id: fluent_syntax::ast::Identifier { name: cached.key },
-            value: Some(fluent_syntax::ast::Pattern { elements }),
-            attributes: vec![],
-            comment: None,
-        }),
+        FluentEntry::Message(code_message(cached.key, cached.kwargs)),
         Arc::new(cached.ftl_path),
         None,
         None,
@@ -434,5 +415,30 @@ mod tests {
 
         assert_eq!(load_cache(&path, &none, false).files.len(), 1);
         assert!(load_cache(&path, &tests, false).files.is_empty());
+    }
+
+    #[test]
+    fn test_cached_call_order_kwargs_are_normalized_on_load() {
+        // An entry written by a build that stored kwargs in call order must produce the same
+        // message as a fresh parse, which sorts them.
+        let cached = CachedFluentKey {
+            key: "order".to_string(),
+            code_path: PathBuf::from("app.py"),
+            ftl_path: PathBuf::from("_default.ftl"),
+            kwargs: vec!["b".to_string(), "a".to_string()],
+            source_line: Some(1),
+            source_column: Some(1),
+        };
+
+        let loaded = cached_key_to_fluent_key(cached);
+
+        assert_eq!(kwargs_from_key(&loaded), vec!["a", "b"]);
+        assert_eq!(
+            loaded.entry.as_ref(),
+            &FluentEntry::Message(code_message(
+                "order".to_string(),
+                vec!["a".to_string(), "b".to_string()]
+            ))
+        );
     }
 }

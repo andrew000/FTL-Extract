@@ -1012,4 +1012,26 @@ i18n.get("nested", _path="pages/main.ftl")
         );
         assert_eq!(generate_ftl(leave_as_is), "# bad = {\n# still bad\n\n");
     }
+
+    #[test]
+    fn test_extract_writes_one_sorted_placeholder_for_reordered_kwargs() {
+        let temp = TempDir::new().unwrap();
+        let code_path = temp.path().join("code");
+        let locales_path = temp.path().join("locales");
+        fs::create_dir_all(&code_path).unwrap();
+        fs::create_dir_all(&locales_path).unwrap();
+        fs::write(
+            code_path.join("app.py"),
+            "def f(i18n):\n    i18n.get(\"order\", a=1, b=2)\n    i18n.get(\"order\", b=2, a=1)\n",
+        )
+        .unwrap();
+
+        let stats = extract(config(code_path, locales_path.clone())).unwrap();
+
+        assert_eq!(stats.ftl_keys_added["en"], 1);
+        assert_eq!(
+            fs::read_to_string(locales_path.join("en").join("_default.ftl")).unwrap(),
+            "order = order{ $a }{ $b }\n"
+        );
+    }
 }

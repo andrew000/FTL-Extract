@@ -1,7 +1,7 @@
 use crate::ftl::matcher::{FluentEntry, FluentKey};
 use crate::ftl::utils::{ExtractionStatistics, FastHashMap, FastHashSet};
 use anyhow::{Context, Result, bail};
-use common::{FtlWalk, ftl_files};
+use common::{FtlWalk, ftl_files, line_column};
 use fluent_syntax::ast::Entry;
 use rayon::prelude::{IntoParallelRefIterator, ParallelIterator};
 use std::fs;
@@ -94,13 +94,37 @@ fn process_raw_ftl(
     Ok(())
 }
 
+/// `Failed to parse FTL file <path>:<line>:<column>: <what>`, like `ftl check --check syntax`,
+/// for the first error; further errors are only counted. The file is read again for the
+/// position, which only happens on this error path.
+fn ftl_syntax_error(path: &Path, errors: &[fluent_syntax::parser::ParserError]) -> String {
+    let content = fs::read_to_string(path).unwrap_or_default();
+    let (line, column) = errors
+        .first()
+        .map(|error| line_column(&content, error.pos.start))
+        .unwrap_or((1, 1));
+    let what = errors
+        .first()
+        .map(|error| error.kind.to_string())
+        .unwrap_or_default();
+    let more = match errors.len() {
+        0 | 1 => String::new(),
+        n => format!(" (and {} more)", n - 1),
+    };
+    format!(
+        "Failed to parse FTL file {}:{line}:{column}: {what}{more}",
+        path.display()
+    )
+}
+
 fn import_from_ftl(path: &Path, locale_dir: &Path, locale: &str) -> Result<ImportResult> {
     let content = fs::read_to_string(path)
         .with_context(|| format!("Failed to read FTL file: {}", path.display()))?;
 
-    let resource = fluent_syntax::parser::parse(content).map_err(|err| {
-        anyhow::anyhow!("Failed to parse FTL file {}: {:?}", path.display(), err.1)
-    })?;
+    let resource = match fluent_syntax::parser::parse(content) {
+        Ok(resource) => resource,
+        Err((_, errors)) => bail!(ftl_syntax_error(path, &errors)),
+    };
 
     // Nearly every entry is a message, so the body length is a good size for the key map
     // and saves the rehashes that growing it from empty would take.
@@ -456,6 +480,42 @@ JUNK!!!
         assert_eq!(
             *ftl_keys["title"].path,
             PathBuf::from("pages").join("main.ftl")
+        );
+    }
+
+    #[test]
+    fn test_import_from_ftl_names_the_file_line_and_column_of_a_syntax_error() {
+        let temp = TempDir::new().unwrap();
+        let path = temp.path().join("_broken.ftl");
+        std::fs::write(&path, "hello = Hello\n\nbroken = {\n    Text\n").unwrap();
+
+        let error = super::import_from_ftl(&path, temp.path(), "en").unwrap_err();
+
+        assert_eq!(
+            error.to_string(),
+            format!(
+                "Failed to parse FTL file {}:5:1: Expected a token starting with \"}}\"",
+                path.display()
+            )
+        );
+    }
+
+    #[test]
+    fn test_import_from_ftl_counts_further_syntax_errors() {
+        let temp = TempDir::new().unwrap();
+        let path = temp.path().join("_broken.ftl");
+        std::fs::write(&path, "a = {\n\nb = fine\n\nc = {\n\nd = fine\n").unwrap();
+
+        let error = super::import_from_ftl(&path, temp.path(), "en").unwrap_err();
+
+        // The first error is reported where the parser stopped inside `a`, the second one is
+        // only counted.
+        assert_eq!(
+            error.to_string(),
+            format!(
+                "Failed to parse FTL file {}:3:3: Expected a token starting with \"}}\" (and 1 more)",
+                path.display()
+            )
         );
     }
 }

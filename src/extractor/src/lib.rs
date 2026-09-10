@@ -5,7 +5,7 @@ mod tests {
 
     #[test]
     fn _test_extract() {
-        // cargo run --release -- extract $CODE_PATH $OUT_PATH -l "en" -l "uk" -l "pl" -K "LF" -K "LazyProxy" -I "core" --comment-junks --comment-keys-mode=comment --line-endings=crlf --verbose
+        // cargo run --release -- extract $CODE_PATH $OUT_PATH -l "en" -l "uk" -l "pl" -K "LF" -K "LazyProxy" -I "core" --comment-keys-mode=comment --line-endings=crlf --verbose
         // cargo run --release -- stub $CODE_PATH/locales/en $CODE_PATH/stub.pyi
     }
 }

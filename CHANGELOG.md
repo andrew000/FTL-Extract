@@ -2,6 +2,16 @@
 
 ## 0.12.1 — Unreleased
 
+### Breaking changes
+
+- `ftl extract --comment-junks` and the `comment-junks` config key are gone. The flag was dead: a locale file that
+  does not parse has aborted `ftl extract` since `0.12.0` (`Failed to parse FTL file ...`) before any commenting
+  could happen, and that is the right behavior, because commenting a broken message out and writing a placeholder
+  would silently turn a translation into a comment. The CLI flag now fails with clap's `unexpected argument` error.
+  A `comment-junks = true` in `pyproject.toml` still loads for the whole `0.12.x` series but does nothing and logs
+  `comment-junks has no effect and will be removed in 0.13: syntax errors in .ftl files abort the run`; `0.13`
+  drops the key. `ftl config sample` no longer prints it.
+
 ### Fixed
 
 - `ftl extract` no longer comments out and replaces a valid translation whose variable appears only inside a Fluent
@@ -33,6 +43,9 @@
   to `i18n.get("welcome", **data)` is one key: a new key is written with the variables of the first call without
   `**` (or of the first `**` call when there is no other), only calls without `**` are compared with each other, and
   the other checks treat the key as usual.
+- When a locale file does not parse, `ftl extract` now reports the file, line and column and the parser's own
+  description, like `ftl check --check syntax` does: `Failed to parse FTL file locales/en/_default.ftl:5:1: Expected
+  a token starting with "}"` (plus `(and N more)` for further errors), instead of a debug dump of the error list.
 
 ### Behavior changes
 - The placeholder `ftl extract` writes for a new key lists its variables sorted by name (`order = order{ $a }{ $b }`)

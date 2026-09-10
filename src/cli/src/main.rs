@@ -19,7 +19,7 @@ use extractor::ftl::consts::{
 };
 use extractor::ftl::ftl_extractor::{ExtractConfig, extract};
 use extractor::ftl::utils::FastHashSet;
-use log::{error, info};
+use log::{error, info, warn};
 use mimalloc::MiMalloc;
 use std::path::{Path, PathBuf};
 use stub::{StubConfig, generate_stub};
@@ -76,7 +76,6 @@ fn main() {
             ignore_attributes,
             append_ignore_attributes,
             ignore_kwargs,
-            comment_junks,
             default_ftl_file,
             comment_keys_mode,
             line_endings,
@@ -90,6 +89,12 @@ fn main() {
             let pyproject = config_source
                 .and_then(|loaded| loaded.config.extract.clone())
                 .unwrap_or_default();
+            if pyproject.comment_junks.is_some() {
+                warn!(
+                    target: "cli",
+                    "comment-junks has no effect and will be removed in 0.13: syntax errors in .ftl files abort the run"
+                );
+            }
             let base_dir = config_source
                 .map(|loaded| loaded.base_dir.as_path())
                 .unwrap_or_else(|| Path::new("."));
@@ -187,7 +192,6 @@ fn main() {
                     pyproject.ignore_kwargs,
                     DEFAULT_IGNORE_KWARGS.iter().cloned().collect(),
                 )),
-                comment_junks: comment_junks || pyproject.comment_junks.unwrap_or(false),
                 default_ftl_file,
                 comment_keys_mode,
                 line_endings,

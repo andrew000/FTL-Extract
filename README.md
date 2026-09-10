@@ -52,7 +52,6 @@ i18n-keys-append = ["LF", "LazyProxy"]
 ignore-attributes-append = ["core"]
 exclude-dirs-append = ["./tests/*"]
 ignore-kwargs = ["when"]
-comment-junks = true
 comment-keys-mode = "comment"
 line-endings = "lf"
 cache = true
@@ -125,6 +124,9 @@ $ ftl extract project_path/code_path project_path/locales
 - `project_path/code_path` - path to the project directory where the code is located.
 - `project_path/locales` - path to the project directory where the `.ftl` files will be located.
 
+A locale file with a Fluent syntax error aborts the run before anything is written; `ftl check --check syntax`
+reports the file, line and column.
+
 ### 📚 Additional arguments
 
 - `-l` or `--language` - add a new language to the project.
@@ -137,7 +139,6 @@ $ ftl extract project_path/code_path project_path/locales
 - `-I` or `--append-ignore-attributes` - add more attributes to ignore to the default list.
 - `--ignore-kwargs` - ignore specific kwargs of the i18n_keys like `when=...` in
   `aiogram_dialog.I18nFormat(..., when=...)`.
-- `--comment-junks` - comments errored translations in the `.ftl` file.
 - `--default-ftl-file` - specify the default `.ftl` file name.
 - `--comment-keys-mode` - specify the comment keys mode. It will comment keys that are not used in the code or print
   warnings about them. Available modes: `comment`, `warn`.
@@ -433,7 +434,6 @@ $ ftl extract \
   -I 'core' \
   -E './tests/*' \
   --ignore-kwargs 'when' \
-  --comment-junks \
   --comment-keys-mode 'comment' \
   --cache \
   --verbose

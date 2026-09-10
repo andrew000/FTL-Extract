@@ -25,7 +25,6 @@ fn make_config(code_path: PathBuf, locales_path: PathBuf, languages: Vec<&str>) 
         ignore_attributes: FastHashSet::default(),
         ignore_kwargs: DEFAULT_IGNORE_KWARGS.clone(),
         default_ftl_file: PathBuf::from("_default.ftl"),
-        comment_junks: true,
         comment_keys_mode: CommentsKeyModes::Comment,
         line_endings: LineEndings::LF,
         dry_run: true, // dry_run to avoid I/O noise

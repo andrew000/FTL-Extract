@@ -26,7 +26,6 @@ pub struct ExtractConfig {
     pub ignore_attributes: FastHashSet<String>,
     pub ignore_kwargs: FastHashSet<String>,
     pub default_ftl_file: PathBuf,
-    pub comment_junks: bool,
     pub comment_keys_mode: CommentsKeyModes,
     pub line_endings: LineEndings,
     pub dry_run: bool,
@@ -166,7 +165,7 @@ fn process_language(
     config: &ExtractConfig,
     statistics: &mut ExtractionStatistics,
 ) -> Result<()> {
-    let (mut stored_fluent_keys, stored_terms, mut leave_as_is) =
+    let (mut stored_fluent_keys, stored_terms, leave_as_is) =
         import_ftl_from_dir(&config.locales_path, lang, statistics)?;
     let lang_dir = config.locales_path.join(lang);
 
@@ -256,15 +255,7 @@ fn process_language(
         }
     });
 
-    handle_comments_and_junk(
-        &mut keys_to_comment,
-        &mut keys_to_add,
-        &mut leave_as_is,
-        &lang_dir,
-        config,
-        statistics,
-        lang,
-    );
+    handle_comment_keys(&mut keys_to_comment, &mut keys_to_add, &lang_dir, config);
 
     // Merge and Write
     write_results(
@@ -281,14 +272,11 @@ fn process_language(
 
     Ok(())
 }
-fn handle_comments_and_junk(
+fn handle_comment_keys(
     keys_to_comment: &mut FastHashMap<String, FluentKey>,
     keys_to_add: &mut FastHashMap<String, FluentKey>,
-    leave_as_is: &mut Vec<FluentKey>,
     lang_dir: &Path,
     config: &ExtractConfig,
-    statistics: &mut ExtractionStatistics,
-    lang: &str,
 ) {
     match config.comment_keys_mode {
         CommentsKeyModes::Comment => {
@@ -305,15 +293,6 @@ fn handle_comments_and_junk(
                     fluent_key.key,
                     lang_dir.join(fluent_key.path.as_ref()).display()
                 );
-            }
-        }
-    }
-
-    if config.comment_junks {
-        for fluent_key in leave_as_is {
-            if matches!(fluent_key.entry.as_ref(), FluentEntry::Junk(_)) {
-                comment_ftl_key(fluent_key);
-                *statistics.ftl_keys_commented.get_mut(lang).unwrap() += 1;
             }
         }
     }
@@ -444,7 +423,6 @@ mod tests {
             ignore_attributes: DEFAULT_IGNORE_ATTRIBUTES.clone(),
             ignore_kwargs: DEFAULT_IGNORE_KWARGS.clone(),
             default_ftl_file: PathBuf::from(DEFAULT_FTL_FILENAME),
-            comment_junks: false,
             comment_keys_mode: CommentsKeyModes::Comment,
             line_endings: LineEndings::Default,
             dry_run: false,
@@ -718,39 +696,6 @@ i18n.page.title(_path="pages/main.ftl")
     }
 
     #[test]
-    fn test_handle_comments_and_junk_comments_junk_entries() {
-        let mut config = config(PathBuf::from("code"), PathBuf::from("locales"));
-        config.comment_junks = true;
-        let mut statistics = ExtractionStatistics::new();
-        statistics.init_lang("en");
-        let mut leave_as_is = vec![FluentKey::new(
-            Arc::new(PathBuf::new()),
-            String::new(),
-            FluentEntry::Junk("bad = {".to_string()),
-            Arc::new(PathBuf::from("_default.ftl")),
-            Some("en".to_string()),
-            Some(0),
-            FastHashSet::default(),
-        )];
-
-        handle_comments_and_junk(
-            &mut FastHashMap::default(),
-            &mut FastHashMap::default(),
-            &mut leave_as_is,
-            Path::new("locales/en"),
-            &config,
-            &mut statistics,
-            "en",
-        );
-
-        assert!(matches!(
-            leave_as_is[0].entry.as_ref(),
-            FluentEntry::Comment(_)
-        ));
-        assert_eq!(statistics.ftl_keys_commented["en"], 1);
-    }
-
-    #[test]
     fn test_extract_reports_write_failures_instead_of_panicking() {
         let temp = TempDir::new().unwrap();
         let code_path = temp.path().join("code");
@@ -1002,43 +947,6 @@ i18n.get("nested", _path="pages/main.ftl")
             );
             assert_eq!(output, expected);
         }
-    }
-
-    #[test]
-    fn test_comment_junks_keeps_every_junk_line() {
-        // `import_ftl_from_dir` refuses files with junk, so `comment_junks` is only reachable
-        // with keys built in memory; it goes through the same `comment_ftl_key`.
-        let mut config = config(PathBuf::from("code"), PathBuf::from("locales"));
-        config.comment_junks = true;
-        let mut statistics = ExtractionStatistics::new();
-        statistics.init_lang("en");
-        let mut leave_as_is = vec![FluentKey::new(
-            Arc::new(PathBuf::new()),
-            String::new(),
-            FluentEntry::Junk("bad = {\nstill bad\n\n\n".to_string()),
-            Arc::new(PathBuf::from("_default.ftl")),
-            Some("en".to_string()),
-            Some(0),
-            FastHashSet::default(),
-        )];
-
-        handle_comments_and_junk(
-            &mut FastHashMap::default(),
-            &mut FastHashMap::default(),
-            &mut leave_as_is,
-            Path::new("locales/en"),
-            &config,
-            &mut statistics,
-            "en",
-        );
-
-        assert_eq!(
-            leave_as_is[0].entry.as_ref(),
-            &FluentEntry::Comment(fluent_syntax::ast::Comment {
-                content: vec!["bad = {".to_string(), "still bad".to_string()],
-            })
-        );
-        assert_eq!(generate_ftl(leave_as_is), "# bad = {\n# still bad\n\n");
     }
 
     #[test]

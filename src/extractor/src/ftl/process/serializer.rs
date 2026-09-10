@@ -28,7 +28,6 @@ pub(crate) fn generate_ftl(fluent_keys: Vec<FluentKey>) -> String {
             FluentEntry::Comment(comment) => Entry::Comment(comment),
             FluentEntry::GroupComment(comment) => Entry::GroupComment(comment),
             FluentEntry::ResourceComment(comment) => Entry::ResourceComment(comment),
-            FluentEntry::Junk(content) => Entry::Junk { content },
         })
         .collect();
     let resource: Resource<String> = Resource { body };
@@ -98,15 +97,6 @@ mod tests {
                 Arc::new(PathBuf::from("tmp.ftl")), // path
                 Some("en".to_string()),  // locale
                 Some(2),
-                FastHashSet::default(),
-            ),
-            FluentKey::new(
-                Arc::new(PathBuf::from("tmp.py")),
-                String::from("junk"),                           // key
-                FluentEntry::Junk("This is junk.".to_string()), // entry
-                Arc::new(PathBuf::from("tmp.ftl")),             // path
-                Some("en".to_string()),                         // locale
-                Some(3),
                 FastHashSet::default(),
             ),
         ];

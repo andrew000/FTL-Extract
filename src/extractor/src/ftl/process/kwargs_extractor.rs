@@ -296,7 +296,7 @@ mod tests {
         let comment = FluentKey::new(
             Arc::new(PathBuf::new()),
             String::new(),
-            FluentEntry::Junk("junk".to_string()),
+            FluentEntry::Comment(fluent_syntax::ast::Comment { content: vec![] }),
             Arc::new(PathBuf::from("tmp.ftl")),
             None,
             None,

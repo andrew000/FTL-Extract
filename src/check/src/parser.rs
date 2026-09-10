@@ -235,7 +235,7 @@ fn message_entries_from_located_entries(
                 key: message.id.name.clone(),
                 value: extract_message_value(message),
                 line: located.line,
-                ignore_untranslated: has_ignore_untranslated_marker(message.comment.as_ref()),
+                ignored: ignored_checks(message.comment.as_ref()),
             })
         })
         .collect()
@@ -255,15 +255,97 @@ fn extract_message_value(message: &Message<String>) -> Option<String> {
     Some(buffer.trim().to_string())
 }
 
-fn has_ignore_untranslated_marker(comment: Option<&Comment<String>>) -> bool {
-    let Some(comment) = comment else {
-        return false;
+/// Checks a message opts out of through a `# ftl-extract: ignore ...` comment marker.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub(crate) struct IgnoredChecks {
+    pub(crate) stale: bool,
+    pub(crate) untranslated: bool,
+}
+
+impl IgnoredChecks {
+    const ALL: Self = Self {
+        stale: true,
+        untranslated: true,
     };
 
-    comment.content.iter().any(|line| {
-        let normalized = line.trim().to_ascii_lowercase();
-        normalized.contains("ftl-extract: ignore-untranslated") || normalized == "ignore"
-    })
+    fn merge(&mut self, other: Self) {
+        self.stale |= other.stale;
+        self.untranslated |= other.untranslated;
+    }
+}
+
+/// Parses the ignore markers in a message comment.
+///
+/// Recognised spellings, case-insensitive:
+/// - `# ftl-extract: ignore` and `# ftl-extract: ignore all` ignore every per-message check
+/// - `# ftl-extract: ignore stale` / `# ftl-extract: ignore untranslated`, or several names
+///   separated by commas or spaces
+/// - `# ftl-extract: ignore-untranslated` and a bare `# ignore` line, kept as aliases of
+///   `ignore untranslated` from earlier releases
+///
+/// Unknown check names are skipped.
+pub(crate) fn ignored_checks(comment: Option<&Comment<String>>) -> IgnoredChecks {
+    let mut ignored = IgnoredChecks::default();
+    let Some(comment) = comment else {
+        return ignored;
+    };
+
+    for line in &comment.content {
+        ignored.merge(parse_ignore_marker(line));
+    }
+    ignored
+}
+
+fn parse_ignore_marker(line: &str) -> IgnoredChecks {
+    const PREFIX: &str = "ftl-extract:";
+
+    let normalized = line.trim().to_ascii_lowercase();
+    if normalized == "ignore" {
+        return IgnoredChecks {
+            untranslated: true,
+            ..IgnoredChecks::default()
+        };
+    }
+
+    let Some(position) = normalized.find(PREFIX) else {
+        return IgnoredChecks::default();
+    };
+    let directive = normalized[position + PREFIX.len()..].trim();
+
+    if directive == "ignore-untranslated" {
+        return IgnoredChecks {
+            untranslated: true,
+            ..IgnoredChecks::default()
+        };
+    }
+
+    let Some(names) = directive.strip_prefix("ignore") else {
+        return IgnoredChecks::default();
+    };
+    if !names.is_empty() && !names.starts_with(char::is_whitespace) {
+        return IgnoredChecks::default();
+    }
+
+    let mut ignored = IgnoredChecks::default();
+    let mut any_name = false;
+    for name in names.split(|c: char| c == ',' || c.is_whitespace()) {
+        if name.is_empty() {
+            continue;
+        }
+        any_name = true;
+        match name {
+            "all" => ignored.merge(IgnoredChecks::ALL),
+            "stale" => ignored.stale = true,
+            "untranslated" => ignored.untranslated = true,
+            _ => {}
+        }
+    }
+
+    if any_name {
+        ignored
+    } else {
+        IgnoredChecks::ALL
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -399,6 +481,82 @@ mod tests {
                     line: 5,
                 },
             ]
+        );
+    }
+}
+
+#[cfg(test)]
+mod ignore_marker_tests {
+    use super::{IgnoredChecks, ignored_checks};
+    use fluent_syntax::ast::Comment;
+
+    fn parse(lines: &[&str]) -> IgnoredChecks {
+        let comment = Comment {
+            content: lines.iter().map(|line| line.to_string()).collect(),
+        };
+        ignored_checks(Some(&comment))
+    }
+
+    const NONE: IgnoredChecks = IgnoredChecks {
+        stale: false,
+        untranslated: false,
+    };
+    const STALE: IgnoredChecks = IgnoredChecks {
+        stale: true,
+        untranslated: false,
+    };
+    const UNTRANSLATED: IgnoredChecks = IgnoredChecks {
+        stale: false,
+        untranslated: true,
+    };
+
+    #[test]
+    fn test_no_comment_or_unrelated_comment_ignores_nothing() {
+        assert_eq!(ignored_checks(None), NONE);
+        assert_eq!(parse(&["Brand name, do not translate"]), NONE);
+        assert_eq!(parse(&["ftl-extract: ignored"]), NONE);
+        assert_eq!(parse(&["ftl-extract: skip stale"]), NONE);
+    }
+
+    #[test]
+    fn test_legacy_spellings_ignore_untranslated_only() {
+        assert_eq!(parse(&["ftl-extract: ignore-untranslated"]), UNTRANSLATED);
+        assert_eq!(parse(&["FTL-Extract: Ignore-Untranslated"]), UNTRANSLATED);
+        assert_eq!(parse(&["ignore"]), UNTRANSLATED);
+        assert_eq!(
+            parse(&["Note: ftl-extract: ignore-untranslated"]),
+            UNTRANSLATED
+        );
+    }
+
+    #[test]
+    fn test_named_checks_and_all() {
+        assert_eq!(parse(&["ftl-extract: ignore stale"]), STALE);
+        assert_eq!(parse(&["ftl-extract: ignore untranslated"]), UNTRANSLATED);
+        assert_eq!(
+            parse(&["ftl-extract: ignore stale, untranslated"]),
+            IgnoredChecks::ALL
+        );
+        assert_eq!(
+            parse(&["ftl-extract: ignore stale untranslated"]),
+            IgnoredChecks::ALL
+        );
+        assert_eq!(parse(&["ftl-extract: ignore all"]), IgnoredChecks::ALL);
+        assert_eq!(parse(&["ftl-extract: ignore"]), IgnoredChecks::ALL);
+        assert_eq!(parse(&["ftl-extract:ignore"]), IgnoredChecks::ALL);
+    }
+
+    #[test]
+    fn test_unknown_names_are_skipped_and_lines_merge() {
+        assert_eq!(parse(&["ftl-extract: ignore missing"]), NONE);
+        assert_eq!(parse(&["ftl-extract: ignore missing, stale"]), STALE);
+        assert_eq!(
+            parse(&[
+                "Brand name",
+                "ftl-extract: ignore stale",
+                "ftl-extract: ignore untranslated"
+            ]),
+            IgnoredChecks::ALL
         );
     }
 }

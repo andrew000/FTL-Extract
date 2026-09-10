@@ -1,5 +1,5 @@
 use crate::checks::{run_code_aware_check, run_code_aware_check_with_extracted};
-use crate::parser::CheckLocaleCache;
+use crate::parser::{CheckLocaleCache, ignored_checks};
 use crate::types::{CheckCodeAwareConfig, CheckStaleConfig, CheckStaleResult, StaleKey};
 use anyhow::Result;
 use common::{FastHashMap, FastHashSet};
@@ -38,6 +38,9 @@ pub fn check_stale_with_cache(
                 .strip_prefix(&locale_path)
                 .unwrap_or(&entry.file_path)
                 .to_path_buf();
+            if entry.ignored.stale {
+                continue;
+            }
             if used_keys.contains(&(entry.key.clone(), relative_to_locale)) {
                 continue;
             }
@@ -92,8 +95,10 @@ fn live_referenced_messages(
             match &located.entry {
                 Entry::Message(message) => {
                     let node = ReferenceNode::Message(message.id.name.clone());
-                    if used_keys
-                        .contains(&(message.id.name.clone(), file.relative_to_locale.clone()))
+                    // Messages ignored for `stale` count as used, so what they reference stays live.
+                    if ignored_checks(message.comment.as_ref()).stale
+                        || used_keys
+                            .contains(&(message.id.name.clone(), file.relative_to_locale.clone()))
                     {
                         roots.insert(node.clone());
                     }
@@ -360,5 +365,43 @@ i18n.get("hello", _path="two.ftl")
 
         assert_eq!(result.extraction_errors.len(), 1);
         assert_eq!(result.extraction_errors[0].key.as_deref(), Some("hello"));
+    }
+
+    #[test]
+    fn test_check_stale_skips_messages_with_ignore_marker() {
+        let temp = TempDir::new().unwrap();
+        write(&temp.path().join("code/app.py"), r#"i18n.get("hello")"#);
+        write(
+            &temp.path().join("locales/uk/_default.ftl"),
+            "hello = Hello\n# ftl-extract: ignore stale\ndynamic = Built at runtime\n# ftl-extract: ignore untranslated\nold = Old\n# ftl-extract: ignore all\nother = Other\n",
+        );
+
+        let result = check_stale(config(&temp, vec!["uk".to_string()])).unwrap();
+
+        let keys = result
+            .stale_keys
+            .iter()
+            .map(|key| key.key.as_str())
+            .collect::<Vec<_>>();
+        assert_eq!(keys, vec!["old"]);
+    }
+
+    #[test]
+    fn test_check_stale_keeps_messages_referenced_by_ignored_message() {
+        let temp = TempDir::new().unwrap();
+        write(&temp.path().join("code/app.py"), r#"i18n.get("hello")"#);
+        write(
+            &temp.path().join("locales/uk/_default.ftl"),
+            "hello = Hello\n# ftl-extract: ignore stale\ndynamic = { part } and { -brand }\npart = Part\n-brand = Brand\nunused = Unused\n",
+        );
+
+        let result = check_stale(config(&temp, vec!["uk".to_string()])).unwrap();
+
+        let keys = result
+            .stale_keys
+            .iter()
+            .map(|key| key.key.as_str())
+            .collect::<Vec<_>>();
+        assert_eq!(keys, vec!["unused"]);
     }
 }

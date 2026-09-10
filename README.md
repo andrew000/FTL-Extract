@@ -338,16 +338,29 @@ report-path = "reports/ftl-check"
 report-format = "json"
 ```
 
-### 🙈 Ignore marker for intentional placeholders
+### 🙈 Ignore markers
 
-If a key is intentionally the same as its message id (for example, brand or domain terms like `balance = balance`), add a message comment marker above it:
+Some keys are intentional exceptions: brand or domain terms that must stay equal to their key, or keys that are built
+dynamically in Python (f-strings, variables, `getattr`), which the extractor cannot see and would otherwise report as
+stale forever. Add a comment marker above such a message to opt it out of specific checks:
 
 ```ftl
-# ftl-extract: ignore-untranslated
+# ftl-extract: ignore untranslated
 balance = balance
+
+# ftl-extract: ignore stale
+dynamic-key = Built from an f-string in Python
+
+# ftl-extract: ignore all
+brand = brand
 ```
 
-This key will be skipped by `ftl check --check untranslated`.
+The marker is `# ftl-extract: ignore` followed by the checks to skip: `stale`, `untranslated`, several names separated
+by commas or spaces, or `all`. A bare `# ftl-extract: ignore` means `all`. A message ignored for `stale` also keeps the
+messages and terms it references alive, exactly as if Python code used it.
+
+The older spelling `# ftl-extract: ignore-untranslated` (and a bare `# ignore` line) still works as an alias of
+`# ftl-extract: ignore untranslated`.
 
 
 ## FAQ

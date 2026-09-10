@@ -1,13 +1,68 @@
-name: Publish to PyPI
+name: Release
+
+# How a release goes out:
+#
+#   1. Merge `dev` into `master`, then push the version tag:
+#        git tag vX.Y.Z master && git push origin vX.Y.Z
+#      The tag push builds every wheel and the sdist and attaches them to the GitHub
+#      release for that tag. A draft release is created if there is none; a draft you
+#      already saved in the UI for that tag name is used as is.
+#   2. Edit the draft's title and notes, look the assets over, then publish it. Publishing
+#      downloads exactly those assets from the release and uploads them to PyPI. Nothing
+#      is rebuilt, so what was inspected is what ships.
+#
+# GitHub does not run workflows for saving, editing or deleting a *draft* release, so a
+# draft alone never starts a build: push the tag, or run the workflow manually from the
+# Actions tab (pick the branch or tag to build from, name the release tag). The manual
+# run also rebuilds and replaces the assets after a fix.
+#
+# Publishing a release whose tag was never pushed and never built fails in the publish
+# job on purpose: it finds no assets. Build them (tag push or manual run) and re-run the
+# publish job.
 
 on:
+  push:
+    tags: [ "v*" ]
   release:
     types: [ published ]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag of the release to attach the artifacts to, e.g. v0.13.0"
+        required: true
+        type: string
 
 jobs:
+  draft:
+    name: 📝 Ensure a draft release exists
+    if: github.event_name != 'release'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+    steps:
+      # One job creates the draft so the seven build jobs cannot race each other into
+      # creating seven of them. `gh release view` also finds drafts by tag name.
+      - name: Create the draft if there is no release for the tag yet
+        shell: bash
+        run: |
+          if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "Release $RELEASE_TAG exists; the build jobs will attach to it."
+          else
+            gh release create "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --draft --verify-tag \
+              --title "$RELEASE_TAG" --notes "Draft created by the Release workflow. Edit the title and notes before publishing."
+          fi
+
   build:
     name: 📦 Build wheels
+    needs: draft
     runs-on: ${{ matrix.os }}
+    permissions:
+      contents: write  # attaching the assets to the release
+    env:
+      RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
     strategy:
       fail-fast: true
       matrix:
@@ -32,6 +87,7 @@ jobs:
           - os: macos-15-intel
             arch: x86_64
     steps:
+      # Builds the pushed tag, or the ref a manual run was started on.
       - uses: actions/checkout@v7
 
       - name: Install uv
@@ -124,28 +180,34 @@ jobs:
         shell: bash
         run: uv build --wheel --out-dir sdist-check wheelhouse/*.tar.gz
 
-      - name: Store artifacts
-        uses: actions/upload-artifact@v7
-        with:
-          name: ftl_extract-${{ matrix.os }}-${{ matrix.arch }}-${{ matrix.libc }}-${{ github.run_id }}
-          if-no-files-found: error
-          path: wheelhouse/*
+      # `--clobber` lets a manual re-run replace assets of the same name.
+      - name: Attach the artifacts to the release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          ls -lah wheelhouse
+          gh release upload "$RELEASE_TAG" wheelhouse/* --repo "$GITHUB_REPOSITORY" --clobber
 
   publish:
     name: 🐍 Publish distribution 📦
+    if: github.event_name == 'release'
     runs-on: ubuntu-latest
-    needs: build
     permissions:
+      contents: read
       id-token: write  # IMPORTANT: this permission is mandatory for trusted publishing
     steps:
-      - name: Download artifacts
-        uses: actions/download-artifact@v8
-        with:
-          path: dist
-          merge-multiple: true
-
-      - name: List artifacts
-        run: ls -lah dist
+      - name: Download the assets attached to the release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: |
+          if ! gh release download "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --dir dist --pattern '*.whl' --pattern '*.tar.gz'; then
+            echo "::error::No wheels are attached to $RELEASE_TAG. Push the tag or run the Release workflow manually so the build job attaches them, then re-run this job."
+            exit 1
+          fi
+          ls -lah dist
 
       - name: Publish to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1

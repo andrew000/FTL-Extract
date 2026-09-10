@@ -8,13 +8,21 @@ use std::sync::Arc;
 /// Entries are moved out of their `Arc` when nothing else holds them, which is the case for
 /// keys imported from `.ftl` files and for commented keys. Only entries shared between
 /// locales (keys extracted from code) are cloned.
-pub(crate) fn generate_ftl(mut fluent_keys: Vec<FluentKey>) -> String {
-    // Stable sort: keys added from code all share `usize::MAX` and keep their order.
-    fluent_keys.sort_by_key(|key| key.position);
-
-    let body = fluent_keys
+pub(crate) fn generate_ftl(fluent_keys: Vec<FluentKey>) -> String {
+    // Only the position and the entry matter from here on. Sorting those instead of the
+    // whole keys keeps the sort from shuffling a few hundred bytes per key. The index
+    // tie-break reproduces the stable order for equal positions: keys added from code all
+    // share `usize::MAX` and keep their input order.
+    let mut entries: Vec<(usize, usize, Arc<FluentEntry>)> = fluent_keys
         .into_iter()
-        .map(|key| match Arc::unwrap_or_clone(key.entry) {
+        .enumerate()
+        .map(|(index, key)| (key.position, index, key.entry))
+        .collect();
+    entries.sort_unstable_by_key(|&(position, index, _)| (position, index));
+
+    let body = entries
+        .into_iter()
+        .map(|(_, _, entry)| match Arc::unwrap_or_clone(entry) {
             FluentEntry::Message(message) => Entry::Message(message),
             FluentEntry::Term(term) => Entry::Term(term),
             FluentEntry::Comment(comment) => Entry::Comment(comment),

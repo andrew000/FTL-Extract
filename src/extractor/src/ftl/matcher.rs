@@ -1,5 +1,6 @@
 #![allow(unused_variables)]
 
+use crate::ftl::code_extractor::kwargs_from_key;
 use crate::ftl::consts;
 use crate::ftl::diagnostics::{CodeLocation, ExtractionDiagnostic, ExtractionDiagnosticKind};
 use crate::ftl::utils::{FastHashMap, FastHashSet};
@@ -52,6 +53,64 @@ impl FluentKey {
             source_location: None,
         }
     }
+}
+
+/// The placeholder message written for a key found in code: the key as text followed by one
+/// `{ $kwarg }` per keyword argument, sorted by name.
+///
+/// Sorting makes two calls with the same keyword arguments in a different order, or in
+/// different files, produce equal messages, and keeps the generated placeholder and the cache
+/// content reproducible: files are extracted in parallel, so call order would not be stable.
+pub(crate) fn code_message(
+    key: String,
+    mut kwargs: Vec<String>,
+) -> fluent_syntax::ast::Message<String> {
+    kwargs.sort_unstable();
+
+    let mut elements = Vec::with_capacity(kwargs.len() + 1);
+    elements.push(fluent_syntax::ast::PatternElement::TextElement { value: key.clone() });
+    elements.extend(
+        kwargs
+            .into_iter()
+            .map(|name| fluent_syntax::ast::PatternElement::Placeable {
+                expression: fluent_syntax::ast::Expression::Inline(
+                    fluent_syntax::ast::InlineExpression::VariableReference {
+                        id: fluent_syntax::ast::Identifier { name },
+                    },
+                ),
+            }),
+    );
+
+    fluent_syntax::ast::Message {
+        id: fluent_syntax::ast::Identifier { name: key },
+        value: Some(fluent_syntax::ast::Pattern { elements }),
+        attributes: vec![],
+        comment: None,
+    }
+}
+
+/// Message text of a `KeyMessageConflict`: the two keyword-argument sets with their locations,
+/// in the same order as the diagnostic's `locations` (existing first).
+pub(crate) fn kwargs_conflict_message(existing: &FluentKey, new_fluent_key: &FluentKey) -> String {
+    fn describe(key: &FluentKey) -> String {
+        let kwargs = kwargs_from_key(key);
+        let kwargs = if kwargs.is_empty() {
+            "no keyword arguments".to_string()
+        } else {
+            kwargs.join(", ")
+        };
+        match &key.source_location {
+            Some(location) => format!("{kwargs} ({location})"),
+            None => kwargs,
+        }
+    }
+
+    format!(
+        "Fluent key {} is used with different keyword arguments: {} and {}",
+        new_fluent_key.key,
+        describe(existing),
+        describe(new_fluent_key)
+    )
 }
 
 pub(crate) struct I18nMatcher<'a> {
@@ -222,8 +281,7 @@ impl<'a> I18nMatcher<'a> {
     #[inline]
     fn create_fluent_key(&self, expr: &ruff_python_ast::ExprCall, key: String) -> FluentKey {
         let mut path = self.default_ftl_file.clone();
-        let mut elements =
-            vec![fluent_syntax::ast::PatternElement::TextElement { value: key.clone() }];
+        let mut kwargs: Vec<String> = Vec::new();
 
         for kw in &expr.arguments.keywords {
             let Some(arg) = kw.arg.as_ref() else {
@@ -243,27 +301,14 @@ impl<'a> I18nMatcher<'a> {
                     }
                 }
             } else if !self.ignore_kwargs.contains(arg.as_str()) {
-                elements.push(fluent_syntax::ast::PatternElement::Placeable {
-                    expression: fluent_syntax::ast::Expression::Inline(
-                        fluent_syntax::ast::InlineExpression::VariableReference {
-                            id: fluent_syntax::ast::Identifier {
-                                name: arg.to_string(),
-                            },
-                        },
-                    ),
-                });
+                kwargs.push(arg.to_string());
             }
         }
 
         let mut fluent_key = FluentKey::new(
             self.code_path.clone(),
             key.clone(),
-            FluentEntry::Message(fluent_syntax::ast::Message {
-                id: fluent_syntax::ast::Identifier { name: key },
-                value: Some(fluent_syntax::ast::Pattern { elements }),
-                attributes: vec![],
-                comment: None,
-            }),
+            FluentEntry::Message(code_message(key, kwargs)),
             path,
             None,
             None,
@@ -338,10 +383,7 @@ impl<'a> I18nMatcher<'a> {
         match (existing.entry.as_ref(), new_fluent_key.entry.as_ref()) {
             (FluentEntry::Message(existing_message), FluentEntry::Message(new_message)) => {
                 if existing_message != new_message {
-                    let message = format!(
-                        "Fluent key {} has different translations:\n{:?}\nand\n{:?}",
-                        new_fluent_key.key, new_message, existing_message
-                    );
+                    let message = kwargs_conflict_message(&existing, &new_fluent_key);
                     self.add_conflict_diagnostic(
                         ExtractionDiagnosticKind::KeyMessageConflict,
                         &existing,
@@ -363,5 +405,112 @@ impl<'a> I18nMatcher<'a> {
                 );
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{FluentEntry, FluentKey, I18nMatcher, code_message};
+    use crate::ftl::code_extractor::kwargs_from_key;
+    use crate::ftl::diagnostics::{ExtractionDiagnostic, ExtractionDiagnosticKind};
+    use crate::ftl::utils::{FastHashMap, FastHashSet};
+    use pretty_assertions::assert_eq;
+    use ruff_python_ast::visitor::source_order::SourceOrderVisitor;
+    use std::path::PathBuf;
+    use std::sync::{Arc, LazyLock};
+
+    static I18N: LazyLock<FastHashSet<String>> =
+        LazyLock::new(|| FastHashSet::from_iter(["i18n".to_string()]));
+    static EMPTY: LazyLock<FastHashSet<String>> = LazyLock::new(FastHashSet::default);
+
+    fn run(source: &str) -> (FastHashMap<String, FluentKey>, Vec<ExtractionDiagnostic>) {
+        let module = ruff_python_parser::parse_module(source).unwrap();
+        let mut matcher = I18nMatcher::new(
+            PathBuf::from("app.py"),
+            source,
+            PathBuf::from("_default.ftl"),
+            &I18N,
+            &EMPTY,
+            &EMPTY,
+            &EMPTY,
+        );
+        matcher.visit_body(module.suite());
+        (matcher.fluent_keys, matcher.diagnostics)
+    }
+
+    #[test]
+    fn test_code_message_sorts_kwargs_by_name() {
+        let message = code_message(
+            "k".to_string(),
+            vec!["zeta".to_string(), "alpha".to_string(), "mid".to_string()],
+        );
+        let key = FluentKey::new(
+            Arc::new(PathBuf::from("app.py")),
+            "k".to_string(),
+            FluentEntry::Message(message),
+            Arc::new(PathBuf::from("_default.ftl")),
+            None,
+            None,
+            FastHashSet::default(),
+        );
+        assert_eq!(kwargs_from_key(&key), vec!["alpha", "mid", "zeta"]);
+    }
+
+    #[test]
+    fn test_same_kwargs_in_a_different_order_are_one_key() {
+        let (keys, diagnostics) = run(
+            "def f(i18n):\n    i18n.get(\"order\", a=1, b=2)\n    i18n.get(\"order\", b=2, a=1)\n",
+        );
+
+        assert!(diagnostics.is_empty(), "{diagnostics:?}");
+        assert_eq!(keys.len(), 1);
+        assert_eq!(kwargs_from_key(&keys["order"]), vec!["a", "b"]);
+    }
+
+    #[test]
+    fn test_different_kwargs_conflict_with_a_readable_message() {
+        let (keys, diagnostics) = run(
+            "def f(i18n):\n    i18n.get(\"order\", a=1, b=2)\n    i18n.get(\"order\", a=1, c=3)\n",
+        );
+
+        assert_eq!(keys.len(), 1);
+        assert_eq!(diagnostics.len(), 1);
+        assert_eq!(
+            diagnostics[0].kind,
+            ExtractionDiagnosticKind::KeyMessageConflict
+        );
+        assert_eq!(diagnostics[0].key.as_deref(), Some("order"));
+        assert_eq!(diagnostics[0].locations.len(), 2);
+        assert_eq!(
+            diagnostics[0].message,
+            "Fluent key order is used with different keyword arguments: a, b (app.py:2:5) and a, c (app.py:3:5)"
+        );
+        assert_eq!(
+            diagnostics[0].to_string(),
+            "[key-message-conflict] Fluent key order is used with different keyword arguments: a, b (app.py:2:5) and a, c (app.py:3:5) (app.py:2:5, app.py:3:5)"
+        );
+    }
+
+    #[test]
+    fn test_conflict_message_names_a_call_without_kwargs() {
+        let (_, diagnostics) = run("i18n.get(\"k\")\ni18n.get(\"k\", a=1)\n");
+
+        assert_eq!(diagnostics.len(), 1);
+        assert_eq!(
+            diagnostics[0].message,
+            "Fluent key k is used with different keyword arguments: no keyword arguments (app.py:1:1) and a (app.py:2:1)"
+        );
+    }
+
+    #[test]
+    fn test_different_paths_still_conflict() {
+        let (_, diagnostics) =
+            run("i18n.get(\"k\", _path=\"one.ftl\")\ni18n.get(\"k\", _path=\"two.ftl\")\n");
+
+        assert_eq!(diagnostics.len(), 1);
+        assert_eq!(
+            diagnostics[0].kind,
+            ExtractionDiagnosticKind::KeyPathConflict
+        );
     }
 }

@@ -5,7 +5,7 @@ use crate::ftl::cache::{
 use crate::ftl::diagnostics::{
     CodeLocation, ExtractedCode, ExtractedFluentKey, ExtractionDiagnostic, ExtractionDiagnosticKind,
 };
-use crate::ftl::matcher::{FluentEntry, FluentKey, I18nMatcher};
+use crate::ftl::matcher::{FluentEntry, FluentKey, I18nMatcher, kwargs_conflict_message};
 use crate::ftl::utils::{FastHashMap, FastHashSet};
 use anyhow::Result;
 use common::LineIndex;
@@ -319,12 +319,7 @@ fn merge_fluent_key(
                     diagnostics.push(conflict_diagnostic(
                         ExtractionDiagnosticKind::KeyMessageConflict,
                         entry.key(),
-                        format!(
-                            "Fluent key {} has different translations:\n{:?}\nand\n{:?}",
-                            entry.key(),
-                            b,
-                            a
-                        ),
+                        kwargs_conflict_message(existing_key, &val),
                         existing_key,
                         &val,
                     ));
@@ -1285,5 +1280,82 @@ i18n.get("ok")
         assert!(cache.files.keys().all(|file| file.ends_with("app.py")));
 
         assert_eq!(run(&everything).keys.len(), 2);
+    }
+
+    #[test]
+    fn test_same_kwargs_in_a_different_order_across_files_is_one_key() {
+        let temp = TempDir::new().unwrap();
+        let code_dir = temp.path().join("py");
+        std::fs::create_dir_all(&code_dir).unwrap();
+        std::fs::write(code_dir.join("a.py"), r#"i18n.get("order", a=1, b=2)"#).unwrap();
+        std::fs::write(code_dir.join("b.py"), r#"i18n.get("order", b=2, a=1)"#).unwrap();
+        std::fs::write(code_dir.join("c.py"), r#"i18n.get("order", b=2, a=1)"#).unwrap();
+
+        // Files are reduced in parallel; the result must not depend on which one wins.
+        for _ in 0..5 {
+            let extracted = super::extract_code_with_diagnostics(
+                &code_dir,
+                I18N_ONLY.clone(),
+                FastHashSet::default(),
+                &FastHashSet::default(),
+                FastHashSet::default(),
+                FastHashSet::default(),
+                &PathBuf::from("_default.ftl"),
+            )
+            .unwrap();
+
+            assert!(
+                extracted.diagnostics.is_empty(),
+                "{:?}",
+                extracted.diagnostics
+            );
+            assert_eq!(extracted.keys.len(), 1);
+            assert_eq!(extracted.keys[0].key, "order");
+            assert_eq!(extracted.keys[0].kwargs, vec!["a", "b"]);
+        }
+    }
+
+    #[test]
+    fn test_cross_file_conflict_message_is_readable() {
+        let temp = TempDir::new().unwrap();
+        let code_dir = temp.path().join("py");
+        std::fs::create_dir_all(&code_dir).unwrap();
+        let a_py = code_dir.join("a.py");
+        let b_py = code_dir.join("b.py");
+        std::fs::write(&a_py, r#"i18n.get("order", a=1, b=2)"#).unwrap();
+        std::fs::write(&b_py, r#"i18n.get("order", a=1, c=3)"#).unwrap();
+
+        let extracted = super::extract_code_with_diagnostics(
+            &code_dir,
+            I18N_ONLY.clone(),
+            FastHashSet::default(),
+            &FastHashSet::default(),
+            FastHashSet::default(),
+            FastHashSet::default(),
+            &PathBuf::from("_default.ftl"),
+        )
+        .unwrap();
+
+        assert_eq!(extracted.diagnostics.len(), 1);
+        let diagnostic = &extracted.diagnostics[0];
+        assert_eq!(
+            diagnostic.kind,
+            ExtractionDiagnosticKind::KeyMessageConflict
+        );
+        assert_eq!(diagnostic.key.as_deref(), Some("order"));
+        assert_eq!(diagnostic.locations.len(), 2);
+
+        // Either file can be reduced first, so both orders are exact matches.
+        let a = format!("a, b ({}:1:1)", a_py.display());
+        let c = format!("a, c ({}:1:1)", b_py.display());
+        let expected = [
+            format!("Fluent key order is used with different keyword arguments: {a} and {c}"),
+            format!("Fluent key order is used with different keyword arguments: {c} and {a}"),
+        ];
+        assert!(
+            expected.contains(&diagnostic.message),
+            "unexpected message: {}",
+            diagnostic.message
+        );
     }
 }

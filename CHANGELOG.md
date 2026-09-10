@@ -33,9 +33,10 @@
 - `ftl check --check kwargs` follows `{ msg }` to the value of `msg` only and `{ msg.attr }` to that attribute only.
   It used to count the value plus every attribute of every referenced message, so `a = { b }` reported the variables
   of `b`'s attributes as missing for `a`.
-- Unchanged and still open: `ftl check` requires the variables used in the called message's own attributes,
-  `ftl extract` does not. Both keep their `0.12.0` behaviour, so the two commands can still disagree on such a
-  message.
+- `ftl check --check kwargs` no longer requires variables that appear only in the called message's own attributes:
+  `i18n.save()` renders only the value of `save`, so `$name` in `.tooltip` is never read by that call. A keyword
+  argument that matches only such a variable is reported as `unused in ftl`, exactly as for any other unused keyword
+  argument. `ftl extract` already worked this way, so `extract` and `check` now agree on every message.
 
 ## 0.12.0 — 2026-09-10
 

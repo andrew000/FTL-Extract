@@ -29,7 +29,6 @@
   instead of in call order, which was not even stable across runs because files are extracted in parallel. Existing
   messages are compared by their set of variables, so nothing already stored is rewritten. The extraction cache keeps
   its `v3` schema; entries written in call order by an older build are normalized when loaded.
-
 - `ftl extract`: a keyword argument in code that only matches a variable inside a referenced term
   (`-brand = Bot { $suffix }`, `about = About { -brand }`, `i18n.about(suffix=...)`) is now a kwargs mismatch, so the
   stored message is commented out and replaced, exactly as `0.12.0` already did for any other unused keyword argument

@@ -398,11 +398,11 @@ i18n.get("b", x=1, v=2)
 
     let result = check_kwargs(config(&temp, vec!["uk".to_string()])).unwrap();
 
-    // `a` needs only `x`; `b` needs its value's `v` plus its own attributes' `x` and `y`.
+    // `a` needs only `x`; `b` needs only its value's `v`, so the `x` passed to `b` is unused.
     assert_eq!(result.mismatches.len(), 1);
     assert_eq!(result.mismatches[0].key, "b");
-    assert_eq!(result.mismatches[0].missing_kwargs, vec!["y"]);
-    assert!(result.mismatches[0].unused_kwargs.is_empty());
+    assert!(result.mismatches[0].missing_kwargs.is_empty());
+    assert_eq!(result.mismatches[0].unused_kwargs, vec!["x"]);
 }
 
 #[test]
@@ -411,7 +411,7 @@ fn test_check_kwargs_message_reference_does_not_pull_attributes() {
     write(
         &temp.path().join("code/app.py"),
         r#"i18n.get("a")
-i18n.get("b", x=1)
+i18n.get("b")
 "#,
     );
     write(
@@ -425,7 +425,8 @@ i18n.get("b", x=1)
 }
 
 #[test]
-fn test_check_kwargs_own_attributes_are_still_required() {
+fn test_check_kwargs_own_attributes_are_not_required() {
+    // `i18n.get("b")` renders only the value of `b`, so `$x` in `.title` is never read.
     let temp = TempDir::new().unwrap();
     write(&temp.path().join("code/app.py"), r#"i18n.get("b")"#);
     write(
@@ -435,7 +436,22 @@ fn test_check_kwargs_own_attributes_are_still_required() {
 
     let result = check_kwargs(config(&temp, vec!["uk".to_string()])).unwrap();
 
+    assert!(result.mismatches.is_empty());
+}
+
+#[test]
+fn test_check_kwargs_kwarg_matching_only_an_own_attribute_is_unused() {
+    let temp = TempDir::new().unwrap();
+    write(&temp.path().join("code/app.py"), r#"i18n.get("b", x=1)"#);
+    write(
+        &temp.path().join("locales/uk/_default.ftl"),
+        "b = B\n    .title = Title { $x }\n",
+    );
+
+    let result = check_kwargs(config(&temp, vec!["uk".to_string()])).unwrap();
+
     assert_eq!(result.mismatches.len(), 1);
     assert_eq!(result.mismatches[0].key, "b");
-    assert_eq!(result.mismatches[0].missing_kwargs, vec!["x"]);
+    assert!(result.mismatches[0].missing_kwargs.is_empty());
+    assert_eq!(result.mismatches[0].unused_kwargs, vec!["x"]);
 }

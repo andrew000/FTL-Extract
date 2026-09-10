@@ -23,12 +23,13 @@ impl LocaleMessages {
         self.message_kwargs.get(key)
     }
 
-    /// The variables each message needs, with the shared rules of [`common::message_variables`].
-    /// The message's own attributes are counted as well; `ftl extract` does not count them.
-    /// Unknown references are left to the `references` check.
+    /// The variables each message needs, with the shared rules of [`common::message_variables`],
+    /// the same ones `ftl extract` uses. Unknown references are left to the `references` check.
     fn build_message_kwargs(&mut self) {
         let options = VariableOptions {
-            include_own_attributes: true,
+            // `i18n.key()` renders only the value of `key`, so a variable used only in one of
+            // its own attributes is never read by that call.
+            include_own_attributes: false,
         };
         for (key, message) in &self.messages {
             let collected = message_variables(self, message, options);

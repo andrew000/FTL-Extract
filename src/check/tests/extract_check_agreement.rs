@@ -74,8 +74,6 @@ const AGREED: &[Fixture] = &[
         ftl: "-brand = { subtitle }\nsubtitle = Brand { $case }\nwrapper = { subtitle }\ntitle = { -brand(case: \"genitive\") } { wrapper }\n",
     },
     Fixture {
-        // `b`'s value uses `$x` too, so the own-attribute question (see the last test) does not
-        // interfere.
         name: "attribute reference",
         code: "i18n.a(x=1)\ni18n.b(x=1)\n",
         ftl: "b = B { $x }\n    .title = Title { $x }\na = See { b.title }\n",
@@ -86,11 +84,21 @@ const AGREED: &[Fixture] = &[
         ftl: "b = B\n    .title = Title { $x }\na = See { b.title }\n",
     },
     Fixture {
-        // `a` needs nothing although `b.title` uses `$x`; `b` is not called from code so the
-        // own-attribute question stays out of the way.
+        // `a` needs nothing although `b.title` uses `$x`.
         name: "message reference ignores the referenced message's attributes",
         code: "i18n.a()\n",
         ftl: "b = B\n    .title = Title { $x }\na = See { b }\n",
+    },
+    Fixture {
+        // `i18n.b()` renders only the value of `b`, so `$x` in its own attribute is not needed.
+        name: "own attribute variable is not required",
+        code: "i18n.b()\n",
+        ftl: "b = B\n    .title = Title { $x }\n",
+    },
+    Fixture {
+        name: "own attribute variable next to the same variable in the value",
+        code: "i18n.b(x=1)\n",
+        ftl: "b = B { $x }\n    .title = Title { $x }\n",
     },
     Fixture {
         name: "message chain",
@@ -184,49 +192,65 @@ fn extract_leaves_every_message_alone_when_check_is_clean() {
     }
 }
 
-#[test]
-fn extract_and_check_both_flag_a_real_mismatch() {
-    // Control: the agreement is not vacuous.
-    let fixture = Fixture {
-        name: "missing variable",
-        code: "i18n.items()\n",
-        ftl: "items = You have { NUMBER($count) } items\n",
-    };
-    let temp = write_fixture(&fixture);
-
-    let result = check_kwargs(check_config(&temp)).unwrap();
-    assert_eq!(result.mismatches.len(), 1);
-    assert_eq!(result.mismatches[0].missing_kwargs, vec!["count"]);
-
-    let stats = extract(extract_config(&temp)).unwrap();
-    assert_eq!(stats.ftl_keys_commented["en"], 1);
-    assert_eq!(
-        fs::read_to_string(temp.path().join("locales/en/_default.ftl")).unwrap(),
-        "# items = You have { NUMBER($count) } items\n\nitems = items\n"
-    );
+struct Mismatch {
+    fixture: Fixture,
+    missing: &'static [&'static str],
+    unused: &'static [&'static str],
+    /// The file after `extract`: the original entry commented out, then the placeholder.
+    rewritten: &'static str,
 }
 
-/// Known, deliberate divergence: `check` requires the variables of a message's own attributes
-/// while `extract` does not, because formatting a message renders only its value. With the
-/// variable passed from code, `check` is clean but `extract` rewrites the message. Whether own
-/// attributes should count is an open question for the maintainer; this test documents the
-/// current state and must be updated together with that decision.
 #[test]
-fn own_attribute_variables_are_the_one_remaining_disagreement() {
-    let fixture = Fixture {
-        name: "own attribute",
-        code: "i18n.b(x=1)\n",
-        ftl: "b = B\n    .title = Title { $x }\n",
-    };
-    let temp = write_fixture(&fixture);
+fn extract_and_check_both_flag_a_real_mismatch() {
+    // Control: the agreement is not vacuous. Both commands flag a missing variable, and both
+    // flag a keyword argument that matches only a variable in the called message's own
+    // attribute (the value is what `i18n.b(x=1)` renders, and it does not use `$x`).
+    let cases = [
+        Mismatch {
+            fixture: Fixture {
+                name: "missing variable",
+                code: "i18n.items()\n",
+                ftl: "items = You have { NUMBER($count) } items\n",
+            },
+            missing: &["count"],
+            unused: &[],
+            rewritten: "# items = You have { NUMBER($count) } items\n\nitems = items\n",
+        },
+        Mismatch {
+            fixture: Fixture {
+                name: "kwarg matching only an own attribute",
+                code: "i18n.b(x=1)\n",
+                ftl: "b = B\n    .title = Title { $x }\n",
+            },
+            missing: &[],
+            unused: &["x"],
+            rewritten: "# b = B\n#     .title = Title { $x }\n\nb = b{ $x }\n",
+        },
+    ];
 
-    let result = check_kwargs(check_config(&temp)).unwrap();
-    assert!(result.mismatches.is_empty());
+    for case in cases {
+        let temp = write_fixture(&case.fixture);
 
-    let stats = extract(extract_config(&temp)).unwrap();
-    assert_eq!(stats.ftl_keys_commented["en"], 1);
-    assert_ne!(
-        fs::read_to_string(temp.path().join("locales/en/_default.ftl")).unwrap(),
-        fixture.ftl
-    );
+        let result = check_kwargs(check_config(&temp)).unwrap();
+        assert_eq!(result.mismatches.len(), 1, "[{}]", case.fixture.name);
+        assert_eq!(
+            result.mismatches[0].missing_kwargs, case.missing,
+            "[{}]",
+            case.fixture.name
+        );
+        assert_eq!(
+            result.mismatches[0].unused_kwargs, case.unused,
+            "[{}]",
+            case.fixture.name
+        );
+
+        let stats = extract(extract_config(&temp)).unwrap();
+        assert_eq!(stats.ftl_keys_commented["en"], 1, "[{}]", case.fixture.name);
+        assert_eq!(
+            fs::read_to_string(temp.path().join("locales/en/_default.ftl")).unwrap(),
+            case.rewritten,
+            "[{}]",
+            case.fixture.name
+        );
+    }
 }

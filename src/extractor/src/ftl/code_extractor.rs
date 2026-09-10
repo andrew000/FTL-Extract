@@ -8,7 +8,6 @@ use crate::ftl::diagnostics::{
 use crate::ftl::matcher::{FluentEntry, FluentKey, I18nMatcher};
 use crate::ftl::utils::{ExtractionStatistics, FastHashMap, FastHashSet};
 use anyhow::Result;
-use fluent::types::AnyEq;
 use ignore::overrides::{Override, OverrideBuilder};
 use ignore::types::TypesBuilder;
 use ignore::{WalkBuilder, WalkState};
@@ -369,7 +368,7 @@ fn merge_fluent_key_collecting(
             }
 
             match (existing_key.entry.as_ref(), val.entry.as_ref()) {
-                (FluentEntry::Message(a), FluentEntry::Message(b)) if !a.clone().equals(b) => {
+                (FluentEntry::Message(a), FluentEntry::Message(b)) if a != b => {
                     diagnostics.push(conflict_diagnostic(
                         ExtractionDiagnosticKind::KeyMessageConflict,
                         entry.key(),

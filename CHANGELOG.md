@@ -54,6 +54,9 @@ Behaviour changes new in `0.12.0`:
   of panicking.
 - `ftl extract` no longer panics on the same key with two different `_path=` values, on a dangling message or term
   reference, or on reference cycles (`a = { b }`, `b = { a }`).
+- `ftl extract` no longer panics on i18n calls without a positional string key, such as `i18n.get(*args)`,
+  `i18n.get(**kwargs)`, `i18n.get(key="x")` or `L(name="x")`, nor on a prefixed direct call like
+  `self.i18n("key")`, which is now extracted like `i18n("key")`.
 - Changing `--exclude-dirs` now invalidates the extraction cache.
 - `ftl check` with only warnings no longer reports `FTL check failed`.
 

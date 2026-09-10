@@ -954,6 +954,52 @@ i18n.get("hello", _path="two.ftl")
     }
 
     #[test]
+    fn test_parse_file_skips_calls_without_a_positional_string_key() {
+        // Every line before `i18n.get("ok")` used to panic on `find_positional(0).unwrap()`
+        // (`*args`, `**kwargs` and keyword-only calls are not "empty" arguments) or on
+        // `attrs.last().unwrap()` (`self.i18n("...")` with `self` as a prefix leaves no
+        // attributes). None of them is a key, except the direct prefixed call, which is
+        // extracted like `i18n("...")`.
+        let temp = TempDir::new().unwrap();
+        let file = temp.path().join("wrappers.py");
+        std::fs::write(
+            &file,
+            r#"
+i18n.get(*args)
+i18n.get(**kwargs)
+i18n.get(key="x")
+L(name="x")
+L(*args)
+L(**kwargs)
+self.i18n(*args)
+self.i18n(key="x")
+self.i18n("self-call")
+i18n("direct")
+i18n.get("ok")
+"#,
+        )
+        .unwrap();
+
+        let i18n_keys = FastHashSet::from_iter(["i18n".to_string(), "L".to_string()]);
+        let prefixes = FastHashSet::from_iter(["self".to_string()]);
+        let options = ParseOptions {
+            i18n_keys: &i18n_keys,
+            i18n_keys_prefix: &prefixes,
+            ignore_attributes: &EMPTY,
+            ignore_kwargs: &EMPTY,
+            default_ftl_file: &DEFAULT_FTL,
+        };
+
+        let (keys, diagnostics) =
+            super::parse_file(&file, std::fs::metadata(&file).unwrap().len(), options);
+
+        assert!(diagnostics.is_empty(), "{diagnostics:?}");
+        let mut found: Vec<&str> = keys.keys().map(String::as_str).collect();
+        found.sort_unstable();
+        assert_eq!(found, ["direct", "ok", "self-call"]);
+    }
+
+    #[test]
     fn test_parse_file_reports_invalid_utf8() {
         let temp = TempDir::new().unwrap();
         let invalid_utf8 = temp.path().join("invalid_utf8.py");

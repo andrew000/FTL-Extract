@@ -10,7 +10,7 @@ use std::sync::Arc;
 use std::time::UNIX_EPOCH;
 
 // Bump whenever `CacheOptions` or the cached key layout changes; older files are then ignored.
-pub(super) const CACHE_SCHEMA_VERSION: u32 = 3;
+pub(super) const CACHE_SCHEMA_VERSION: u32 = 4;
 
 #[derive(Clone, Debug, PartialEq, Eq, Encode, Decode)]
 pub(super) struct CacheOptions {
@@ -44,6 +44,9 @@ struct CachedFluentKey {
     kwargs: Vec<String>,
     source_line: Option<usize>,
     source_column: Option<usize>,
+    /// Line and column (in `code_path`) of the first call that passed `**kwargs`.
+    kwargs_unknown_line: Option<usize>,
+    kwargs_unknown_column: Option<usize>,
 }
 
 pub(super) enum CacheUpdate {
@@ -175,20 +178,27 @@ fn cached_key_to_fluent_key(cached: CachedFluentKey) -> FluentKey {
             column,
         });
     }
+    if let (Some(line), Some(column)) = (cached.kwargs_unknown_line, cached.kwargs_unknown_column) {
+        fluent_key.kwargs_unknown = Some(CodeLocation {
+            path: fluent_key.code_path.as_ref().clone(),
+            line,
+            column,
+        });
+    }
 
     fluent_key
 }
 
 fn fluent_key_to_cached_key(fluent_key: FluentKey) -> CachedFluentKey {
     let kwargs = kwargs_from_key(&fluent_key);
-    let source_line = fluent_key
-        .source_location
-        .as_ref()
-        .map(|location| location.line);
-    let source_column = fluent_key
-        .source_location
-        .as_ref()
-        .map(|location| location.column);
+    let line_column = |location: &Option<CodeLocation>| {
+        (
+            location.as_ref().map(|location| location.line),
+            location.as_ref().map(|location| location.column),
+        )
+    };
+    let (source_line, source_column) = line_column(&fluent_key.source_location);
+    let (kwargs_unknown_line, kwargs_unknown_column) = line_column(&fluent_key.kwargs_unknown);
 
     CachedFluentKey {
         key: fluent_key.key,
@@ -197,6 +207,8 @@ fn fluent_key_to_cached_key(fluent_key: FluentKey) -> CachedFluentKey {
         kwargs,
         source_line,
         source_column,
+        kwargs_unknown_line,
+        kwargs_unknown_column,
     }
 }
 
@@ -302,12 +314,12 @@ mod tests {
         assert_eq!(
             cache_file_path(None),
             PathBuf::from(".ftl-extract-cache")
-                .join(format!("extract-{}-v3.bin", env!("CARGO_PKG_VERSION")))
+                .join(format!("extract-{}-v4.bin", env!("CARGO_PKG_VERSION")))
         );
         assert_eq!(
             cache_file_path(Some(Path::new("cache-dir"))),
             PathBuf::from("cache-dir")
-                .join(format!("extract-{}-v3.bin", env!("CARGO_PKG_VERSION")))
+                .join(format!("extract-{}-v4.bin", env!("CARGO_PKG_VERSION")))
         );
         assert_eq!(
             cache_file_path(Some(Path::new("custom.bin"))),
@@ -428,6 +440,8 @@ mod tests {
             kwargs: vec!["b".to_string(), "a".to_string()],
             source_line: Some(1),
             source_column: Some(1),
+            kwargs_unknown_line: None,
+            kwargs_unknown_column: None,
         };
 
         let loaded = cached_key_to_fluent_key(cached);
@@ -440,5 +454,30 @@ mod tests {
                 vec!["a".to_string(), "b".to_string()]
             ))
         );
+    }
+
+    #[test]
+    fn test_kwargs_unknown_survives_a_cache_round_trip() {
+        let mut key = fluent_key();
+        key.kwargs_unknown = Some(CodeLocation {
+            path: key.code_path.as_ref().clone(),
+            line: 7,
+            column: 5,
+        });
+        let expected = key.kwargs_unknown.clone();
+        let mut keys = FastHashMap::default();
+        keys.insert(key.key.clone(), key);
+
+        let cached_file = keys_to_cached_file(1, 2, &keys);
+        let loaded = cached_file_to_keys(&cached_file);
+
+        assert_eq!(loaded["hello"].kwargs_unknown, expected);
+
+        let plain = keys_to_cached_file(
+            1,
+            2,
+            &FastHashMap::from_iter([("k".to_string(), fluent_key())]),
+        );
+        assert_eq!(cached_file_to_keys(&plain)["hello"].kwargs_unknown, None);
     }
 }

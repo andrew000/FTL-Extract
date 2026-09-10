@@ -30,6 +30,10 @@ pub struct FluentKey {
     pub position: usize,
     pub depends_on_keys: FastHashSet<String>,
     pub source_location: Option<CodeLocation>,
+    /// For a key found in code: the first call site that passed `**kwargs`, if any. Such a
+    /// call can pass any variable, so the key's variables cannot be verified against the
+    /// stored message; `extract` and `check` skip the comparison for it.
+    pub kwargs_unknown: Option<CodeLocation>,
 }
 
 impl FluentKey {
@@ -51,6 +55,15 @@ impl FluentKey {
             position: position.unwrap_or(usize::MAX),
             depends_on_keys,
             source_location: None,
+            kwargs_unknown: None,
+        }
+    }
+
+    /// Records that `other`, another occurrence of the same key, passed `**kwargs`. The first
+    /// such call site is kept.
+    pub(crate) fn absorb_kwargs_unknown(&mut self, other: &FluentKey) {
+        if self.kwargs_unknown.is_none() {
+            self.kwargs_unknown = other.kwargs_unknown.clone();
         }
     }
 }
@@ -282,9 +295,12 @@ impl<'a> I18nMatcher<'a> {
     fn create_fluent_key(&self, expr: &ruff_python_ast::ExprCall, key: String) -> FluentKey {
         let mut path = self.default_ftl_file.clone();
         let mut kwargs: Vec<String> = Vec::new();
+        let mut kwargs_unknown = None;
 
         for kw in &expr.arguments.keywords {
             let Some(arg) = kw.arg.as_ref() else {
+                // `**something`: any variable may be passed, so the set is unknowable.
+                kwargs_unknown.get_or_insert_with(|| self.code_location(expr));
                 continue;
             };
 
@@ -315,6 +331,7 @@ impl<'a> I18nMatcher<'a> {
             FastHashSet::default(),
         );
         fluent_key.source_location = Some(self.code_location(expr));
+        fluent_key.kwargs_unknown = kwargs_unknown;
 
         fluent_key
     }
@@ -358,11 +375,15 @@ impl<'a> I18nMatcher<'a> {
     fn add_fluent_key(&mut self, expr: &ruff_python_ast::ExprCall, key: String) {
         let new_fluent_key = self.create_fluent_key(expr, key);
 
-        let Some(existing) = self.fluent_keys.get(&new_fluent_key.key).cloned() else {
+        let Some(existing) = self.fluent_keys.get_mut(&new_fluent_key.key) else {
             self.fluent_keys
                 .insert(new_fluent_key.key.clone(), new_fluent_key);
             return;
         };
+        // The kept occurrence carries the `**kwargs` marker of every occurrence; explicit
+        // keyword arguments are still compared below, independently of it.
+        existing.absorb_kwargs_unknown(&new_fluent_key);
+        let existing = existing.clone();
 
         if existing.path != new_fluent_key.path {
             let message = format!(
@@ -512,5 +533,68 @@ mod tests {
             diagnostics[0].kind,
             ExtractionDiagnosticKind::KeyPathConflict
         );
+    }
+
+    fn location(line: usize, column: usize) -> crate::ftl::diagnostics::CodeLocation {
+        crate::ftl::diagnostics::CodeLocation {
+            path: PathBuf::from("app.py"),
+            line,
+            column,
+        }
+    }
+
+    #[test]
+    fn test_double_star_kwargs_mark_the_key_as_unverifiable() {
+        let (keys, diagnostics) = run("i18n.get(\"welcome\", **data)\n");
+
+        assert!(diagnostics.is_empty(), "{diagnostics:?}");
+        assert_eq!(keys.len(), 1);
+        assert!(kwargs_from_key(&keys["welcome"]).is_empty());
+        assert_eq!(keys["welcome"].kwargs_unknown, Some(location(1, 1)));
+    }
+
+    #[test]
+    fn test_explicit_kwargs_next_to_double_star_are_kept() {
+        let (keys, _) = run("i18n.get(\"k\", a=1, **data)\n");
+
+        assert_eq!(kwargs_from_key(&keys["k"]), vec!["a"]);
+        assert_eq!(keys["k"].kwargs_unknown, Some(location(1, 1)));
+    }
+
+    #[test]
+    fn test_unverifiable_marker_is_carried_by_the_kept_occurrence() {
+        // The first call is kept as the key; the marker comes from the second call.
+        let (keys, diagnostics) = run("i18n.get(\"k\", a=1)\ni18n.get(\"k\", a=1, **data)\n");
+
+        assert!(diagnostics.is_empty(), "{diagnostics:?}");
+        assert_eq!(keys["k"].source_location, Some(location(1, 1)));
+        assert_eq!(keys["k"].kwargs_unknown, Some(location(2, 1)));
+    }
+
+    #[test]
+    fn test_explicit_conflicts_are_still_reported_next_to_double_star() {
+        let (keys, diagnostics) = run(
+            "i18n.get(\"k\", a=1, b=2)\ni18n.get(\"k\", a=1, b=2, **data)\ni18n.get(\"k\", a=1, c=3)\n",
+        );
+
+        assert_eq!(diagnostics.len(), 1);
+        assert_eq!(
+            diagnostics[0].kind,
+            ExtractionDiagnosticKind::KeyMessageConflict
+        );
+        assert_eq!(
+            diagnostics[0].message,
+            "Fluent key k is used with different keyword arguments: a, b (app.py:1:1) and a, c (app.py:3:1)"
+        );
+        assert_eq!(keys["k"].kwargs_unknown, Some(location(2, 1)));
+    }
+
+    #[test]
+    fn test_calls_without_a_key_are_still_skipped() {
+        let (keys, diagnostics) = run("i18n.get(*args)\ni18n.get(**kw)\ni18n.get(\"k\", *rest)\n");
+
+        assert!(diagnostics.is_empty(), "{diagnostics:?}");
+        assert_eq!(keys.len(), 1);
+        assert_eq!(keys["k"].kwargs_unknown, None);
     }
 }

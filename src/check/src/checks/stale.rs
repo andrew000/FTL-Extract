@@ -404,4 +404,24 @@ i18n.get("hello", _path="two.ftl")
             .collect::<Vec<_>>();
         assert_eq!(keys, vec!["unused"]);
     }
+
+    #[test]
+    fn test_double_star_kwargs_do_not_affect_the_stale_check() {
+        // `welcome` is called with `**data`: it still counts as used, and `unused` is still
+        // reported.
+        let temp = TempDir::new().unwrap();
+        write(
+            &temp.path().join("code/app.py"),
+            r#"i18n.get("welcome", **data)"#,
+        );
+        write(
+            &temp.path().join("locales/uk/_default.ftl"),
+            "welcome = Welcome, { $name }!\nunused = Unused\n",
+        );
+
+        let result = check_stale(config(&temp, vec!["uk".to_string()])).unwrap();
+
+        assert_eq!(result.stale_keys.len(), 1);
+        assert_eq!(result.stale_keys[0].key, "unused");
+    }
 }

@@ -86,6 +86,9 @@ pub struct ExtractedFluentKey {
     pub ftl_path: PathBuf,
     pub code_location: Option<CodeLocation>,
     pub kwargs: Vec<String>,
+    /// The first call site that passed `**kwargs`, if any. The key's variables cannot be
+    /// verified then, and the `kwargs` check skips it.
+    pub kwargs_unknown: Option<CodeLocation>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]

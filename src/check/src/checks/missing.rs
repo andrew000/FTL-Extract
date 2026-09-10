@@ -179,4 +179,25 @@ i18n.get("hello", _path="two.ftl")
         assert_eq!(result.extraction_errors[0].key.as_deref(), Some("hello"));
         assert_eq!(result.extraction_errors[0].locations.len(), 2);
     }
+
+    #[test]
+    fn test_double_star_kwargs_do_not_affect_the_missing_check() {
+        // `welcome` is called with `**data` and exists; `absent` is still reported.
+        let temp = TempDir::new().unwrap();
+        write(
+            &temp.path().join("code/app.py"),
+            r#"i18n.get("welcome", **data)
+i18n.get("absent", **data)
+"#,
+        );
+        write(
+            &temp.path().join("locales/uk/_default.ftl"),
+            "welcome = Welcome, { $name }!\n",
+        );
+
+        let result = check_missing(config(&temp, vec!["uk".to_string()])).unwrap();
+
+        assert_eq!(result.missing_keys.len(), 1);
+        assert_eq!(result.missing_keys[0].key, "absent");
+    }
 }

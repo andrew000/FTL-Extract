@@ -157,7 +157,9 @@ title = Welcome to { -brand(case: 1) }
 }
 
 #[test]
-fn test_check_kwargs_term_without_argument_requires_term_variable() {
+fn test_check_kwargs_term_without_argument_does_not_require_term_variable() {
+    // `$case` is the term's parameter. Unbound, it falls back to the default variant; the
+    // caller's kwargs are never consulted, so nothing is required from code.
     let temp = TempDir::new().unwrap();
     write(&temp.path().join("code/app.py"), r#"i18n.get("title")"#);
     write(
@@ -173,10 +175,7 @@ title = Welcome to { -brand }
 
     let result = check_kwargs(config(&temp, vec!["uk".to_string()])).unwrap();
 
-    assert_eq!(result.mismatches.len(), 1);
-    assert_eq!(result.mismatches[0].key, "title");
-    assert_eq!(result.mismatches[0].missing_kwargs, vec!["case"]);
-    assert!(result.mismatches[0].unused_kwargs.is_empty());
+    assert!(result.mismatches.is_empty());
 }
 
 #[test]
@@ -331,4 +330,112 @@ i18n.get("hello", _path="two.ftl")
 
     assert_eq!(result.extraction_errors.len(), 1);
     assert_eq!(result.extraction_errors[0].key.as_deref(), Some("hello"));
+}
+
+#[test]
+fn test_check_kwargs_unbound_term_variable_is_not_required_from_code() {
+    // Variables inside a term resolve against the term's call arguments only; the caller's
+    // kwargs are never consulted, so an unbound `$suffix` is a term problem, not a code one.
+    let temp = TempDir::new().unwrap();
+    write(&temp.path().join("code/app.py"), r#"i18n.get("about")"#);
+    write(
+        &temp.path().join("locales/uk/_default.ftl"),
+        "-brand = Bot { $suffix }\nabout = About { -brand(case: \"gen\") }\n",
+    );
+
+    let result = check_kwargs(config(&temp, vec!["uk".to_string()])).unwrap();
+
+    assert!(result.mismatches.is_empty());
+}
+
+#[test]
+fn test_check_kwargs_kwarg_matching_a_term_variable_is_unused() {
+    let temp = TempDir::new().unwrap();
+    write(
+        &temp.path().join("code/app.py"),
+        r#"i18n.get("about", suffix="x")"#,
+    );
+    write(
+        &temp.path().join("locales/uk/_default.ftl"),
+        "-brand = Bot { $suffix }\nabout = About { -brand }\n",
+    );
+
+    let result = check_kwargs(config(&temp, vec!["uk".to_string()])).unwrap();
+
+    assert_eq!(result.mismatches.len(), 1);
+    assert!(result.mismatches[0].missing_kwargs.is_empty());
+    assert_eq!(result.mismatches[0].unused_kwargs, vec!["suffix"]);
+}
+
+#[test]
+fn test_check_kwargs_function_positional_argument_requires_kwarg() {
+    let temp = TempDir::new().unwrap();
+    write(&temp.path().join("code/app.py"), r#"i18n.get("items")"#);
+    write(
+        &temp.path().join("locales/uk/_default.ftl"),
+        "items =\n    { NUMBER($count) ->\n        [one] One item\n       *[other] Many items\n    }\n",
+    );
+
+    let result = check_kwargs(config(&temp, vec!["uk".to_string()])).unwrap();
+
+    assert_eq!(result.mismatches.len(), 1);
+    assert_eq!(result.mismatches[0].missing_kwargs, vec!["count"]);
+}
+
+#[test]
+fn test_check_kwargs_attribute_reference_follows_only_that_attribute() {
+    let temp = TempDir::new().unwrap();
+    write(
+        &temp.path().join("code/app.py"),
+        r#"i18n.get("a", x=1)
+i18n.get("b", x=1, v=2)
+"#,
+    );
+    write(
+        &temp.path().join("locales/uk/_default.ftl"),
+        "b = B { $v }\n    .title = Title { $x }\n    .other = { $y }\na = See { b.title }\n",
+    );
+
+    let result = check_kwargs(config(&temp, vec!["uk".to_string()])).unwrap();
+
+    // `a` needs only `x`; `b` needs its value's `v` plus its own attributes' `x` and `y`.
+    assert_eq!(result.mismatches.len(), 1);
+    assert_eq!(result.mismatches[0].key, "b");
+    assert_eq!(result.mismatches[0].missing_kwargs, vec!["y"]);
+    assert!(result.mismatches[0].unused_kwargs.is_empty());
+}
+
+#[test]
+fn test_check_kwargs_message_reference_does_not_pull_attributes() {
+    let temp = TempDir::new().unwrap();
+    write(
+        &temp.path().join("code/app.py"),
+        r#"i18n.get("a")
+i18n.get("b", x=1)
+"#,
+    );
+    write(
+        &temp.path().join("locales/uk/_default.ftl"),
+        "b = B\n    .title = Title { $x }\na = See { b }\n",
+    );
+
+    let result = check_kwargs(config(&temp, vec!["uk".to_string()])).unwrap();
+
+    assert!(result.mismatches.is_empty());
+}
+
+#[test]
+fn test_check_kwargs_own_attributes_are_still_required() {
+    let temp = TempDir::new().unwrap();
+    write(&temp.path().join("code/app.py"), r#"i18n.get("b")"#);
+    write(
+        &temp.path().join("locales/uk/_default.ftl"),
+        "b = B\n    .title = Title { $x }\n",
+    );
+
+    let result = check_kwargs(config(&temp, vec!["uk".to_string()])).unwrap();
+
+    assert_eq!(result.mismatches.len(), 1);
+    assert_eq!(result.mismatches[0].key, "b");
+    assert_eq!(result.mismatches[0].missing_kwargs, vec!["x"]);
 }

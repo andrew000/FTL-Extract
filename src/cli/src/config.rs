@@ -40,6 +40,8 @@ pub struct ExtractPyprojectConfig {
     pub ignore_attributes: Option<Vec<String>>,
     pub ignore_attributes_append: Option<Vec<String>>,
     pub ignore_kwargs: Option<Vec<String>>,
+    /// Deprecated since 0.12.1 and ignored: a locale file with syntax errors aborts the run.
+    /// Still parsed so existing configs keep working; removed in 0.13.
     pub comment_junks: Option<bool>,
     pub default_ftl_file: Option<PathBuf>,
     pub comment_keys_mode: Option<String>,
@@ -143,7 +145,6 @@ i18n-keys-append = ["LF", "LazyProxy"]
 ignore-attributes-append = ["core"]
 exclude-dirs-append = ["./tests/*"]
 ignore-kwargs = ["when"]
-comment-junks = true
 comment-keys-mode = "comment"
 line-endings = "lf"
 cache = true

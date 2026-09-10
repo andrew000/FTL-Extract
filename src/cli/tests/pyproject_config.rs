@@ -1205,3 +1205,100 @@ fn check_json_reports_kwargs_conflict_with_both_call_sites() {
     assert_eq!(extraction["code_location"]["line"], 1);
     assert_eq!(extraction["code_location"]["column"], 1);
 }
+
+#[test]
+fn extract_rejects_the_removed_comment_junks_flag() {
+    let temp = TempDir::new().unwrap();
+    write(&temp.path().join("code/app.py"), r#"i18n.get("hello")"#);
+
+    let output = ftl()
+        .arg("extract")
+        .arg(temp.path().join("code"))
+        .arg(temp.path().join("locales"))
+        .arg("--comment-junks")
+        .output()
+        .unwrap();
+
+    assert_eq!(output.status.code(), Some(2));
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("unexpected argument '--comment-junks'"),
+        "{stderr}"
+    );
+    assert!(!temp.path().join("locales").exists());
+}
+
+#[test]
+fn extract_warns_about_the_deprecated_comment_junks_config_key() {
+    let temp = TempDir::new().unwrap();
+    write(&temp.path().join("code/app.py"), r#"i18n.get("hello")"#);
+    write(
+        &pyproject(&temp),
+        r#"
+[tool.ftl-extract.extract]
+code-path = "code"
+locales-path = "locales"
+languages = ["en"]
+comment-junks = true
+"#,
+    );
+
+    let output = ftl()
+        .arg("--config")
+        .arg(pyproject(&temp))
+        .arg("extract")
+        .output()
+        .unwrap();
+
+    assert_success(&output);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains(
+            "comment-junks has no effect and will be removed in 0.13: syntax errors in .ftl files abort the run"
+        ),
+        "{stderr}"
+    );
+    assert!(
+        temp.path()
+            .join("locales")
+            .join("en")
+            .join("_default.ftl")
+            .exists()
+    );
+}
+
+#[test]
+fn extract_reports_ftl_syntax_errors_with_file_and_position() {
+    let temp = TempDir::new().unwrap();
+    write(&temp.path().join("code/app.py"), r#"i18n.get("hello")"#);
+    write(
+        &temp.path().join("locales/en/_default.ftl"),
+        "hello = Hello\n\nbroken = {\n    Text\n",
+    );
+
+    let output = ftl()
+        .arg("extract")
+        .arg(temp.path().join("code"))
+        .arg(temp.path().join("locales"))
+        .arg("-l")
+        .arg("en")
+        .output()
+        .unwrap();
+
+    assert_eq!(output.status.code(), Some(1));
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    let expected = format!(
+        "Failed to parse FTL file {}:5:1: Expected a token starting with \"}}\"",
+        temp.path()
+            .join("locales")
+            .join("en")
+            .join("_default.ftl")
+            .display()
+    );
+    assert!(stderr.contains(&expected), "{stderr}");
+    assert_eq!(
+        std::fs::read_to_string(temp.path().join("locales/en/_default.ftl")).unwrap(),
+        "hello = Hello\n\nbroken = {\n    Text\n",
+        "the broken file must be left untouched"
+    );
+}

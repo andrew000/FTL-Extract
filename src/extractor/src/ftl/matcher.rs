@@ -17,7 +17,6 @@ pub enum FluentEntry {
     Comment(fluent_syntax::ast::Comment<String>),
     GroupComment(fluent_syntax::ast::Comment<String>),
     ResourceComment(fluent_syntax::ast::Comment<String>),
-    Junk(String),
 }
 
 #[derive(Clone, Debug)]

@@ -155,7 +155,6 @@ fn extract_config(temp: &TempDir) -> ExtractConfig {
         ignore_attributes: DEFAULT_IGNORE_ATTRIBUTES.clone(),
         ignore_kwargs: DEFAULT_IGNORE_KWARGS.clone(),
         default_ftl_file: PathBuf::from(DEFAULT_FTL_FILENAME),
-        comment_junks: false,
         comment_keys_mode: CommentsKeyModes::Comment,
         line_endings: LineEndings::LF,
         dry_run: false,

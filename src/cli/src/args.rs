@@ -69,10 +69,6 @@ pub(crate) enum Commands {
         #[arg(long)]
         ignore_kwargs: Vec<String>,
 
-        /// Comment Junk elements
-        #[arg(long, default_value_t = false)]
-        comment_junks: bool,
-
         /// Default FTL filename
         #[arg(long)]
         default_ftl_file: Option<PathBuf>,

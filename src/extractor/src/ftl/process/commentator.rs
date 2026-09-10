@@ -7,8 +7,8 @@ use std::sync::Arc;
 /// stripping the `# ` prefix from the written comment gives the entry back unchanged.
 ///
 /// Messages and terms are serialized with exactly one trailing newline, which `str::lines`
-/// does not turn into an empty item. Junk is written verbatim and can end with blank lines;
-/// those are dropped, because an empty comment line would be written as a bare `#`.
+/// does not turn into an empty item. Trailing blank lines are dropped all the same, because an
+/// empty comment line would be written as a bare `#`.
 fn split_content(raw_entry: &str) -> Vec<String> {
     let mut content: Vec<String> = raw_entry.lines().map(str::to_string).collect();
     while content.last().is_some_and(|line| line.trim().is_empty()) {
@@ -31,9 +31,6 @@ pub(crate) fn comment_ftl_key(key: &mut FluentKey) {
         }
         FluentEntry::Term(term) => {
             ser.serialize_term(term);
-        }
-        FluentEntry::Junk(junk) => {
-            ser.serialize_junk(junk);
         }
         FluentEntry::Comment(_)
         | FluentEntry::GroupComment(_)
@@ -82,7 +79,6 @@ mod tests {
             Entry::Message(message) => FluentEntry::Message(message),
             Entry::Term(term) => FluentEntry::Term(term),
             Entry::Comment(comment) => FluentEntry::Comment(comment),
-            Entry::Junk { content } => FluentEntry::Junk(content),
             other => panic!("unexpected entry {other:?}"),
         };
         key(entry)
@@ -220,41 +216,7 @@ mod tests {
     }
 
     #[test]
-    fn test_junk_drops_trailing_blank_lines_only() {
-        let mut junk = key(FluentEntry::Junk("bad = {\nstill bad\n\n\n".to_string()));
-        super::comment_ftl_key(&mut junk);
-        assert_eq!(
-            junk.entry.as_ref(),
-            &FluentEntry::Comment(fluent_syntax::ast::Comment {
-                content: vec!["bad = {".to_string(), "still bad".to_string()],
-            })
-        );
-
-        let mut junk = key(FluentEntry::Junk("bad = {".to_string()));
-        super::comment_ftl_key(&mut junk);
-        assert_eq!(
-            junk.entry.as_ref(),
-            &FluentEntry::Comment(fluent_syntax::ast::Comment {
-                content: vec!["bad = {".to_string()],
-            })
-        );
-
-        let mut junk = key(FluentEntry::Junk("a\n\nb\n".to_string()));
-        super::comment_ftl_key(&mut junk);
-        assert_eq!(
-            junk.entry.as_ref(),
-            &FluentEntry::Comment(fluent_syntax::ast::Comment {
-                content: vec!["a".to_string(), String::new(), "b".to_string()],
-            })
-        );
-    }
-
-    #[test]
     fn test_written_comment_has_no_bare_hash_lines() {
-        let mut junk = key(FluentEntry::Junk("bad = {\n\n".to_string()));
-        super::comment_ftl_key(&mut junk);
-        assert_eq!(generate_ftl(vec![junk]), "# bad = {\n\n");
-
         let key = {
             let mut key = key_from_source("old-rules =\n    Rule one.\n    Rule two.\n");
             super::comment_ftl_key(&mut key);

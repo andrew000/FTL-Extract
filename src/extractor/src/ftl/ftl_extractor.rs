@@ -181,11 +181,14 @@ fn process_language(
     }
 
     // Compare Key Kwargs
-    let stored_fluent_keys_ref = stored_fluent_keys.clone();
     let mut depend_keys: FastHashSet<String> = FastHashSet::default();
 
+    // Mismatches are collected first and removed afterwards, so the stored map stays
+    // borrowed for reference resolution instead of being copied before the loop.
+    let mut kwargs_mismatches: Vec<(&String, &FluentKey)> = Vec::new();
+
     for (key, fluent_key) in in_code_fluent_keys.iter() {
-        let Some(stored_key) = stored_fluent_keys_ref.get(key) else {
+        let Some(stored_key) = stored_fluent_keys.get(key) else {
             continue;
         };
 
@@ -199,13 +202,17 @@ fn process_language(
         let stored_args = extract_kwargs(
             stored_key,
             &stored_terms,
-            &stored_fluent_keys_ref,
+            &stored_fluent_keys,
             &mut depend_keys,
         )?;
 
-        if code_args != stored_args
-            && let Some(stored_key) = stored_fluent_keys.remove(key)
-        {
+        if code_args != stored_args {
+            kwargs_mismatches.push((key, fluent_key));
+        }
+    }
+
+    for (key, fluent_key) in kwargs_mismatches {
+        if let Some(stored_key) = stored_fluent_keys.remove(key) {
             keys_to_comment.insert(key.clone(), stored_key);
             keys_to_add.insert(key.clone(), fluent_key.clone());
 

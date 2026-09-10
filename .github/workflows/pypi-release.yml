@@ -28,11 +28,14 @@ jobs:
             arch: AMD64
           - os: macos-14
             arch: arm64
+          # Last Intel macOS image on GitHub Actions; supported until August 2027.
+          - os: macos-15-intel
+            arch: x86_64
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Install uv
-        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
         with:
           python-version: "3.14"
           version: "latest"
@@ -42,9 +45,14 @@ jobs:
         shell: bash
         run: uv sync --no-install-project --group dev
 
+      # On Linux, cibuildwheel compiles inside the manylinux/musllinux container, so the
+      # host cargo cache is never used there. The default key ignores matrix values, hence
+      # the explicit per-entry key.
       - name: Rust cache
+        if: runner.os != 'Linux'
         uses: Swatinem/rust-cache@v2
         with:
+          key: ${{ matrix.os }}-${{ matrix.arch }}
           cache-targets: true
 
       - name: Build and fix wheels (Windows)
@@ -61,11 +69,11 @@ jobs:
             uv run --no-project --verbose --with $wheel --refresh-package ftl_extract -- ftl --version
           done
 
-      - name: Build, fix and test wheels (macOS arm64)
-        if: runner.os == 'macOS' && matrix.arch == 'arm64'
+      - name: Build, fix and test wheels (macOS)
+        if: runner.os == 'macOS'
         shell: bash
         env:
-          CIBW_BUILD: "cp314-macosx_arm64"
+          CIBW_BUILD: "cp314-macosx_${{ matrix.arch }}"
         run: |
           uv run --no-project cibuildwheel --config-file pyproject.toml --output-dir wheelhouse --platform macos
           for wheel in wheelhouse/*.whl; do

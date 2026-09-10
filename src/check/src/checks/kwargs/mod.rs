@@ -7,8 +7,8 @@ use crate::checks::{run_code_aware_check, run_code_aware_check_with_extracted};
 use crate::parser::CheckLocaleCache;
 use crate::types::{CheckCodeAwareConfig, CheckKwargsConfig, CheckKwargsResult, KwargsMismatch};
 use anyhow::Result;
+use common::FastHashSet;
 use extractor::ftl::diagnostics::ExtractedCode;
-use extractor::ftl::utils::FastHashSet;
 use locale::read_locale_messages_with_ast;
 
 pub fn check_kwargs(config: CheckKwargsConfig) -> Result<CheckKwargsResult> {

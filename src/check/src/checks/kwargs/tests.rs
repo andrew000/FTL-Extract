@@ -1,10 +1,10 @@
 use super::check_kwargs;
 use crate::types::CheckKwargsConfig;
+use common::FastHashSet;
 use extractor::ftl::consts::{
     DEFAULT_EXCLUDE_DIRS, DEFAULT_FTL_FILENAME, DEFAULT_I18N_KEYS, DEFAULT_IGNORE_ATTRIBUTES,
     DEFAULT_IGNORE_KWARGS,
 };
-use extractor::ftl::utils::FastHashSet;
 use std::fs;
 use std::path::{Path, PathBuf};
 use tempfile::TempDir;

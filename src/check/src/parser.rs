@@ -1,11 +1,9 @@
 use crate::types::MessageEntry;
 use anyhow::{Context, Result, bail};
-use extractor::ftl::matcher::line_column;
-use extractor::ftl::utils::FastHashMap;
+use common::FastHashMap;
+use common::{FtlWalk, ftl_files, line_column};
 use fluent_syntax::ast::{Comment, Entry, Message, PatternElement, Resource};
 use fluent_syntax::parser::ParserError;
-use ignore::WalkBuilder;
-use ignore::types::TypesBuilder;
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -193,33 +191,7 @@ fn parse_cached_ftl_file(
 }
 
 pub(crate) fn ftl_files_for_locale(locales_path: &Path, locale: &str) -> Result<Vec<PathBuf>> {
-    let locale_path = locales_path.join(locale);
-    if !locale_path.exists() {
-        return Ok(Vec::new());
-    }
-
-    let mut type_builder = TypesBuilder::new();
-    type_builder.add("ftl", "*.ftl")?;
-    type_builder.select("ftl");
-    let types = type_builder.build()?;
-
-    let walker = WalkBuilder::new(&locale_path)
-        .types(types)
-        .parents(false)
-        .git_global(false)
-        .build();
-
-    let mut files = Vec::new();
-    for entry in walker {
-        let Some(path) = entry.ok().map(|it| it.into_path()) else {
-            continue;
-        };
-        if path.is_file() {
-            files.push(path);
-        }
-    }
-    files.sort();
-    Ok(files)
+    ftl_files(&locales_path.join(locale), FtlWalk::Filtered)
 }
 
 #[derive(Debug, Clone)]

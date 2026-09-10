@@ -1,5 +1,5 @@
+use common::FastHashSet;
 use extractor::ftl::diagnostics as extractor_diagnostics;
-use extractor::ftl::utils::FastHashSet;
 use std::path::PathBuf;
 
 #[derive(Debug, Clone)]

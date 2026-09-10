@@ -1,5 +1,5 @@
 use super::locale::LocaleResource;
-use extractor::ftl::utils::{FastHashMap, FastHashSet};
+use common::{FastHashMap, FastHashSet};
 use fluent_syntax::ast::{Entry, Identifier};
 
 #[derive(Debug, Default)]

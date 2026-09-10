@@ -1,6 +1,6 @@
-use crate::atomic_write::write_atomically;
 use crate::fluent::Message;
 use anyhow::{Context, Result};
+use common::write_atomically;
 use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
 use std::path::Path;

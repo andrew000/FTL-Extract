@@ -14,6 +14,7 @@ resolver = "3"
 members = [
     "src/check",
     "src/cli",
+    "src/common",
     "src/extractor",
     "src/stub",
 ]
@@ -27,6 +28,7 @@ tempfile = { version = "3.27.0" }
 # Workspace crates
 check = { path = "src/check" }
 cli = { path = "src/cli" }
+common = { path = "src/common" }
 extractor = { path = "src/extractor" }
 stub = { path = "src/stub" }
 

@@ -14,9 +14,9 @@ name = "check"
 
 [dependencies]
 anyhow.workspace = true
-extractor = { path = "../extractor" }
+common.workspace = true
+extractor.workspace = true
 fluent-syntax.workspace = true
-ignore.workspace = true
 serde_json.workspace = true
 
 [dev-dependencies]

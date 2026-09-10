@@ -2,8 +2,8 @@ use crate::checks::{run_code_aware_check, run_code_aware_check_with_extracted};
 use crate::parser::CheckLocaleCache;
 use crate::types::{CheckCodeAwareConfig, CheckMissingConfig, CheckMissingResult, MissingKey};
 use anyhow::Result;
+use common::FastHashSet;
 use extractor::ftl::diagnostics::ExtractedCode;
-use extractor::ftl::utils::FastHashSet;
 use std::path::PathBuf;
 
 pub fn check_missing(config: CheckMissingConfig) -> Result<CheckMissingResult> {

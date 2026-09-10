@@ -8,7 +8,7 @@ use std::path::Path;
 /// renamed over `path`. An interrupted run therefore leaves either the previous file or the
 /// complete new one on disk, never a truncated one. On failure the temporary file is removed
 /// and the existing file is left untouched.
-pub(crate) fn write_atomically(path: &Path, contents: &[u8]) -> io::Result<()> {
+pub fn write_atomically(path: &Path, contents: &[u8]) -> io::Result<()> {
     let parent = match path.parent() {
         Some(parent) if !parent.as_os_str().is_empty() => parent,
         _ => Path::new("."),

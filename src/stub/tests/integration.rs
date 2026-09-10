@@ -109,3 +109,26 @@ test-term-reference = Check this: { -warn-emoji }
         Ok(())
     }
 }
+
+#[test]
+fn test_generate_stub_reports_write_failure_instead_of_panicking() -> anyhow::Result<()> {
+    let temp_dir = TempDir::new()?;
+    let ftl_dir = temp_dir.path().join("ftl");
+    fs::create_dir(&ftl_dir)?;
+    fs::write(ftl_dir.join("test.ftl"), "hello = Hello\n")?;
+
+    // The stub path's parent is a regular file, so the write cannot succeed.
+    let blocker = temp_dir.path().join("blocker");
+    fs::write(&blocker, "file")?;
+
+    let error = generate_stub(StubConfig {
+        locales_path: ftl_dir,
+        stub_path: blocker.join("stub.pyi"),
+        export_tree: false,
+    })
+    .unwrap_err();
+
+    assert!(error.to_string().contains("Failed to write stub file"));
+    assert_eq!(fs::read_to_string(&blocker)?, "file");
+    Ok(())
+}

@@ -1,5 +1,6 @@
+use crate::atomic_write::write_atomically;
 use crate::fluent::Message;
-use anyhow::Result;
+use anyhow::{Context, Result};
 use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
 use std::path::Path;
@@ -130,7 +131,8 @@ pub fn build_tree(messages: IndexMap<String, Message>) -> Result<IndexMap<String
 
 pub fn export_tree_json<P: AsRef<Path>>(tree: &IndexMap<String, TreeNode>, path: P) -> Result<()> {
     let json = serde_json::to_string_pretty(tree)?;
-    std::fs::write(path, json)?;
+    write_atomically(path.as_ref(), json.as_bytes())
+        .with_context(|| format!("Failed to write tree file {}", path.as_ref().display()))?;
     Ok(())
 }
 

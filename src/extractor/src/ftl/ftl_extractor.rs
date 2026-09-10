@@ -1,3 +1,4 @@
+use crate::ftl::atomic_write::write_atomically;
 use crate::ftl::code_extractor::{extract_fluent_keys, sort_fluent_keys_by_path};
 use crate::ftl::consts::{CommentsKeyModes, LineEndings};
 use crate::ftl::diagnostics::ExtractionDiagnostic;
@@ -11,7 +12,6 @@ use anyhow::{Result, bail};
 use log::{debug, info, warn};
 use rayon::prelude::{IntoParallelRefIterator, ParallelIterator};
 use std::fmt::Write as _;
-use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
@@ -246,7 +246,7 @@ fn process_language(
         config,
         statistics,
         lang,
-    );
+    )?;
 
     Ok(())
 }
@@ -304,7 +304,7 @@ fn write_results(
     config: &ExtractConfig,
     statistics: &mut ExtractionStatistics,
     lang: &str,
-) {
+) -> Result<()> {
     let mut sorted_fluent_keys = sort_fluent_keys_by_path(stored_keys);
 
     // Merge all buckets into the sorted structure
@@ -329,33 +329,55 @@ fn write_results(
 
     let stored_keys_count = std::sync::atomic::AtomicUsize::new(0);
 
-    sorted_fluent_keys.par_iter().for_each(|(path, keys)| {
-        let full_path = lang_dir.join(path.as_ref());
+    // Every file is attempted even if one fails, so the error lists all of them at once.
+    let mut write_errors = sorted_fluent_keys
+        .par_iter()
+        .filter_map(|(path, keys)| {
+            let full_path = lang_dir.join(path.as_ref());
 
-        let misc_entries = leave_as_is_map.get(&full_path).cloned().unwrap_or_default();
+            let misc_entries = leave_as_is_map.get(&full_path).cloned().unwrap_or_default();
 
-        let ftl_content = generate_ftl(keys, &misc_entries);
+            let ftl_content = generate_ftl(keys, &misc_entries);
 
-        if config.dry_run {
-            debug!(
-                "[DRY-RUN] Would write to {}. {} keys found.",
-                full_path.display(),
-                keys.len()
-            )
+            if config.dry_run {
+                debug!(
+                    "[DRY-RUN] Would write to {}. {} keys found.",
+                    full_path.display(),
+                    keys.len()
+                )
+            } else if let Err(err) = write(&full_path, ftl_content, &config.line_endings) {
+                return Some(format!("{}: {err}", full_path.display()));
+            } else {
+                debug!("Saved {}. {} keys.", full_path.display(), keys.len());
+            }
+
+            let count = keys
+                .iter()
+                .filter(|k| matches!(k.entry.as_ref(), FluentEntry::Message(_)))
+                .count();
+            stored_keys_count.fetch_add(count, std::sync::atomic::Ordering::Relaxed);
+            None
+        })
+        .collect::<Vec<_>>();
+
+    if !write_errors.is_empty() {
+        write_errors.sort_unstable();
+        let noun = if write_errors.len() == 1 {
+            "file"
         } else {
-            write(full_path.clone(), ftl_content, &config.line_endings);
-            debug!("Saved {}. {} keys.", full_path.display(), keys.len());
-        }
-
-        let count = keys
-            .iter()
-            .filter(|k| matches!(k.entry.as_ref(), FluentEntry::Message(_)))
-            .count();
-        stored_keys_count.fetch_add(count, std::sync::atomic::Ordering::Relaxed);
-    });
+            "files"
+        };
+        bail!(
+            "Failed to write {} .ftl {noun} for locale `{lang}`:\n  - {}",
+            write_errors.len(),
+            write_errors.join("\n  - ")
+        );
+    }
 
     *statistics.ftl_stored_keys_count.get_mut(lang).unwrap() +=
         stored_keys_count.load(std::sync::atomic::Ordering::Relaxed);
+
+    Ok(())
 }
 
 fn normalize_line_endings(s: String, line_endings: &LineEndings) -> String {
@@ -367,12 +389,9 @@ fn normalize_line_endings(s: String, line_endings: &LineEndings) -> String {
     }
 }
 
-fn write(path: PathBuf, ftl: String, line_endings: &LineEndings) {
-    if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent).unwrap();
-    }
+fn write(path: &Path, ftl: String, line_endings: &LineEndings) -> std::io::Result<()> {
     let ftl_with_line_endings = normalize_line_endings(ftl, line_endings);
-    fs::write(path, ftl_with_line_endings).expect("Unable to write file");
+    write_atomically(path, ftl_with_line_endings.as_bytes())
 }
 
 #[cfg(test)]
@@ -383,6 +402,7 @@ mod tests {
         DEFAULT_IGNORE_KWARGS,
     };
     use pretty_assertions::assert_eq;
+    use std::fs;
     use tempfile::TempDir;
 
     fn config(code_path: PathBuf, locales_path: PathBuf) -> ExtractConfig {
@@ -637,6 +657,43 @@ i18n.page.title(_path="pages/main.ftl")
             FluentEntry::Comment(_)
         ));
         assert_eq!(statistics.ftl_keys_commented["en"], 1);
+    }
+
+    #[test]
+    fn test_extract_reports_write_failures_instead_of_panicking() {
+        let temp = TempDir::new().unwrap();
+        let code_path = temp.path().join("code");
+        let locales_path = temp.path().join("locales");
+        let locale_path = locales_path.join("en");
+        fs::create_dir_all(&code_path).unwrap();
+        fs::create_dir_all(&locale_path).unwrap();
+
+        fs::write(
+            code_path.join("app.py"),
+            r#"
+i18n.get("hello")
+i18n.get("nested", _path="pages/main.ftl")
+"#,
+        )
+        .unwrap();
+        // Both target files are blocked: one is a directory, the other has a file as parent.
+        fs::create_dir_all(locale_path.join("_default.ftl")).unwrap();
+        fs::write(locale_path.join("pages"), "not a directory").unwrap();
+
+        let error = extract(config(code_path, locales_path)).unwrap_err();
+
+        let message = error.to_string();
+        assert!(
+            message.contains("Failed to write 2 .ftl files"),
+            "{message}"
+        );
+        assert!(message.contains("_default.ftl"), "{message}");
+        assert!(message.contains("main.ftl"), "{message}");
+        assert!(locale_path.join("_default.ftl").is_dir());
+        assert_eq!(
+            fs::read_to_string(locale_path.join("pages")).unwrap(),
+            "not a directory"
+        );
     }
 
     #[test]

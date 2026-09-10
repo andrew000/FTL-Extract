@@ -31,10 +31,10 @@ jobs:
           # - os: macos-14
           #   arch: arm64
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Install uv
-        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
         with:
           python-version: "3.14"
           version: "latest"
@@ -44,9 +44,14 @@ jobs:
         shell: bash
         run: uv sync --no-install-project --group dev
 
+      # On Linux, cibuildwheel compiles inside the manylinux/musllinux container, so the
+      # host cargo cache only matters for the entry that runs `cargo llvm-cov` natively.
+      # The default key ignores matrix values, hence the explicit per-entry key.
       - name: Rust cache
+        if: runner.os != 'Linux' || (matrix.arch == 'x86_64' && matrix.libc == 'manylinux')
         uses: Swatinem/rust-cache@v2
         with:
+          key: ${{ matrix.os }}-${{ matrix.arch }}-${{ matrix.libc }}
           cache-targets: true
 
       - name: Install cargo-llvm-cov

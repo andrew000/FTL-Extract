@@ -21,8 +21,9 @@
 - `ftl extract` no longer aborts with `key-message-conflict` when the same key is called with the same keyword
   arguments in a different order (`i18n.get("order", a=1, b=2)` and `i18n.get("order", b=2, a=1)`), in one file or
   across files. A real conflict (`a, b` versus `a, c`) still aborts, and its message now names the key, both
-  keyword-argument sets and both locations instead of dumping the internal AST:
-  `Fluent key order is used with different keyword arguments: a, b (app/a.py:2:5) and a, c (app/b.py:3:5)`.
+  keyword-argument sets and both locations instead of dumping the internal AST, and the two sides are listed in a
+  stable order (by file, line and column) whichever file was scanned first:
+  `[key-message-conflict] Fluent key order is used with different keyword arguments: a, b and a, c (app/a.py:2:5, app/b.py:3:5)`.
 - `ftl extract` no longer comments out and replaces a translation because the code calls the key with `**kwargs`
   (`i18n.get("welcome", **data)` with `welcome = Welcome, { $name }!` used to become `welcome = welcome`, silently).
   Such a call can pass any variable, so the key's variables are unverifiable: `extract` leaves the stored message

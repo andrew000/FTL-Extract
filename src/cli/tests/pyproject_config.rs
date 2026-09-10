@@ -940,3 +940,60 @@ fn check_reports_python_parse_errors_as_extraction_diagnostics() {
     assert!(report.contains(r#""key": null"#));
     assert!(report.contains("broken.py"));
 }
+
+#[test]
+fn extract_conflicting_paths_exit_with_both_call_sites() {
+    let temp = TempDir::new().unwrap();
+    write(
+        &temp.path().join("code/a.py"),
+        r#"i18n.get("hello", _path="one.ftl")"#,
+    );
+    write(
+        &temp.path().join("code/b.py"),
+        "\n\ni18n.get(\"hello\", _path=\"two.ftl\")\n",
+    );
+
+    let output = ftl()
+        .arg("extract")
+        .arg(temp.path().join("code"))
+        .arg(temp.path().join("locales"))
+        .output()
+        .unwrap();
+
+    assert_eq!(output.status.code(), Some(1));
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("[key-path-conflict]"), "{stderr}");
+    assert!(stderr.contains("a.py:1:1"), "{stderr}");
+    assert!(stderr.contains("b.py:3:1"), "{stderr}");
+    assert!(!stderr.contains("panicked"), "{stderr}");
+    assert!(!temp.path().join("locales").exists());
+}
+
+#[test]
+fn extract_reports_dangling_ftl_reference_instead_of_panicking() {
+    let temp = TempDir::new().unwrap();
+    write(&temp.path().join("code/app.py"), r#"i18n.get("hello")"#);
+    write(
+        &temp.path().join("locales/en/_default.ftl"),
+        "hello = Hello { missing-message }\n",
+    );
+
+    let output = ftl()
+        .arg("extract")
+        .arg(temp.path().join("code"))
+        .arg(temp.path().join("locales"))
+        .output()
+        .unwrap();
+
+    assert_eq!(output.status.code(), Some(1));
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("references unknown message `missing-message`"),
+        "{stderr}"
+    );
+    assert!(!stderr.contains("panicked"), "{stderr}");
+    assert_eq!(
+        std::fs::read_to_string(temp.path().join("locales/en/_default.ftl")).unwrap(),
+        "hello = Hello { missing-message }\n"
+    );
+}

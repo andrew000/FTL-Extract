@@ -159,18 +159,19 @@ fn process_language(
 
     // Compare Code Keys vs Stored Keys (Path mismatch & New keys)
     for (key, fluent_key) in in_code_fluent_keys.iter() {
-        if let Some(stored_key) = stored_fluent_keys.get(key) {
+        if let Some(stored_key) = stored_fluent_keys.get_mut(key) {
             if fluent_key.path != stored_key.path {
                 // Path changed: comment old, add new
-                let old_key = stored_fluent_keys.remove(key).unwrap();
-                keys_to_comment.insert(key.clone(), old_key);
+                if let Some(old_key) = stored_fluent_keys.remove(key) {
+                    keys_to_comment.insert(key.clone(), old_key);
+                }
                 keys_to_add.insert(key.clone(), fluent_key.clone());
 
                 *statistics.ftl_keys_commented.get_mut(lang).unwrap() += 1;
                 *statistics.ftl_keys_updated.get_mut(lang).unwrap() += 1;
             } else {
                 // Update code path for reference
-                stored_fluent_keys.get_mut(key).unwrap().code_path = fluent_key.code_path.clone();
+                stored_key.code_path = fluent_key.code_path.clone();
             }
         } else {
             // New key
@@ -184,26 +185,28 @@ fn process_language(
     let mut depend_keys: FastHashSet<String> = FastHashSet::default();
 
     for (key, fluent_key) in in_code_fluent_keys.iter() {
-        if !stored_fluent_keys.contains_key(key) {
+        let Some(stored_key) = stored_fluent_keys_ref.get(key) else {
             continue;
-        }
+        };
 
         let code_args = extract_kwargs(
             fluent_key,
-            &mut stored_terms,
+            &stored_terms,
             in_code_fluent_keys,
             &mut depend_keys,
-        );
+        )?;
 
         let stored_args = extract_kwargs(
-            stored_fluent_keys.get(key).unwrap(),
-            &mut stored_terms,
+            stored_key,
+            &stored_terms,
             &stored_fluent_keys_ref,
             &mut depend_keys,
-        );
+        )?;
 
-        if code_args != stored_args {
-            keys_to_comment.insert(key.clone(), stored_fluent_keys.remove(key).unwrap());
+        if code_args != stored_args
+            && let Some(stored_key) = stored_fluent_keys.remove(key)
+        {
+            keys_to_comment.insert(key.clone(), stored_key);
             keys_to_add.insert(key.clone(), fluent_key.clone());
 
             *statistics.ftl_keys_commented.get_mut(lang).unwrap() += 1;

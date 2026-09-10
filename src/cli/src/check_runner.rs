@@ -27,9 +27,43 @@ pub(crate) struct CheckRunConfig {
     pub(crate) clear_cache: bool,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum ResolvedCheckKind {
+    Kwargs,
+    Missing,
+    References,
+    Stale,
+    Syntax,
+    Untranslated,
+}
+
+impl ResolvedCheckKind {
+    /// Every concrete check in default execution order (syntax first).
+    const ALL: [Self; 6] = [
+        Self::Syntax,
+        Self::References,
+        Self::Untranslated,
+        Self::Missing,
+        Self::Stale,
+        Self::Kwargs,
+    ];
+
+    fn from_cli(kind: &CheckKind) -> Option<Self> {
+        match kind {
+            CheckKind::All => None,
+            CheckKind::Kwargs => Some(Self::Kwargs),
+            CheckKind::Missing => Some(Self::Missing),
+            CheckKind::References => Some(Self::References),
+            CheckKind::Stale => Some(Self::Stale),
+            CheckKind::Syntax => Some(Self::Syntax),
+            CheckKind::Untranslated => Some(Self::Untranslated),
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub(crate) struct ExpandedChecks {
-    pub(crate) checks: Vec<CheckKind>,
+    pub(crate) checks: Vec<ResolvedCheckKind>,
 }
 
 pub(crate) fn run_check(
@@ -57,8 +91,7 @@ where
 
     for check in expanded_checks.checks {
         match check {
-            CheckKind::All => unreachable!("check expansion removes `all`"),
-            CheckKind::Kwargs => {
+            ResolvedCheckKind::Kwargs => {
                 let extracted =
                     ensure_extracted_code(&mut extracted_code, &config, &mut extract_code)?;
                 let cache = ensure_locale_cache(&mut locale_cache, &config, &[])?;
@@ -72,7 +105,7 @@ where
                     &mut extraction_diagnostics_added,
                 );
             }
-            CheckKind::Missing => {
+            ResolvedCheckKind::Missing => {
                 let extracted =
                     ensure_extracted_code(&mut extracted_code, &config, &mut extract_code)?;
                 let cache = ensure_locale_cache(&mut locale_cache, &config, &[])?;
@@ -86,14 +119,14 @@ where
                     &mut extraction_diagnostics_added,
                 );
             }
-            CheckKind::References => {
+            ResolvedCheckKind::References => {
                 let cache = ensure_locale_cache(&mut locale_cache, &config, &[])?;
                 extend_check_result(
                     &mut result,
                     CheckResult::from(check_references_with_cache(cache)?),
                 );
             }
-            CheckKind::Stale => {
+            ResolvedCheckKind::Stale => {
                 let extracted =
                     ensure_extracted_code(&mut extracted_code, &config, &mut extract_code)?;
                 let cache = ensure_locale_cache(&mut locale_cache, &config, &[])?;
@@ -107,7 +140,7 @@ where
                     &mut extraction_diagnostics_added,
                 );
             }
-            CheckKind::Syntax => {
+            ResolvedCheckKind::Syntax => {
                 let cache = ensure_locale_cache(&mut locale_cache, &config, &[])?;
                 extend_check_result(
                     &mut result,
@@ -117,7 +150,7 @@ where
                     break;
                 }
             }
-            CheckKind::Untranslated => {
+            ResolvedCheckKind::Untranslated => {
                 let cache = ensure_locale_cache(&mut locale_cache, &config, &config.suggest_from)?;
                 extend_check_result(
                     &mut result,
@@ -137,19 +170,19 @@ fn ensure_locale_cache<'a>(
     config: &CheckRunConfig,
     extra_locales: &[String],
 ) -> Result<&'a CheckLocaleCache> {
-    if locale_cache.is_none() {
-        *locale_cache = Some(CheckLocaleCache::load(
+    match locale_cache {
+        Some(cache) => {
+            if !extra_locales.is_empty() {
+                cache.load_extra_locales(extra_locales)?;
+            }
+            Ok(cache)
+        }
+        None => Ok(locale_cache.insert(CheckLocaleCache::load(
             &config.locales_path,
             &config.locales,
             extra_locales,
-        )?);
-    } else if !extra_locales.is_empty()
-        && let Some(cache) = locale_cache.as_mut()
-    {
-        cache.load_extra_locales(extra_locales)?;
+        )?)),
     }
-
-    Ok(locale_cache.as_ref().expect("locale cache is initialized"))
 }
 
 fn ensure_extracted_code<'a, F>(
@@ -160,28 +193,29 @@ fn ensure_extracted_code<'a, F>(
 where
     F: FnMut(CheckCodeConfig) -> Result<ExtractedCode>,
 {
-    if extracted_code.is_none() {
-        validate_check_locales(&config.locales_path, &config.locales)?;
-        let code_path = config.code_path.clone().context(
-            "Missing code path. Pass --code-path or set tool.ftl-extract.check.code-path",
-        )?;
-        *extracted_code = Some(extract_code(CheckCodeConfig {
-            code_path,
-            i18n_keys: config.i18n_keys.clone(),
-            i18n_keys_prefix: config.i18n_keys_prefix.clone(),
-            exclude_dirs: config.exclude_dirs.clone(),
-            ignore_attributes: config.ignore_attributes.clone(),
-            ignore_kwargs: config.ignore_kwargs.clone(),
-            default_ftl_file: config.default_ftl_file.clone(),
-            cache: config.cache,
-            cache_path: config.cache_path.clone(),
-            clear_cache: config.clear_cache,
-        })?);
+    if let Some(extracted) = extracted_code {
+        return Ok(extracted);
     }
 
-    Ok(extracted_code
-        .as_ref()
-        .expect("extracted code is initialized"))
+    validate_check_locales(&config.locales_path, &config.locales)?;
+    let code_path = config
+        .code_path
+        .clone()
+        .context("Missing code path. Pass --code-path or set tool.ftl-extract.check.code-path")?;
+    let extracted = extract_code(CheckCodeConfig {
+        code_path,
+        i18n_keys: config.i18n_keys.clone(),
+        i18n_keys_prefix: config.i18n_keys_prefix.clone(),
+        exclude_dirs: config.exclude_dirs.clone(),
+        ignore_attributes: config.ignore_attributes.clone(),
+        ignore_kwargs: config.ignore_kwargs.clone(),
+        default_ftl_file: config.default_ftl_file.clone(),
+        cache: config.cache,
+        cache_path: config.cache_path.clone(),
+        clear_cache: config.clear_cache,
+    })?;
+
+    Ok(extracted_code.insert(extracted))
 }
 
 fn add_extraction_diagnostics_once(
@@ -219,44 +253,32 @@ fn extend_check_result(target: &mut CheckResult, source: CheckResult) {
     target.diagnostics.extend(source.diagnostics);
 }
 
+/// Resolves the CLI check list into concrete checks: an empty list or `all` expands to every
+/// check, duplicates are dropped, and `syntax` always runs first.
 pub(crate) fn expand_check_kinds(checks: Vec<CheckKind>) -> ExpandedChecks {
-    let defaults = vec![
-        CheckKind::Syntax,
-        CheckKind::References,
-        CheckKind::Untranslated,
-        CheckKind::Missing,
-        CheckKind::Stale,
-        CheckKind::Kwargs,
-    ];
+    if checks.is_empty() || checks.contains(&CheckKind::All) {
+        return ExpandedChecks {
+            checks: ResolvedCheckKind::ALL.to_vec(),
+        };
+    }
 
-    let is_default_or_all = checks.is_empty() || checks.contains(&CheckKind::All);
-    let checks = if is_default_or_all {
-        defaults
-    } else {
-        normalize_check_order(checks)
-    };
-
-    let mut expanded = Vec::new();
-    for check in checks {
+    let mut expanded = Vec::with_capacity(checks.len());
+    for check in checks.iter().filter_map(ResolvedCheckKind::from_cli) {
         if !expanded.contains(&check) {
             expanded.push(check);
         }
     }
-    ExpandedChecks { checks: expanded }
-}
 
-fn normalize_check_order(checks: Vec<CheckKind>) -> Vec<CheckKind> {
-    if !checks.contains(&CheckKind::Syntax) {
-        return checks;
+    if let Some(position) = expanded
+        .iter()
+        .position(|check| *check == ResolvedCheckKind::Syntax)
+        && position != 0
+    {
+        let syntax = expanded.remove(position);
+        expanded.insert(0, syntax);
     }
 
-    let mut normalized = vec![CheckKind::Syntax];
-    normalized.extend(
-        checks
-            .into_iter()
-            .filter(|check| *check != CheckKind::Syntax),
-    );
-    normalized
+    ExpandedChecks { checks: expanded }
 }
 
 fn has_fatal_syntax_diagnostics(result: &CheckResult) -> bool {
@@ -322,17 +344,29 @@ mod tests {
     fn check_all_runs_syntax_first() {
         let expanded = expand_check_kinds(vec![CheckKind::All]);
 
-        assert_eq!(expanded.checks.first(), Some(&CheckKind::Syntax));
+        assert_eq!(expanded.checks.first(), Some(&ResolvedCheckKind::Syntax));
         assert_eq!(
             expanded.checks,
             vec![
-                CheckKind::Syntax,
-                CheckKind::References,
-                CheckKind::Untranslated,
-                CheckKind::Missing,
-                CheckKind::Stale,
-                CheckKind::Kwargs,
+                ResolvedCheckKind::Syntax,
+                ResolvedCheckKind::References,
+                ResolvedCheckKind::Untranslated,
+                ResolvedCheckKind::Missing,
+                ResolvedCheckKind::Stale,
+                ResolvedCheckKind::Kwargs,
             ]
+        );
+    }
+
+    #[test]
+    fn empty_check_list_and_all_mixed_with_others_expand_to_every_check() {
+        assert_eq!(
+            expand_check_kinds(Vec::new()).checks,
+            ResolvedCheckKind::ALL.to_vec()
+        );
+        assert_eq!(
+            expand_check_kinds(vec![CheckKind::Missing, CheckKind::All]).checks,
+            ResolvedCheckKind::ALL.to_vec()
         );
     }
 
@@ -340,7 +374,10 @@ mod tests {
     fn check_custom_list_is_not_default_or_all() {
         let expanded = expand_check_kinds(vec![CheckKind::Missing, CheckKind::Syntax]);
 
-        assert_eq!(expanded.checks, vec![CheckKind::Syntax, CheckKind::Missing]);
+        assert_eq!(
+            expanded.checks,
+            vec![ResolvedCheckKind::Syntax, ResolvedCheckKind::Missing]
+        );
     }
 
     #[test]
@@ -356,20 +393,27 @@ mod tests {
         assert_eq!(
             expanded.checks,
             vec![
-                CheckKind::Syntax,
-                CheckKind::Kwargs,
-                CheckKind::Missing,
-                CheckKind::References,
-                CheckKind::Stale,
+                ResolvedCheckKind::Syntax,
+                ResolvedCheckKind::Kwargs,
+                ResolvedCheckKind::Missing,
+                ResolvedCheckKind::References,
+                ResolvedCheckKind::Stale,
             ]
         );
     }
 
     #[test]
-    fn custom_checks_without_syntax_keep_order() {
-        let expanded = expand_check_kinds(vec![CheckKind::Missing, CheckKind::Kwargs]);
+    fn custom_checks_without_syntax_keep_order_and_drop_duplicates() {
+        let expanded = expand_check_kinds(vec![
+            CheckKind::Missing,
+            CheckKind::Kwargs,
+            CheckKind::Missing,
+        ]);
 
-        assert_eq!(expanded.checks, vec![CheckKind::Missing, CheckKind::Kwargs]);
+        assert_eq!(
+            expanded.checks,
+            vec![ResolvedCheckKind::Missing, ResolvedCheckKind::Kwargs]
+        );
     }
 
     #[test]

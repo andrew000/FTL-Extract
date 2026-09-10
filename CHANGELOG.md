@@ -5,26 +5,33 @@
 ### Fixed
 
 - `ftl extract` no longer comments out and replaces a valid translation whose variable appears only inside a Fluent
-  function call (`{ NUMBER($count) }`, also as a selector), only through a parameterized term
-  (`{ -brand(case: "gen") }`), or only through a message attribute reference (`{ btn.title }`). The extractor
-  compared the stored message's variables with its own walk that skipped function arguments, counted every variable
-  inside a term and followed `{ msg.attr }` to the value; `ftl check` used a different walk and passed, so the
-  rewrite went unnoticed.
-- `ftl extract` and `ftl check` now decide with one shared collector (`common::message_variables`) which variables a
-  stored message needs, following the `fluent-bundle` resolver: function arguments count, `{ msg }` pulls in only the
-  value and `{ msg.attr }` only that attribute, and nothing inside a term is a caller variable because terms resolve
-  variables against their own call arguments.
+  function call (`{ NUMBER($count) }`, also as a selector), only inside a referenced term
+  (`{ -brand(case: "gen") }` or `{ -brand }`), or only through a message attribute reference (`{ btn.title }`). The
+  extractor's own walk skipped function arguments, counted every variable inside a term as one the code had to pass,
+  and followed `{ msg.attr }` to the message value. `ftl check` used a different walk and passed, so the rewrite went
+  unnoticed.
+- `ftl extract` and `ftl check` now share one collector (`common::message_variables`) that decides which variables a
+  stored message needs, following the `fluent-bundle` resolver: function arguments count; `{ msg }` pulls in only the
+  value of `msg` and `{ msg.attr }` only that attribute; nothing inside a term is a caller variable, because a term
+  resolves variables against its own call arguments only.
 
 ### Behavior changes
 
-- `ftl check --check kwargs` no longer requires a term's variables from code. `{ -brand }` with
-  `-brand = { $case -> ... }` used to report `case` as missing; unbound term variables fall back to the default variant
-  and never read the caller's arguments. A kwarg that only matches a variable inside a term is now reported as
-  unused.
-- `ftl check --check kwargs` follows `{ msg.attr }` to that attribute only and `{ msg }` to the value only. It used to
-  count the value plus every attribute of a referenced message.
-- Unchanged and still open: `ftl check` counts the variables of the called message's own attributes, `ftl extract`
-  does not. See the "own attributes" note in the shared collector.
+- `ftl extract`: a keyword argument in code that only matches a variable inside a referenced term
+  (`-brand = Bot { $suffix }`, `about = About { -brand }`, `i18n.about(suffix=...)`) is now a kwargs mismatch, so the
+  stored message is commented out and replaced, exactly as `0.12.0` already did for any other unused keyword argument
+  (`greet = Hello!` with `i18n.greet(name=...)`). `0.12.0` let the term case through only because it counted the
+  term's variable as satisfied by the caller.
+- `ftl check --check kwargs` no longer requires variables that exist only inside terms. `{ -brand }` with
+  `-brand = { $case -> ... }` used to report `case` as `missing in code`; an unbound term variable falls back to the
+  default variant and never reads the caller's arguments. The same message with `i18n.about(case=...)` in code is now
+  reported as `unused in ftl: case`.
+- `ftl check --check kwargs` follows `{ msg }` to the value of `msg` only and `{ msg.attr }` to that attribute only.
+  It used to count the value plus every attribute of every referenced message, so `a = { b }` reported the variables
+  of `b`'s attributes as missing for `a`.
+- Unchanged and still open: `ftl check` requires the variables used in the called message's own attributes,
+  `ftl extract` does not. Both keep their `0.12.0` behaviour, so the two commands can still disagree on such a
+  message.
 
 ## 0.12.0 — 2026-09-10
 

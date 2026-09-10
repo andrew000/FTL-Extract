@@ -400,6 +400,24 @@ $ ftl extract project_path/code_path project_path/locales -l en -l uk -l pl
 $ ftl extract project_path/code_path project_path/locales -K LF -K LazyProxy -K L
 ```
 
+#### ❓ - Why is a key called with `**kwargs` not checked for variables ?
+
+```python
+i18n.get("welcome", **data)
+```
+
+`**data` can pass any keyword argument, so FTL-Extract cannot know which variables this call provides. For such a
+key the variables are not verified at all: `ftl extract` leaves the stored translation as it is (a new key is still
+written, with the explicit keyword arguments it saw, e.g. `welcome = welcome`), and `ftl check --check kwargs` skips
+the key. Run either command with `--verbose` to see which keys are affected:
+
+```
+key "welcome" is called with **kwargs at app/a.py:3:5; its variables cannot be verified
+```
+
+Explicit keyword arguments are still compared between calls of the same key, and every other check treats the key as
+usual.
+
 ***
 
 ## How I use FTL-Extract in most of my projects

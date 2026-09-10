@@ -133,27 +133,16 @@ impl<'a> I18nMatcher<'a> {
     }
     #[inline]
     fn process_name_call(&mut self, expr: &ruff_python_ast::ExprCall) {
-        if expr.arguments.is_empty()
-            || !expr
-                .arguments
-                .find_positional(0)
-                .unwrap()
-                .is_string_literal_expr()
-        {
+        // `find_positional` is `None` for `i18n(*args)`, `i18n(**kwargs)` and `i18n(key="x")`:
+        // there is no key to extract, and `is_empty()` alone does not rule those out.
+        let Some(arg) = expr.arguments.find_positional(0) else {
             return;
-        }
+        };
+        let Some(literal) = arg.as_string_literal_expr() else {
+            return;
+        };
 
-        let key = expr
-            .arguments
-            .find_positional(0)
-            .unwrap()
-            .as_string_literal_expr()
-            .unwrap()
-            .value
-            .clone()
-            .to_string();
-
-        self.add_fluent_key(expr, key);
+        self.add_fluent_key(expr, literal.value.to_string());
     }
     #[inline]
     fn process_attribute_name_call(
@@ -165,8 +154,9 @@ impl<'a> I18nMatcher<'a> {
         if self.i18n_keys.contains(attr.id.as_str()) {
             self.process_i18n_key_call(expr, attrs);
         } else if self.i18n_keys_prefix.contains(attr.id.as_str())
-            && !attrs.is_empty()
-            && self.i18n_keys.contains(*attrs.last().unwrap())
+            && attrs
+                .last()
+                .is_some_and(|last| self.i18n_keys.contains(*last))
         {
             // Remove the last attribute to handle cases where the prefix key is followed by a
             // valid i18n key.
@@ -180,29 +170,26 @@ impl<'a> I18nMatcher<'a> {
         expr: &ruff_python_ast::ExprCall,
         attrs: SmallVec<&str, 8>,
     ) {
-        if attrs.len() == 1 && *attrs.first().unwrap() == consts::GET_LITERAL {
-            self.process_i18n_key_call_get_literal(expr);
-        } else {
-            self.process_i18n_key_call_attrs(expr, attrs);
+        match attrs.as_slice() {
+            // `self.i18n("key")` with `self` as a prefix: the prefix step removed the only
+            // attribute, so treat it like `i18n("key")`.
+            [] => self.process_name_call(expr),
+            [attr] if *attr == consts::GET_LITERAL => self.process_i18n_key_call_get_literal(expr),
+            _ => self.process_i18n_key_call_attrs(expr, attrs),
         }
     }
     #[inline]
     fn process_i18n_key_call_get_literal(&mut self, expr: &ruff_python_ast::ExprCall) {
-        if expr.arguments.is_empty() {
+        // Same as `process_name_call`: `i18n.get(*args)` and `i18n.get(key="x")` have no
+        // positional argument even though `arguments` is not empty.
+        let Some(arg) = expr.arguments.find_positional(0) else {
             return;
-        }
+        };
+        let Some(literal) = arg.as_string_literal_expr() else {
+            return;
+        };
 
-        let arg = expr.arguments.find_positional(0).unwrap();
-        if arg.is_string_literal_expr() {
-            let key = arg
-                .as_string_literal_expr()
-                .unwrap()
-                .value
-                .to_string()
-                .clone();
-
-            self.add_fluent_key(expr, key);
-        }
+        self.add_fluent_key(expr, literal.value.to_string());
     }
     #[inline]
     fn process_i18n_key_call_attrs(
@@ -210,7 +197,10 @@ impl<'a> I18nMatcher<'a> {
         expr: &ruff_python_ast::ExprCall,
         attrs: SmallVec<&str, 8>,
     ) {
-        if self.ignore_attributes.contains(*attrs.last().unwrap()) {
+        let Some(last) = attrs.last() else {
+            return;
+        };
+        if self.ignore_attributes.contains(*last) {
             return;
         }
 

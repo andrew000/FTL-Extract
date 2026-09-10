@@ -1,41 +1,29 @@
 use crate::ftl::matcher::{FluentEntry, FluentKey};
-use fluent_syntax::ast::Entry;
+use fluent_syntax::ast::{Entry, Resource};
 use fluent_syntax::serializer::{Options, Serializer};
+use std::sync::Arc;
 
-pub(crate) fn generate_ftl(fluent_keys: &Vec<FluentKey>, leave_as_is: &[FluentKey]) -> String {
-    let mut resource: fluent_syntax::ast::Resource<String> =
-        fluent_syntax::ast::Resource { body: vec![] };
+/// Serializes `fluent_keys` in `position` order.
+///
+/// Entries are moved out of their `Arc` when nothing else holds them, which is the case for
+/// keys imported from `.ftl` files and for commented keys. Only entries shared between
+/// locales (keys extracted from code) are cloned.
+pub(crate) fn generate_ftl(mut fluent_keys: Vec<FluentKey>) -> String {
+    // Stable sort: keys added from code all share `usize::MAX` and keep their order.
+    fluent_keys.sort_by_key(|key| key.position);
 
-    let mut listed_fluent_keys = fluent_keys.to_owned();
-    listed_fluent_keys.extend_from_slice(leave_as_is);
-
-    // Sort fluent keys by position
-    listed_fluent_keys.sort_by_key(|key| key.position);
-
-    for fluent_key in listed_fluent_keys {
-        match fluent_key.entry.as_ref() {
-            FluentEntry::Message(message) => {
-                resource.body.push(Entry::Message(message.clone()));
-            }
-            FluentEntry::Term(term) => {
-                resource.body.push(Entry::Term(term.clone()));
-            }
-            FluentEntry::Comment(comment) => {
-                resource.body.push(Entry::Comment(comment.clone()));
-            }
-            FluentEntry::GroupComment(comment) => {
-                resource.body.push(Entry::GroupComment(comment.clone()));
-            }
-            FluentEntry::ResourceComment(comment) => {
-                resource.body.push(Entry::ResourceComment(comment.clone()));
-            }
-            FluentEntry::Junk(junk) => {
-                resource.body.push(Entry::Junk {
-                    content: junk.clone(),
-                });
-            }
-        }
-    }
+    let body = fluent_keys
+        .into_iter()
+        .map(|key| match Arc::unwrap_or_clone(key.entry) {
+            FluentEntry::Message(message) => Entry::Message(message),
+            FluentEntry::Term(term) => Entry::Term(term),
+            FluentEntry::Comment(comment) => Entry::Comment(comment),
+            FluentEntry::GroupComment(comment) => Entry::GroupComment(comment),
+            FluentEntry::ResourceComment(comment) => Entry::ResourceComment(comment),
+            FluentEntry::Junk(content) => Entry::Junk { content },
+        })
+        .collect();
+    let resource: Resource<String> = Resource { body };
 
     let mut ser = Serializer::new(Options { with_junk: false });
     ser.serialize_resource(&resource);
@@ -114,9 +102,12 @@ mod tests {
                 FastHashSet::default(),
             ),
         ];
-        let leave_as_is: Vec<FluentKey> = vec![];
+        // Entries shared with another key (as code keys are between locales) are cloned,
+        // the rest are moved; the output must not depend on which path was taken.
+        let shared = fluent_keys[0].clone();
 
-        let ftl_output = super::generate_ftl(&fluent_keys, &leave_as_is);
+        let ftl_output = super::generate_ftl(fluent_keys);
+        assert!(matches!(shared.entry.as_ref(), FluentEntry::Message(_)));
         let expected_output =
             "message = Test message.\n-term = Test term.\n\n# This is a comment.\n\n";
         assert_eq!(ftl_output, expected_output);
@@ -149,7 +140,7 @@ mod tests {
             ),
         ];
 
-        let ftl_output = super::generate_ftl(&fluent_keys, &[]);
+        let ftl_output = super::generate_ftl(fluent_keys);
 
         assert!(ftl_output.contains("## Group"));
         assert!(ftl_output.contains("### Resource"));

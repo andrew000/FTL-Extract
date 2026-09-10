@@ -23,12 +23,21 @@
   across files. A real conflict (`a, b` versus `a, c`) still aborts, and its message now names the key, both
   keyword-argument sets and both locations instead of dumping the internal AST:
   `Fluent key order is used with different keyword arguments: a, b (app/a.py:2:5) and a, c (app/b.py:3:5)`.
+- `ftl extract` no longer comments out and replaces a translation because the code calls the key with `**kwargs`
+  (`i18n.get("welcome", **data)` with `welcome = Welcome, { $name }!` used to become `welcome = welcome`, silently).
+  Such a call can pass any variable, so the key's variables are unverifiable: `extract` leaves the stored message
+  alone and `ftl check --check kwargs` skips the key, both logging
+  `key "welcome" is called with **kwargs at app/a.py:3:5; its variables cannot be verified` with `--verbose`. A new
+  key is still written with the explicit keyword arguments it was seen with, explicit keyword arguments are still
+  compared between calls of the same key, and the other checks treat the key as usual.
 
 ### Behavior changes
 - The placeholder `ftl extract` writes for a new key lists its variables sorted by name (`order = order{ $a }{ $b }`)
   instead of in call order, which was not even stable across runs because files are extracted in parallel. Existing
-  messages are compared by their set of variables, so nothing already stored is rewritten. The extraction cache keeps
-  its `v3` schema; entries written in call order by an older build are normalized when loaded.
+  messages are compared by their set of variables, so nothing already stored is rewritten. Entries written
+  in call order by an older build are normalized when loaded.
+- The extraction cache schema is now `v4` (`.ftl-extract-cache/extract-<version>-v4.bin`): cached keys record
+  whether a call passes `**kwargs`. Older cache files are ignored and rebuilt on the next run.
 - `ftl extract`: a keyword argument in code that only matches a variable inside a referenced term
   (`-brand = Bot { $suffix }`, `about = About { -brand }`, `i18n.about(suffix=...)`) is now a kwargs mismatch, so the
   stored message is commented out and replaced, exactly as `0.12.0` already did for any other unused keyword argument

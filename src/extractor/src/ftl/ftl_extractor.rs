@@ -10,7 +10,7 @@ use crate::ftl::utils::{ExtractionStatistics, FastHashMap, FastHashSet};
 use anyhow::{Result, bail};
 use common::write_atomically;
 use log::{debug, info, warn};
-use rayon::prelude::{IntoParallelRefIterator, ParallelIterator};
+use rayon::prelude::{IntoParallelIterator, IntoParallelRefIterator, ParallelIterator};
 use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -318,7 +318,8 @@ fn write_results(
         sorted_fluent_keys.entry(path).or_default().extend(keys);
     }
 
-    // Group "leave as is" items by path
+    // Standalone comments keep their place in the files that get rewritten. A file holding
+    // nothing but comments has no bucket here and is left untouched on disk.
     let mut leave_as_is_map: FastHashMap<Arc<PathBuf>, Vec<FluentKey>> = FastHashMap::default();
     for item in leave_as_is {
         leave_as_is_map
@@ -326,36 +327,39 @@ fn write_results(
             .or_default()
             .push(item);
     }
+    for (path, keys) in sorted_fluent_keys.iter_mut() {
+        if let Some(misc_entries) = leave_as_is_map.remove(&lang_dir.join(path.as_ref())) {
+            keys.extend(misc_entries);
+        }
+    }
 
     let stored_keys_count = std::sync::atomic::AtomicUsize::new(0);
 
     // Every file is attempted even if one fails, so the error lists all of them at once.
     let mut write_errors = sorted_fluent_keys
-        .par_iter()
+        .into_par_iter()
         .filter_map(|(path, keys)| {
             let full_path = lang_dir.join(path.as_ref());
+            let entries = keys.len();
+            let messages = keys
+                .iter()
+                .filter(|k| matches!(k.entry.as_ref(), FluentEntry::Message(_)))
+                .count();
 
-            let misc_entries = leave_as_is_map.get(&full_path).cloned().unwrap_or_default();
-
-            let ftl_content = generate_ftl(keys, &misc_entries);
+            let ftl_content = generate_ftl(keys);
 
             if config.dry_run {
                 debug!(
-                    "[DRY-RUN] Would write to {}. {} keys found.",
-                    full_path.display(),
-                    keys.len()
+                    "[DRY-RUN] Would write to {}. {entries} entries.",
+                    full_path.display()
                 )
             } else if let Err(err) = write(&full_path, ftl_content, &config.line_endings) {
                 return Some(format!("{}: {err}", full_path.display()));
             } else {
-                debug!("Saved {}. {} keys.", full_path.display(), keys.len());
+                debug!("Saved {}. {entries} entries.", full_path.display());
             }
 
-            let count = keys
-                .iter()
-                .filter(|k| matches!(k.entry.as_ref(), FluentEntry::Message(_)))
-                .count();
-            stored_keys_count.fetch_add(count, std::sync::atomic::Ordering::Relaxed);
+            stored_keys_count.fetch_add(messages, std::sync::atomic::Ordering::Relaxed);
             None
         })
         .collect::<Vec<_>>();
@@ -623,6 +627,39 @@ i18n.page.title(_path="pages/main.ftl")
             fs::read_to_string(locale_path.join("new.ftl"))
                 .unwrap()
                 .contains("moved = moved")
+        );
+    }
+
+    #[test]
+    fn test_extract_preserves_standalone_comments_and_leaves_comment_only_files_alone() {
+        let temp = TempDir::new().unwrap();
+        let code_path = temp.path().join("code");
+        let locales_path = temp.path().join("locales");
+        let locale_path = locales_path.join("en");
+        fs::create_dir_all(&code_path).unwrap();
+        fs::create_dir_all(&locale_path).unwrap();
+
+        fs::write(code_path.join("app.py"), r#"i18n.get("greeting")"#).unwrap();
+        fs::write(
+            locale_path.join("_default.ftl"),
+            "### Resource\n\n# Standalone\n\ngreeting = Hello\n",
+        )
+        .unwrap();
+        // Would be re-formatted by the serializer if it were rewritten.
+        let notes = "# only comments\n## group\n";
+        fs::write(locale_path.join("notes.ftl"), notes).unwrap();
+
+        let stats = extract(config(code_path, locales_path)).unwrap();
+
+        // Comments do not count as stored keys.
+        assert_eq!(stats.ftl_stored_keys_count["en"], 1);
+        let default = fs::read_to_string(locale_path.join("_default.ftl")).unwrap();
+        assert!(default.contains("### Resource"), "{default}");
+        assert!(default.contains("# Standalone"), "{default}");
+        assert!(default.contains("greeting = Hello"), "{default}");
+        assert_eq!(
+            fs::read_to_string(locale_path.join("notes.ftl")).unwrap(),
+            notes
         );
     }
 

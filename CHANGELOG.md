@@ -14,6 +14,10 @@
   stored message needs, following the `fluent-bundle` resolver: function arguments count; `{ msg }` pulls in only the
   value of `msg` and `{ msg.attr }` only that attribute; nothing inside a term is a caller variable, because a term
   resolves variables against its own call arguments only.
+- `ftl extract` no longer merges the last two lines of an entry it comments out. A multiline message, a select
+  expression, a message with attributes or one with a comment above it (including the `# ftl-extract: ignore stale`
+  marker) used to end up as `#     Rule two.    Rule three.` or `# # ftl-extract: ignore stalestatus-ok = OK`, so the
+  commented copy could not be restored by uncommenting it. Every serialized line is now its own `# ` line.
 
 ### Behavior changes
 

@@ -203,6 +203,27 @@ column of the syntax error.
 
 Breaking change: `ftl untranslated` has been removed. Use `ftl check --check untranslated` instead.
 
+### 📁 Keys are matched per file, not just by name
+
+The `missing`, `stale`, and `kwargs` checks compare a key together with the `.ftl` file it belongs to, relative to the
+locale directory. A key that exists in the locale but lives in a different file than the code declares is reported
+**twice**: as `missing` in the file the code expects, and as `stale` in the file where it actually is.
+
+```python
+# Code says the key lives in pages/main.ftl
+i18n.get("page-title", _path="pages/main.ftl")
+```
+
+```ftl
+# locales/en/_default.ftl  ->  missing in pages/main.ftl, stale in _default.ftl
+page-title = Page title
+```
+
+This is intentional: `ftl extract` owns the file layout and always writes a key to the file named by `_path=` (or to
+the default file when `_path=` is absent). It surprises people who organised their locale files by hand. To fix it,
+either add the matching `_path=` argument in code, or run `ftl extract`, which moves the key to the expected file and
+comments out the old copy.
+
 ### ⚖️ Severities
 
 Every diagnostic is either an `error` or a `warn`. Errors mean the application is broken or will break at runtime;

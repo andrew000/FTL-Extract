@@ -146,13 +146,9 @@ fn process_language(
     config: &ExtractConfig,
     statistics: &mut ExtractionStatistics,
 ) -> Result<()> {
-    let (mut stored_fluent_keys, mut stored_terms, mut leave_as_is) =
+    let (mut stored_fluent_keys, stored_terms, mut leave_as_is) =
         import_ftl_from_dir(&config.locales_path, lang, statistics)?;
-
-    // Normalize paths relative to the language directory
     let lang_dir = config.locales_path.join(lang);
-    normalize_paths(&mut stored_fluent_keys, &lang_dir);
-    normalize_paths(&mut stored_terms, &lang_dir);
 
     let mut keys_to_comment: FastHashMap<String, FluentKey> = FastHashMap::default();
     let mut keys_to_add: FastHashMap<String, FluentKey> = FastHashMap::default();
@@ -257,13 +253,6 @@ fn process_language(
 
     Ok(())
 }
-fn normalize_paths(keys: &mut FastHashMap<String, FluentKey>, base: &Path) {
-    for key in keys.values_mut() {
-        if let Ok(stripped) = key.path.strip_prefix(base) {
-            key.path = Arc::new(stripped.to_path_buf());
-        }
-    }
-}
 fn handle_comments_and_junk(
     keys_to_comment: &mut FastHashMap<String, FluentKey>,
     keys_to_add: &mut FastHashMap<String, FluentKey>,
@@ -335,7 +324,7 @@ fn write_results(
             .push(item);
     }
     for (path, keys) in sorted_fluent_keys.iter_mut() {
-        if let Some(misc_entries) = leave_as_is_map.remove(&lang_dir.join(path.as_ref())) {
+        if let Some(misc_entries) = leave_as_is_map.remove(path) {
             keys.extend(misc_entries);
         }
     }
@@ -667,6 +656,36 @@ i18n.page.title(_path="pages/main.ftl")
         assert_eq!(
             fs::read_to_string(locale_path.join("notes.ftl")).unwrap(),
             notes
+        );
+    }
+
+    #[test]
+    fn test_extract_keeps_keys_in_nested_files_in_place() {
+        let temp = TempDir::new().unwrap();
+        let code_path = temp.path().join("code");
+        let locales_path = temp.path().join("locales");
+        let pages = locales_path.join("en").join("pages");
+        fs::create_dir_all(&code_path).unwrap();
+        fs::create_dir_all(&pages).unwrap();
+
+        fs::write(
+            code_path.join("app.py"),
+            r#"i18n.get("title", _path="pages")"#,
+        )
+        .unwrap();
+        fs::write(pages.join("_default.ftl"), "title = Main page\n").unwrap();
+
+        let stats = extract(config(code_path, locales_path)).unwrap();
+
+        assert_eq!(stats.ftl_keys_added["en"], 0);
+        assert_eq!(stats.ftl_keys_updated["en"], 0);
+        assert_eq!(stats.ftl_keys_commented["en"], 0);
+        assert_eq!(stats.ftl_stored_keys_count["en"], 1);
+        assert_eq!(
+            fs::read_to_string(pages.join("_default.ftl"))
+                .unwrap()
+                .trim(),
+            "title = Main page"
         );
     }
 

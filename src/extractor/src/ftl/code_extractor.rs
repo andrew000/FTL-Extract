@@ -56,12 +56,17 @@ fn find_py_files(search_path: &Path, exclude_matcher: &ExcludeMatcher) -> Vec<Py
         type_builder.select("py");
 
         let result_paths_parallel = Arc::new(Mutex::new(Vec::new()));
+        // `.gitignore` files inside `search_path` are honored with or without a git
+        // repository, as before. Registering the name as a custom ignore file (instead of
+        // `git_ignore(true)` + `require_git(false)`) lets the `ignore` crate skip its
+        // ancestor scan, see `common::ftl_files`.
         WalkBuilder::new(search_path)
             .parents(false)
             .ignore(false)
+            .git_ignore(false)
             .git_global(false)
             .git_exclude(false)
-            .require_git(false)
+            .add_custom_ignore_filename(".gitignore")
             .overrides(exclude_matcher.clone())
             .types(type_builder.build().unwrap())
             .build_parallel()
@@ -683,6 +688,27 @@ class Mock:
 
         let py_files = super::find_py_files(&code_path, &empty_exclude_matcher(&code_path));
         assert_eq!(py_files.len(), 3);
+    }
+
+    #[test]
+    fn test_find_py_files_honors_gitignore_without_a_git_repository() {
+        let temp = TempDir::new().unwrap();
+        let code_path = temp.path().join("py");
+        std::fs::create_dir_all(code_path.join("generated")).unwrap();
+        write_python_fixture(&code_path);
+        std::fs::write(code_path.join(".gitignore"), "generated/\n").unwrap();
+        std::fs::write(
+            code_path.join("generated").join("gen.py"),
+            r#"i18n.get("generated")"#,
+        )
+        .unwrap();
+        // Rules above `code_path` are not consulted.
+        std::fs::write(temp.path().join(".gitignore"), "*.py\n").unwrap();
+
+        let py_files = super::find_py_files(&code_path, &empty_exclude_matcher(&code_path));
+
+        assert_eq!(py_files.len(), 3);
+        assert!(py_files.iter().all(|file| !file.path.ends_with("gen.py")));
     }
 
     #[test]

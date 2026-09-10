@@ -30,6 +30,9 @@ Behaviour changes new in `0.12.0`:
 - A stored `.ftl` message or term that references a message or term that does not exist makes `ftl extract` exit `1`
   with a message naming the entry, the file and the reference. Previously this crashed with a stack trace.
 - In the JSON check report, `key` is `null` for file-level extraction errors and `severity` can now be `"warn"`.
+- `.gitignore` files inside the locales directory are honoured by `ftl extract` and `ftl check` whether or not the
+  project is a git repository (previously only inside one), and `.git/info/exclude` is no longer consulted. Nothing
+  above the locales directory or the code directory is read any more, which removes a directory scan per locale.
 
 ### Added
 

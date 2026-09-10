@@ -1,8 +1,10 @@
 use crate::args::CheckReportFormat;
 use crate::config::resolve_config_path;
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, bail};
+use check::{DiagnosticKind, Severity, SeverityOverrides};
 use clap::ValueEnum;
 use log::error;
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 pub(crate) fn write_output_file(path: &Path, content: String) -> std::io::Result<()> {
@@ -112,6 +114,54 @@ where
             })
         })
         .collect()
+}
+
+/// Merges per-check severity overrides from `pyproject.toml` (`severity = { stale = "error" }`)
+/// and the CLI (`--severity stale=error`). CLI values win over config values.
+pub(crate) fn severity_overrides(
+    cli: &[String],
+    config: Option<BTreeMap<String, String>>,
+) -> Result<SeverityOverrides> {
+    let mut overrides = SeverityOverrides::default();
+
+    for (kind, severity) in config.into_iter().flatten() {
+        overrides.set(
+            parse_severity_kind(&kind)?,
+            parse_severity_level(&severity)?,
+        );
+    }
+    for entry in cli {
+        let Some((kind, severity)) = entry.split_once('=') else {
+            bail!(
+                "Invalid `--severity` value `{entry}`. Expected `<check>=<severity>`, for example `stale=error`"
+            );
+        };
+        overrides.set(parse_severity_kind(kind)?, parse_severity_level(severity)?);
+    }
+
+    Ok(overrides)
+}
+
+fn parse_severity_kind(value: &str) -> Result<DiagnosticKind> {
+    DiagnosticKind::parse(value).with_context(|| {
+        let kinds = DiagnosticKind::ALL
+            .iter()
+            .map(|kind| kind.as_str())
+            .collect::<Vec<_>>()
+            .join(", ");
+        format!("Invalid `severity` check `{value}`. Expected one of: {kinds}")
+    })
+}
+
+fn parse_severity_level(value: &str) -> Result<Severity> {
+    Severity::parse(value).with_context(|| {
+        let levels = Severity::ALL
+            .iter()
+            .map(|severity| severity.as_str())
+            .collect::<Vec<_>>()
+            .join(", ");
+        format!("Invalid `severity` level `{value}`. Expected one of: {levels}")
+    })
 }
 
 pub(crate) fn exit_config_error(error: anyhow::Error) -> ! {
@@ -245,5 +295,58 @@ mod tests {
         )
         .unwrap_err();
         assert!(error.to_string().contains("Invalid `fail-on` value"));
+    }
+
+    #[test]
+    fn severity_overrides_merge_config_and_cli_with_cli_winning() {
+        let config = BTreeMap::from([
+            ("stale".to_string(), "error".to_string()),
+            ("missing".to_string(), "warn".to_string()),
+        ]);
+
+        let overrides = severity_overrides(
+            &["stale=warn".to_string(), "Syntax=WARN".to_string()],
+            Some(config),
+        )
+        .unwrap();
+
+        assert_eq!(overrides.get(DiagnosticKind::Stale), Some(Severity::Warn));
+        assert_eq!(overrides.get(DiagnosticKind::Missing), Some(Severity::Warn));
+        assert_eq!(overrides.get(DiagnosticKind::Syntax), Some(Severity::Warn));
+        assert_eq!(overrides.get(DiagnosticKind::Kwargs), None);
+        assert_eq!(
+            overrides.severity_for(DiagnosticKind::Kwargs),
+            Severity::Error
+        );
+    }
+
+    #[test]
+    fn severity_overrides_report_invalid_values() {
+        let error = severity_overrides(&["stale".to_string()], None).unwrap_err();
+        assert!(error.to_string().contains("Expected `<check>=<severity>`"));
+
+        let error = severity_overrides(&["bogus=error".to_string()], None).unwrap_err();
+        assert!(
+            error
+                .to_string()
+                .contains("Invalid `severity` check `bogus`")
+        );
+
+        let error = severity_overrides(&["stale=fatal".to_string()], None).unwrap_err();
+        assert!(
+            error
+                .to_string()
+                .contains("Invalid `severity` level `fatal`")
+        );
+
+        let config = BTreeMap::from([("stale".to_string(), "loud".to_string())]);
+        let error = severity_overrides(&[], Some(config)).unwrap_err();
+        assert!(
+            error
+                .to_string()
+                .contains("Invalid `severity` level `loud`")
+        );
+
+        assert!(severity_overrides(&[], None).unwrap().is_empty());
     }
 }

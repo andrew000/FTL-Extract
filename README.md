@@ -182,7 +182,11 @@ $ ftl check project_path/locales --code-path project_path/code_path -l uk --sugg
 - `--code-path` - path to Python code. Required for `--check missing`, `--check stale`, and `--check kwargs`.
 - `-l` or `--language` - check only selected locales. Can be passed multiple times.
 - `--suggest-from` - locale(s) used to suggest non-placeholder translations for missing items. Can be passed multiple times.
-- `--fail-on` - minimum diagnostic severity that should return exit code `1`, for example `--fail-on error`. `--fail-on warn` also fails on errors.
+- `--fail-on` - minimum diagnostic severity that should return exit code `1`. `--fail-on error` (the default) fails only on
+  errors; `--fail-on warn` fails on warnings and errors. Pass `--fail-on` with no value in `pyproject.toml`
+  (`fail-on = []`) to always exit `0`.
+- `--severity` - override the severity of a check, for example `--severity stale=error`. Can be passed multiple times.
+  See [Severities](#-severities) for the defaults.
 - `--report-path` - optional report file path for batch processing reports. If no extension is provided, `.txt` or `.json` is appended automatically based on `--report-format`.
 - `--report-format` - report file format: `terminal` or `json` (default: `json`).
 
@@ -198,6 +202,40 @@ checks, since their results cannot be trusted while such files exist. The report
 column of the syntax error.
 
 Breaking change: `ftl untranslated` has been removed. Use `ftl check --check untranslated` instead.
+
+### ⚖️ Severities
+
+Every diagnostic is either an `error` or a `warn`. Errors mean the application is broken or will break at runtime;
+warnings mean the translation catalogue is untidy. The defaults are:
+
+| Check          | Default severity | Why                                                             |
+|----------------|------------------|-----------------------------------------------------------------|
+| `syntax`       | `error`          | The `.ftl` file cannot be loaded at all.                        |
+| `references`   | `error`          | A message references a message or term that does not exist.    |
+| `missing`      | `error`          | Code uses a key that the locale does not provide.               |
+| `kwargs`       | `error`          | Code passes different variables than the message expects.       |
+| `extraction`   | `error`          | A Python file could not be analysed, so the other results are   |
+|                |                  | incomplete.                                                     |
+| `stale`        | `warn`           | The locale contains a key that code no longer uses.             |
+| `untranslated` | `warn`           | A message is still equal to its key.                            |
+
+With the default `--fail-on error`, a project that only has stale or untranslated keys exits `0` and reports
+`FTL check passed with warnings`. Use `--fail-on warn` to fail on warnings too, or change the severity of individual
+checks, on the command line:
+
+```shell
+$ ftl check project_path/locales --code-path project_path/code_path --severity stale=error --severity untranslated=warn
+```
+
+or in `pyproject.toml`:
+
+```toml
+[tool.ftl-extract.check]
+severity = { stale = "error", untranslated = "warn" }
+```
+
+Command-line overrides take precedence over `pyproject.toml`. Syntax errors always stop the remaining checks, even
+when their severity is set to `warn`, because the broken files cannot be analysed.
 
 ### Config examples for each check
 

@@ -1,6 +1,7 @@
 use anyhow::{Context, Result, bail};
 use clap::ValueEnum;
 use serde::Deserialize;
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::sync::LazyLock;
 
@@ -67,6 +68,8 @@ pub struct CheckPyprojectConfig {
     pub checks: Option<Vec<String>>,
     pub suggest_from: Option<Vec<String>>,
     pub fail_on: Option<Vec<String>>,
+    /// Per-check severity overrides, e.g. `severity = { stale = "error" }`.
+    pub severity: Option<BTreeMap<String, String>>,
     pub report_path: Option<PathBuf>,
     pub report_format: Option<String>,
 }
@@ -161,6 +164,10 @@ suggest-from = ["en"]
 fail-on = ["error"]
 report-path = "reports/ftl-check"
 report-format = "json"
+
+# Per-check severity overrides. Defaults: stale and untranslated are warnings,
+# everything else is an error.
+# severity = { stale = "error", untranslated = "warn" }
 
 # Check presets:
 # checks = ["all"]

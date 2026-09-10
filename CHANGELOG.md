@@ -28,9 +28,11 @@
   (`i18n.get("welcome", **data)` with `welcome = Welcome, { $name }!` used to become `welcome = welcome`, silently).
   Such a call can pass any variable, so the key's variables are unverifiable: `extract` leaves the stored message
   alone and `ftl check --check kwargs` skips the key, both logging
-  `key "welcome" is called with **kwargs at app/a.py:3:5; its variables cannot be verified` with `--verbose`. A new
-  key is still written with the explicit keyword arguments it was seen with, explicit keyword arguments are still
-  compared between calls of the same key, and the other checks treat the key as usual.
+  `key "welcome" is called with **kwargs at app/a.py:3:5; its variables cannot be verified` with `--verbose`. A call
+  with `**` never takes part in the `key-message-conflict` comparison either, so `i18n.get("welcome", name=x)` next
+  to `i18n.get("welcome", **data)` is one key: a new key is written with the variables of the first call without
+  `**` (or of the first `**` call when there is no other), only calls without `**` are compared with each other, and
+  the other checks treat the key as usual.
 
 ### Behavior changes
 - The placeholder `ftl extract` writes for a new key lists its variables sorted by name (`order = order{ $a }{ $b }`)

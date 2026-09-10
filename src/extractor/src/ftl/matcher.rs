@@ -59,13 +59,79 @@ impl FluentKey {
         }
     }
 
-    /// Records that `other`, another occurrence of the same key, passed `**kwargs`. The first
-    /// such call site is kept.
-    pub(crate) fn absorb_kwargs_unknown(&mut self, other: &FluentKey) {
-        if self.kwargs_unknown.is_none() {
-            self.kwargs_unknown = other.kwargs_unknown.clone();
-        }
+    /// Whether the call this key's variables come from passed `**kwargs`. `kwargs_unknown` is
+    /// the first `**` call site among all occurrences; it is this occurrence exactly when the
+    /// kept call is that site (a call without `**` always wins over one with it, see
+    /// [`merge_key_occurrence`]).
+    pub(crate) fn kept_call_has_double_star(&self) -> bool {
+        self.kwargs_unknown.is_some() && self.kwargs_unknown == self.source_location
     }
+}
+
+/// Merges `other`, another occurrence of the key that `kept` already holds, into `kept`, and
+/// returns the conflict if the two cannot be reconciled. Shared by the same-file and the
+/// cross-file merge so the rule exists once:
+///
+/// - different `_path=` values are a `KeyPathConflict`, whatever else the calls pass;
+/// - only calls without `**kwargs` are compared with each other: two of them with different
+///   keyword arguments are a `KeyMessageConflict`, a call with `**` never conflicts;
+/// - the kept variables (placeholder, cache, check report) come from the first call without
+///   `**` by location, or from the first `**` call if there is no other;
+/// - `kwargs_unknown` remembers the first `**` call site among all occurrences.
+pub(crate) fn merge_key_occurrence(
+    kept: &mut FluentKey,
+    other: FluentKey,
+) -> Option<ExtractionDiagnostic> {
+    if kept.path != other.path {
+        return Some(conflict_diagnostic(
+            ExtractionDiagnosticKind::KeyPathConflict,
+            kept,
+            &other,
+            path_conflict_message,
+        ));
+    }
+
+    let kept_star = kept.kept_call_has_double_star();
+    let other_star = other.kept_call_has_double_star();
+
+    let conflict = if kept_star || other_star {
+        None
+    } else {
+        match (kept.entry.as_ref(), other.entry.as_ref()) {
+            (FluentEntry::Message(a), FluentEntry::Message(b)) if a == b => None,
+            (FluentEntry::Message(_), FluentEntry::Message(_)) => Some(conflict_diagnostic(
+                ExtractionDiagnosticKind::KeyMessageConflict,
+                kept,
+                &other,
+                kwargs_conflict_message,
+            )),
+            _ => Some(conflict_diagnostic(
+                ExtractionDiagnosticKind::KeyTypeConflict,
+                kept,
+                &other,
+                type_conflict_message,
+            )),
+        }
+    };
+
+    let first_double_star = match (kept.kwargs_unknown.take(), other.kwargs_unknown.clone()) {
+        (Some(a), Some(b)) => Some(a.min(b)),
+        (a, b) => a.or(b),
+    };
+
+    // A call without `**` beats one with it; between equals the earlier call site is kept, so
+    // the result does not depend on the order the occurrences were seen in.
+    let other_wins = match (kept_star, other_star) {
+        (true, false) => true,
+        (false, true) => false,
+        _ => other.source_location < kept.source_location,
+    };
+    if other_wins && conflict.is_none() {
+        *kept = other;
+    }
+    kept.kwargs_unknown = first_double_star;
+
+    conflict
 }
 
 /// The placeholder message written for a key found in code: the key as text followed by one
@@ -405,44 +471,15 @@ impl<'a> I18nMatcher<'a> {
     fn add_fluent_key(&mut self, expr: &ruff_python_ast::ExprCall, key: String) {
         let new_fluent_key = self.create_fluent_key(expr, key);
 
-        let Some(existing) = self.fluent_keys.get_mut(&new_fluent_key.key) else {
-            self.fluent_keys
-                .insert(new_fluent_key.key.clone(), new_fluent_key);
-            return;
-        };
-        // The kept occurrence carries the `**kwargs` marker of every occurrence; explicit
-        // keyword arguments are still compared below, independently of it.
-        existing.absorb_kwargs_unknown(&new_fluent_key);
-        let existing = existing.clone();
-
-        if existing.path != new_fluent_key.path {
-            self.diagnostics.push(conflict_diagnostic(
-                ExtractionDiagnosticKind::KeyPathConflict,
-                &existing,
-                &new_fluent_key,
-                path_conflict_message,
-            ));
-            return;
-        }
-
-        match (existing.entry.as_ref(), new_fluent_key.entry.as_ref()) {
-            (FluentEntry::Message(existing_message), FluentEntry::Message(new_message)) => {
-                if existing_message != new_message {
-                    self.diagnostics.push(conflict_diagnostic(
-                        ExtractionDiagnosticKind::KeyMessageConflict,
-                        &existing,
-                        &new_fluent_key,
-                        kwargs_conflict_message,
-                    ));
+        match self.fluent_keys.get_mut(&new_fluent_key.key) {
+            Some(kept) => {
+                if let Some(conflict) = merge_key_occurrence(kept, new_fluent_key) {
+                    self.diagnostics.push(conflict);
                 }
             }
-            _ => {
-                self.diagnostics.push(conflict_diagnostic(
-                    ExtractionDiagnosticKind::KeyTypeConflict,
-                    &existing,
-                    &new_fluent_key,
-                    type_conflict_message,
-                ));
+            None => {
+                self.fluent_keys
+                    .insert(new_fluent_key.key.clone(), new_fluent_key);
             }
         }
     }
@@ -605,6 +642,11 @@ mod tests {
             diagnostics[0].message,
             "Fluent key k is used with different keyword arguments: a, b and a, c"
         );
+        // The `**` call is neither compared nor named.
+        assert_eq!(
+            diagnostics[0].locations,
+            vec![location(1, 1), location(3, 1)]
+        );
         assert_eq!(keys["k"].kwargs_unknown, Some(location(2, 1)));
     }
 
@@ -615,5 +657,64 @@ mod tests {
         assert!(diagnostics.is_empty(), "{diagnostics:?}");
         assert_eq!(keys.len(), 1);
         assert_eq!(keys["k"].kwargs_unknown, None);
+    }
+
+    #[test]
+    fn test_explicit_call_and_double_star_call_are_one_key() {
+        let (keys, diagnostics) =
+            run("i18n.get(\"welcome\", name=x)\ni18n.get(\"welcome\", **data)\n");
+
+        assert!(diagnostics.is_empty(), "{diagnostics:?}");
+        assert_eq!(keys.len(), 1);
+        assert_eq!(kwargs_from_key(&keys["welcome"]), vec!["name"]);
+        assert_eq!(keys["welcome"].source_location, Some(location(1, 1)));
+        assert_eq!(keys["welcome"].kwargs_unknown, Some(location(2, 1)));
+        assert!(!keys["welcome"].kept_call_has_double_star());
+    }
+
+    #[test]
+    fn test_explicit_call_wins_even_when_the_double_star_call_comes_first() {
+        let (keys, diagnostics) =
+            run("i18n.get(\"welcome\", **data)\ni18n.get(\"welcome\", name=x)\n");
+
+        assert!(diagnostics.is_empty(), "{diagnostics:?}");
+        assert_eq!(kwargs_from_key(&keys["welcome"]), vec!["name"]);
+        assert_eq!(keys["welcome"].source_location, Some(location(2, 1)));
+        assert_eq!(keys["welcome"].kwargs_unknown, Some(location(1, 1)));
+        assert!(!keys["welcome"].kept_call_has_double_star());
+    }
+
+    #[test]
+    fn test_two_partial_double_star_calls_keep_the_first_by_location() {
+        let (keys, diagnostics) =
+            run("i18n.get(\"k\", b=2, **data)\ni18n.get(\"k\", a=1, **data)\n");
+
+        assert!(diagnostics.is_empty(), "{diagnostics:?}");
+        assert_eq!(kwargs_from_key(&keys["k"]), vec!["b"]);
+        assert_eq!(keys["k"].source_location, Some(location(1, 1)));
+        assert_eq!(keys["k"].kwargs_unknown, Some(location(1, 1)));
+        assert!(keys["k"].kept_call_has_double_star());
+    }
+
+    #[test]
+    fn test_two_double_star_only_calls_have_no_variables() {
+        let (keys, diagnostics) = run("i18n.get(\"k\", **data)\ni18n.get(\"k\", **other)\n");
+
+        assert!(diagnostics.is_empty(), "{diagnostics:?}");
+        assert!(kwargs_from_key(&keys["k"]).is_empty());
+        assert_eq!(keys["k"].kwargs_unknown, Some(location(1, 1)));
+        assert!(keys["k"].kept_call_has_double_star());
+    }
+
+    #[test]
+    fn test_path_conflicts_ignore_double_star() {
+        let (_, diagnostics) =
+            run("i18n.get(\"k\", _path=\"one.ftl\", **data)\ni18n.get(\"k\", _path=\"two.ftl\")\n");
+
+        assert_eq!(diagnostics.len(), 1);
+        assert_eq!(
+            diagnostics[0].kind,
+            ExtractionDiagnosticKind::KeyPathConflict
+        );
     }
 }

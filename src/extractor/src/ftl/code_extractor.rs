@@ -5,10 +5,7 @@ use crate::ftl::cache::{
 use crate::ftl::diagnostics::{
     CodeLocation, ExtractedCode, ExtractedFluentKey, ExtractionDiagnostic, ExtractionDiagnosticKind,
 };
-use crate::ftl::matcher::{
-    FluentEntry, FluentKey, I18nMatcher, conflict_diagnostic, kwargs_conflict_message,
-    path_conflict_message, type_conflict_message,
-};
+use crate::ftl::matcher::{FluentEntry, FluentKey, I18nMatcher, merge_key_occurrence};
 use crate::ftl::utils::{FastHashMap, FastHashSet};
 use anyhow::Result;
 use common::LineIndex;
@@ -274,38 +271,8 @@ fn merge_fluent_key(
 ) {
     match target.entry(key) {
         Entry::Occupied(mut entry) => {
-            // The kept occurrence carries the `**kwargs` marker of every occurrence; explicit
-            // keyword arguments are still compared below, independently of it.
-            entry.get_mut().absorb_kwargs_unknown(&val);
-            let existing_key: &FluentKey = entry.get();
-            if existing_key.path != val.path {
-                diagnostics.push(conflict_diagnostic(
-                    ExtractionDiagnosticKind::KeyPathConflict,
-                    existing_key,
-                    &val,
-                    path_conflict_message,
-                ));
-                return;
-            }
-
-            match (existing_key.entry.as_ref(), val.entry.as_ref()) {
-                (FluentEntry::Message(a), FluentEntry::Message(b)) if a != b => {
-                    diagnostics.push(conflict_diagnostic(
-                        ExtractionDiagnosticKind::KeyMessageConflict,
-                        existing_key,
-                        &val,
-                        kwargs_conflict_message,
-                    ));
-                }
-                (a, b) if a != b => {
-                    diagnostics.push(conflict_diagnostic(
-                        ExtractionDiagnosticKind::KeyTypeConflict,
-                        existing_key,
-                        &val,
-                        type_conflict_message,
-                    ));
-                }
-                _ => {}
+            if let Some(conflict) = merge_key_occurrence(entry.get_mut(), val) {
+                diagnostics.push(conflict);
             }
         }
         Entry::Vacant(entry) => {
@@ -1435,6 +1402,134 @@ i18n.get("ok")
 
         for _ in 0..7 {
             assert_eq!(run(), first);
+        }
+    }
+
+    #[test]
+    fn test_double_star_calls_across_files_never_conflict_and_keep_the_explicit_call() {
+        // (a.py, b.py, expected kwargs, file whose call is kept, file with the first `**`)
+        let cases: [(&str, &str, &[&str], &str, &str); 4] = [
+            (
+                r#"i18n.get("welcome", name=x)"#,
+                r#"i18n.get("welcome", **data)"#,
+                &["name"],
+                "a.py",
+                "b.py",
+            ),
+            (
+                r#"i18n.get("welcome", **data)"#,
+                r#"i18n.get("welcome", name=x)"#,
+                &["name"],
+                "b.py",
+                "a.py",
+            ),
+            (
+                r#"i18n.get("welcome", b=2, **data)"#,
+                r#"i18n.get("welcome", a=1, **data)"#,
+                &["b"],
+                "a.py",
+                "a.py",
+            ),
+            (
+                r#"i18n.get("welcome", **data)"#,
+                r#"i18n.get("welcome", **other)"#,
+                &[],
+                "a.py",
+                "a.py",
+            ),
+        ];
+
+        for (a, b, kwargs, kept_in, double_star_in) in cases {
+            let temp = TempDir::new().unwrap();
+            let code_dir = temp.path().join("py");
+            std::fs::create_dir_all(&code_dir).unwrap();
+            std::fs::write(code_dir.join("a.py"), a).unwrap();
+            std::fs::write(code_dir.join("b.py"), b).unwrap();
+
+            // The parallel fold can reduce either file first; the result must not depend on it.
+            for _ in 0..5 {
+                let extracted = super::extract_code_with_diagnostics(
+                    &code_dir,
+                    I18N_ONLY.clone(),
+                    FastHashSet::default(),
+                    &FastHashSet::default(),
+                    FastHashSet::default(),
+                    FastHashSet::default(),
+                    &PathBuf::from("_default.ftl"),
+                )
+                .unwrap();
+
+                assert!(
+                    extracted.diagnostics.is_empty(),
+                    "[{a} / {b}] {:?}",
+                    extracted.diagnostics
+                );
+                assert_eq!(extracted.keys.len(), 1, "[{a} / {b}]");
+                let key = &extracted.keys[0];
+                assert_eq!(key.kwargs, kwargs, "[{a} / {b}]");
+                assert_eq!(
+                    key.code_location.as_ref().unwrap().path,
+                    code_dir.join(kept_in),
+                    "[{a} / {b}] kept call"
+                );
+                assert_eq!(
+                    key.kwargs_unknown.as_ref().unwrap().path,
+                    code_dir.join(double_star_in),
+                    "[{a} / {b}] first ** call"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn test_explicit_calls_still_conflict_across_files_next_to_a_double_star_call() {
+        let temp = TempDir::new().unwrap();
+        let code_dir = temp.path().join("py");
+        std::fs::create_dir_all(&code_dir).unwrap();
+        std::fs::write(code_dir.join("a.py"), r#"i18n.get("order", a=1, b=2)"#).unwrap();
+        std::fs::write(code_dir.join("b.py"), r#"i18n.get("order", **data)"#).unwrap();
+        std::fs::write(code_dir.join("c.py"), r#"i18n.get("order", a=1, c=3)"#).unwrap();
+
+        for _ in 0..5 {
+            let extracted = super::extract_code_with_diagnostics(
+                &code_dir,
+                I18N_ONLY.clone(),
+                FastHashSet::default(),
+                &FastHashSet::default(),
+                FastHashSet::default(),
+                FastHashSet::default(),
+                &PathBuf::from("_default.ftl"),
+            )
+            .unwrap();
+
+            // Only the two explicit calls take part; `b.py` is neither named nor a side.
+            assert_eq!(
+                extracted.diagnostics.len(),
+                1,
+                "{:?}",
+                extracted.diagnostics
+            );
+            let diagnostic = &extracted.diagnostics[0];
+            assert_eq!(
+                diagnostic.kind,
+                ExtractionDiagnosticKind::KeyMessageConflict
+            );
+            assert_eq!(
+                diagnostic.message,
+                "Fluent key order is used with different keyword arguments: a, b and a, c"
+            );
+            assert_eq!(
+                diagnostic
+                    .locations
+                    .iter()
+                    .map(|location| location.path.clone())
+                    .collect::<Vec<_>>(),
+                vec![code_dir.join("a.py"), code_dir.join("c.py")]
+            );
+            assert_eq!(
+                extracted.keys[0].kwargs_unknown.as_ref().unwrap().path,
+                code_dir.join("b.py")
+            );
         }
     }
 }

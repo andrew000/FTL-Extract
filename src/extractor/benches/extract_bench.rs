@@ -49,8 +49,10 @@ fn bench_500keys_1lang(c: &mut Criterion) {
                 );
                 (config, tmp)
             },
-            |(config, _tmp)| {
+            // Hand the temp dir back so Criterion drops it outside the timed region.
+            |(config, tmp)| {
                 extract(config).unwrap();
+                tmp
             },
         );
     });
@@ -69,8 +71,10 @@ fn bench_500keys_5langs(c: &mut Criterion) {
                 );
                 (config, tmp)
             },
-            |(config, _tmp)| {
+            // Hand the temp dir back so Criterion drops it outside the timed region.
+            |(config, tmp)| {
                 extract(config).unwrap();
+                tmp
             },
         );
     });
@@ -93,8 +97,10 @@ fn bench_500keys_10langs(c: &mut Criterion) {
                 );
                 (config, tmp)
             },
-            |(config, _tmp)| {
+            // Hand the temp dir back so Criterion drops it outside the timed region.
+            |(config, tmp)| {
                 extract(config).unwrap();
+                tmp
             },
         );
     });
@@ -117,8 +123,10 @@ fn bench_2000keys_10langs(c: &mut Criterion) {
                 );
                 (config, tmp)
             },
-            |(config, _tmp)| {
+            // Hand the temp dir back so Criterion drops it outside the timed region.
+            |(config, tmp)| {
                 extract(config).unwrap();
+                tmp
             },
         );
     });

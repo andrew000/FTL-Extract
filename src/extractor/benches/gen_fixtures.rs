@@ -14,7 +14,7 @@ pub fn generate_py_file(n: usize) -> String {
 pub fn generate_ftl_file(n: usize) -> String {
     let mut s = String::with_capacity(n * 60);
     for i in 0..n {
-        writeln!(s, "key-{i} = key-{i} {{ $kwarg_{i} }}", i = i).unwrap();
+        writeln!(s, "key_{i} = key_{i} {{ $kwarg_{i} }}", i = i).unwrap();
     }
     s
 }

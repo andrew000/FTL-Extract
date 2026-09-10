@@ -536,7 +536,7 @@ i18n.page.title(_path="pages/main.ftl")
         assert_eq!(first_stats.ftl_keys_added["en"], 2);
         assert!(
             cache_path
-                .join(format!("extract-{}-v2.bin", env!("CARGO_PKG_VERSION")))
+                .join(format!("extract-{}-v3.bin", env!("CARGO_PKG_VERSION")))
                 .exists()
         );
 

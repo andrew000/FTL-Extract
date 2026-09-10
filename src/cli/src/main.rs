@@ -83,6 +83,7 @@ fn main() {
             cache,
             cache_path,
             clear_cache,
+            allow_parse_errors,
         }) => {
             let config_source = project_config.as_ref();
             let pyproject = config_source
@@ -197,6 +198,8 @@ fn main() {
                     || pyproject.clear_cache.unwrap_or(false),
                 cache_path,
                 clear_cache: clear_cache || pyproject.clear_cache.unwrap_or(false),
+                allow_parse_errors: allow_parse_errors
+                    || pyproject.allow_parse_errors.unwrap_or(false),
             };
 
             let start_time = std::time::Instant::now();

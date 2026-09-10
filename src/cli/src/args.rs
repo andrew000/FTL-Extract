@@ -100,6 +100,10 @@ pub(crate) enum Commands {
         /// Clear the extraction cache before running
         #[arg(long, default_value_t = false)]
         clear_cache: bool,
+
+        /// Skip Python files that cannot be read or parsed instead of aborting
+        #[arg(long, default_value_t = false)]
+        allow_parse_errors: bool,
     },
     Stub {
         /// Path to the FTL files directory

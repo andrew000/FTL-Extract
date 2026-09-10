@@ -199,7 +199,7 @@ pub struct MissingKey {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CodeExtractionError {
-    pub key: String,
+    pub key: Option<String>,
     pub message: String,
     pub locations: Vec<SourceLocation>,
 }
@@ -393,7 +393,7 @@ impl From<CheckMissingResult> for CheckResult {
             severity: Severity::Error,
             kind: DiagnosticKind::Extraction,
             locale: None,
-            key: Some(item.key),
+            key: item.key,
             ftl_location: None,
             code_location: item.locations.first().cloned(),
             message: item.message,
@@ -439,7 +439,7 @@ impl From<CheckStaleResult> for CheckResult {
             severity: Severity::Error,
             kind: DiagnosticKind::Extraction,
             locale: None,
-            key: Some(item.key),
+            key: item.key,
             ftl_location: None,
             code_location: item.locations.first().cloned(),
             message: item.message,
@@ -485,7 +485,7 @@ impl From<CheckKwargsResult> for CheckResult {
             severity: Severity::Error,
             kind: DiagnosticKind::Extraction,
             locale: None,
-            key: Some(item.key),
+            key: item.key,
             ftl_location: None,
             code_location: item.locations.first().cloned(),
             message: item.message,

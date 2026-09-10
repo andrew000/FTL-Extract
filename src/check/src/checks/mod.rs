@@ -27,24 +27,23 @@ use crate::types::{
     CheckLocaleConfig, CheckMissingResult, CheckStaleResult, CodeExtractionError,
 };
 use anyhow::{Result, bail};
-use extractor::ftl::code_extractor::{build_exclude_matcher, extract_code_with_diagnostics_cached};
+use extractor::ftl::code_extractor::extract_code_with_diagnostics_cached;
 use extractor::ftl::diagnostics::ExtractedCode;
 use std::path::{Path, PathBuf};
 
 pub fn extract_check_code(config: CheckCodeConfig) -> Result<ExtractedCode> {
-    let exclude_matcher = build_exclude_matcher(&config.code_path, &config.exclude_dirs)?;
-    Ok(extract_code_with_diagnostics_cached(
+    extract_code_with_diagnostics_cached(
         &config.code_path,
         config.i18n_keys,
         config.i18n_keys_prefix,
-        &exclude_matcher,
+        &config.exclude_dirs,
         config.ignore_attributes,
         config.ignore_kwargs,
         &config.default_ftl_file,
         config.cache,
         config.cache_path.as_deref(),
         config.clear_cache,
-    ))
+    )
 }
 
 pub fn code_extraction_errors(extracted: &ExtractedCode) -> Vec<CodeExtractionError> {

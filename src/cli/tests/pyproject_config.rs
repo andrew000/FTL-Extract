@@ -832,3 +832,111 @@ report-format = "json"
         1
     );
 }
+
+#[test]
+fn extract_refuses_to_write_when_python_file_is_broken() {
+    let temp = TempDir::new().unwrap();
+    write(&temp.path().join("code/good.py"), r#"i18n.get("hello")"#);
+    write(&temp.path().join("code/broken.py"), "i18n.get(\"old\"\n");
+    write(&temp.path().join("locales/en/_default.ftl"), "old = Old\n");
+
+    let output = ftl()
+        .arg("extract")
+        .arg(temp.path().join("code"))
+        .arg(temp.path().join("locales"))
+        .output()
+        .unwrap();
+
+    assert_eq!(output.status.code(), Some(1));
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("Extraction aborted"), "{stderr}");
+    assert!(stderr.contains("[parse-error]"), "{stderr}");
+    assert!(stderr.contains("broken.py"), "{stderr}");
+    assert!(stderr.contains("--allow-parse-errors"), "{stderr}");
+    assert_eq!(
+        std::fs::read_to_string(temp.path().join("locales/en/_default.ftl")).unwrap(),
+        "old = Old\n"
+    );
+}
+
+#[test]
+fn extract_allow_parse_errors_flag_continues_past_broken_files() {
+    let temp = TempDir::new().unwrap();
+    write(&temp.path().join("code/good.py"), r#"i18n.get("hello")"#);
+    write(&temp.path().join("code/broken.py"), "i18n.get(");
+
+    let output = ftl()
+        .arg("extract")
+        .arg(temp.path().join("code"))
+        .arg(temp.path().join("locales"))
+        .arg("--allow-parse-errors")
+        .output()
+        .unwrap();
+
+    assert_success(&output);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("Skipping Python file"), "{stderr}");
+    assert!(stderr.contains("broken.py"), "{stderr}");
+    let content = std::fs::read_to_string(temp.path().join("locales/en/_default.ftl")).unwrap();
+    assert!(content.contains("hello = hello"));
+}
+
+#[test]
+fn extract_allow_parse_errors_reads_from_pyproject() {
+    let temp = TempDir::new().unwrap();
+    write(&temp.path().join("code/good.py"), r#"i18n.get("hello")"#);
+    write(&temp.path().join("code/broken.py"), "i18n.get(");
+    write(
+        &pyproject(&temp),
+        r#"
+[tool.ftl-extract.extract]
+code-path = "code"
+locales-path = "locales"
+allow-parse-errors = true
+"#,
+    );
+
+    let output = ftl()
+        .arg("--config")
+        .arg(pyproject(&temp))
+        .arg("extract")
+        .output()
+        .unwrap();
+
+    assert_success(&output);
+    assert!(temp.path().join("locales/en/_default.ftl").exists());
+}
+
+#[test]
+fn check_reports_python_parse_errors_as_extraction_diagnostics() {
+    let temp = TempDir::new().unwrap();
+    write(&temp.path().join("code/good.py"), r#"i18n.get("hello")"#);
+    write(&temp.path().join("code/broken.py"), "i18n.get(\"old\"\n");
+    write(
+        &temp.path().join("locales/uk/_default.ftl"),
+        "hello = Hello\nold = Old\n",
+    );
+
+    let output = ftl()
+        .arg("check")
+        .arg(temp.path().join("locales"))
+        .arg("--code-path")
+        .arg(temp.path().join("code"))
+        .arg("--check")
+        .arg("stale")
+        .arg("--report-path")
+        .arg(temp.path().join("reports/ftl-check"))
+        .output()
+        .unwrap();
+
+    assert_eq!(output.status.code(), Some(1));
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("error[extraction]"), "{stdout}");
+    assert!(stdout.contains("Failed to parse"), "{stdout}");
+    assert!(stdout.contains("broken.py"), "{stdout}");
+
+    let report = std::fs::read_to_string(temp.path().join("reports/ftl-check.json")).unwrap();
+    assert!(report.contains(r#""kind": "extraction""#));
+    assert!(report.contains(r#""key": null"#));
+    assert!(report.contains("broken.py"));
+}

@@ -1,5 +1,6 @@
 use crate::types::{CheckResult, Diagnostic, DiagnosticKind, Severity};
 use std::collections::BTreeMap;
+use std::fmt::Write as _;
 
 pub fn render_check_json(result: &CheckResult) -> String {
     let diagnostics = result
@@ -56,7 +57,7 @@ pub fn render_check_terminal(result: &CheckResult) -> String {
         if !summaries.is_empty() {
             out.push_str("\n\nChecks:\n");
             for summary in summaries {
-                out.push_str(&format!("- {}: passed\n", summary.kind.as_str()));
+                let _ = writeln!(out, "- {}: passed", summary.kind.as_str());
             }
         }
         return out;
@@ -79,29 +80,31 @@ pub fn render_check_terminal(result: &CheckResult) -> String {
     let mut out = format!("FTL check failed: {problem_count} {noun}\n");
 
     for (locale, diagnostics) in by_locale {
-        out.push_str(&format!("\nLocale: {locale}\n"));
+        let _ = writeln!(out, "\nLocale: {locale}");
         for diagnostic in diagnostics {
             out.push('\n');
-            out.push_str(&format!(
-                "{}[{}]: {}\n",
+            let _ = writeln!(
+                out,
+                "{}[{}]: {}",
                 diagnostic.severity.as_str(),
                 diagnostic.kind.as_str(),
                 diagnostic.message
-            ));
+            );
             if let Some(location) = &diagnostic.ftl_location {
                 let column = location
                     .column
                     .map(|column| format!(":{column}"))
                     .unwrap_or_default();
                 if let Some(line) = location.line {
-                    out.push_str(&format!(
-                        "  file: {}:{}{}\n",
+                    let _ = writeln!(
+                        out,
+                        "  file: {}:{}{}",
                         location.path.display(),
                         line,
                         column
-                    ));
+                    );
                 } else {
-                    out.push_str(&format!("  file: {}\n", location.path.display()));
+                    let _ = writeln!(out, "  file: {}", location.path.display());
                 }
             }
             if let Some(location) = &diagnostic.code_location {
@@ -110,41 +113,45 @@ pub fn render_check_terminal(result: &CheckResult) -> String {
                     .map(|column| format!(":{column}"))
                     .unwrap_or_default();
                 if let Some(line) = location.line {
-                    out.push_str(&format!(
-                        "  code: {}:{}{}\n",
+                    let _ = writeln!(
+                        out,
+                        "  code: {}:{}{}",
                         location.path.display(),
                         line,
                         column
-                    ));
+                    );
                 } else {
-                    out.push_str(&format!("  code: {}\n", location.path.display()));
+                    let _ = writeln!(out, "  code: {}", location.path.display());
                 }
             }
             for suggestion in &diagnostic.suggestions {
                 let key = diagnostic.key.as_deref().unwrap_or("");
-                out.push_str(&format!(
-                    "  suggestion[{}]: {} = {}\n",
+                let _ = writeln!(
+                    out,
+                    "  suggestion[{}]: {} = {}",
                     suggestion.locale, key, suggestion.value
-                ));
+                );
             }
             if !diagnostic.missing_kwargs.is_empty() {
-                out.push_str(&format!(
-                    "  missing in code: {}\n",
+                let _ = writeln!(
+                    out,
+                    "  missing in code: {}",
                     diagnostic.missing_kwargs.join(", ")
-                ));
+                );
             }
             if !diagnostic.unused_kwargs.is_empty() {
-                out.push_str(&format!(
-                    "  unused in ftl: {}\n",
+                let _ = writeln!(
+                    out,
+                    "  unused in ftl: {}",
                     diagnostic.unused_kwargs.join(", ")
-                ));
+                );
             }
         }
     }
 
     out.push_str("\nSummary:\n");
-    out.push_str(&format!("- Errors: {}\n", result.error_count()));
-    out.push_str(&format!("- Warnings: {}\n", result.warning_count()));
+    let _ = writeln!(out, "- Errors: {}", result.error_count());
+    let _ = writeln!(out, "- Warnings: {}", result.warning_count());
     out.push_str("- Checks:\n");
     for summary in check_summaries(result) {
         let status = if summary.errors == 0 && summary.warnings == 0 {
@@ -155,7 +162,7 @@ pub fn render_check_terminal(result: &CheckResult) -> String {
                 summary.errors, summary.warnings
             )
         };
-        out.push_str(&format!("  - {}: {}\n", summary.kind.as_str(), status));
+        let _ = writeln!(out, "  - {}: {}", summary.kind.as_str(), status);
     }
 
     out

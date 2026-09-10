@@ -47,6 +47,7 @@ pub struct ExtractPyprojectConfig {
     pub cache: Option<bool>,
     pub cache_path: Option<PathBuf>,
     pub clear_cache: Option<bool>,
+    pub allow_parse_errors: Option<bool>,
 }
 
 #[derive(Debug, Clone, Default, Deserialize)]

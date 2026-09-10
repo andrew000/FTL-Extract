@@ -32,6 +32,7 @@ fn make_config(code_path: PathBuf, locales_path: PathBuf, languages: Vec<&str>) 
         cache: false,
         cache_path: None,
         clear_cache: false,
+        allow_parse_errors: false,
     }
 }
 

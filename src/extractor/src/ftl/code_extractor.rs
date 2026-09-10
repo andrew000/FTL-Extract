@@ -5,8 +5,8 @@ use crate::ftl::cache::{
 use crate::ftl::diagnostics::{
     CodeLocation, ExtractedCode, ExtractedFluentKey, ExtractionDiagnostic, ExtractionDiagnosticKind,
 };
-use crate::ftl::matcher::{FluentEntry, FluentKey, I18nMatcher};
-use crate::ftl::utils::{ExtractionStatistics, FastHashMap, FastHashSet};
+use crate::ftl::matcher::{FluentEntry, FluentKey, I18nMatcher, LineIndex};
+use crate::ftl::utils::{FastHashMap, FastHashSet};
 use anyhow::Result;
 use ignore::overrides::{Override, OverrideBuilder};
 use ignore::types::TypesBuilder;
@@ -104,123 +104,116 @@ fn find_py_files(search_path: &Path, exclude_matcher: &ExcludeMatcher) -> Vec<Py
     result_paths.sort_by(|a, b| a.path.cmp(&b.path));
     result_paths
 }
-fn parse_file(
+
+/// Matcher settings shared by every parsed Python file.
+#[derive(Clone, Copy)]
+struct ParseOptions<'a> {
+    i18n_keys: &'a FastHashSet<String>,
+    i18n_keys_prefix: &'a FastHashSet<String>,
+    ignore_attributes: &'a FastHashSet<String>,
+    ignore_kwargs: &'a FastHashSet<String>,
+    default_ftl_file: &'a Path,
+}
+
+type ParsedFile = (FastHashMap<String, FluentKey>, Vec<ExtractionDiagnostic>);
+
+fn file_diagnostic(
+    kind: ExtractionDiagnosticKind,
     file: &Path,
-    file_size: u64,
-    i18n_keys: &FastHashSet<String>,
-    i18n_keys_prefix: &FastHashSet<String>,
-    ignore_attributes: &FastHashSet<String>,
-    ignore_kwargs: &FastHashSet<String>,
-    default_ftl_file: &Path,
-) -> FastHashMap<String, FluentKey> {
+    message: String,
+    (line, column): (usize, usize),
+) -> ExtractionDiagnostic {
+    ExtractionDiagnostic {
+        kind,
+        key: None,
+        message,
+        locations: vec![CodeLocation {
+            path: file.to_path_buf(),
+            line,
+            column,
+        }],
+    }
+}
+
+fn read_error(file: &Path, err: &std::io::Error) -> ExtractionDiagnostic {
+    file_diagnostic(
+        ExtractionDiagnosticKind::ReadError,
+        file,
+        format!("Failed to read {}: {err}", file.display()),
+        (1, 1),
+    )
+}
+
+fn parse_file(file: &Path, file_size: u64, options: ParseOptions<'_>) -> ParsedFile {
     if file_size == 0 {
-        return FastHashMap::default();
+        return (FastHashMap::default(), Vec::new());
     }
 
     let file_handle = match fs::File::open(file) {
         Ok(f) => f,
-        Err(_) => return FastHashMap::default(),
+        Err(err) => return (FastHashMap::default(), vec![read_error(file, &err)]),
     };
 
     // Unsafe is required for mmap (file could change under us), but standard for tools like this.
     let mmap = unsafe {
         match Mmap::map(&file_handle) {
             Ok(m) => m,
-            Err(_) => return FastHashMap::default(),
+            Err(err) => return (FastHashMap::default(), vec![read_error(file, &err)]),
         }
     };
 
     // Quick check: does the file contain any of the i18n keys or prefixes?
-    let has_key = i18n_keys
+    let has_key = options
+        .i18n_keys
         .iter()
-        .chain(i18n_keys_prefix.iter())
+        .chain(options.i18n_keys_prefix.iter())
         .any(|key| memmem::find(&mmap, key.as_bytes()).is_some());
 
     if !has_key {
-        return FastHashMap::default();
+        return (FastHashMap::default(), Vec::new());
     }
 
     let code = match std::str::from_utf8(&mmap) {
         Ok(c) => c,
-        Err(_) => {
-            error!(target: "extractor:code", "Bad UTF-8 in {}", file.display());
-            return FastHashMap::default();
+        Err(err) => {
+            // Everything before `valid_up_to` is guaranteed to be valid UTF-8.
+            let valid = std::str::from_utf8(&mmap[..err.valid_up_to()]).unwrap_or_default();
+            let location = LineIndex::new(valid).line_column(valid, valid.len());
+            return (
+                FastHashMap::default(),
+                vec![file_diagnostic(
+                    ExtractionDiagnosticKind::InvalidUtf8,
+                    file,
+                    format!("Invalid UTF-8 in {}: {err}", file.display()),
+                    location,
+                )],
+            );
         }
     };
     let module = match ruff_python_parser::parse_module(code) {
         Ok(m) => m,
-        Err(_) => return FastHashMap::default(),
+        Err(err) => {
+            let location = LineIndex::new(code).line_column(code, err.location.start().to_usize());
+            return (
+                FastHashMap::default(),
+                vec![file_diagnostic(
+                    ExtractionDiagnosticKind::ParseError,
+                    file,
+                    format!("Failed to parse {}: {}", file.display(), err.error),
+                    location,
+                )],
+            );
+        }
     };
 
     let mut matcher = I18nMatcher::new(
         file.to_path_buf(),
-        default_ftl_file.to_path_buf(),
-        i18n_keys,
-        i18n_keys_prefix,
-        ignore_attributes,
-        ignore_kwargs,
-    );
-
-    matcher.visit_body(module.suite());
-
-    matcher.fluent_keys
-}
-
-fn parse_file_collecting(
-    file: &Path,
-    file_size: u64,
-    i18n_keys: &FastHashSet<String>,
-    i18n_keys_prefix: &FastHashSet<String>,
-    ignore_attributes: &FastHashSet<String>,
-    ignore_kwargs: &FastHashSet<String>,
-    default_ftl_file: &Path,
-) -> (FastHashMap<String, FluentKey>, Vec<ExtractionDiagnostic>) {
-    if file_size == 0 {
-        return (FastHashMap::default(), Vec::new());
-    }
-
-    let file_handle = match fs::File::open(file) {
-        Ok(f) => f,
-        Err(_) => return (FastHashMap::default(), Vec::new()),
-    };
-
-    // Unsafe is required for mmap (file could change under us), but standard for tools like this.
-    let mmap = unsafe {
-        match Mmap::map(&file_handle) {
-            Ok(m) => m,
-            Err(_) => return (FastHashMap::default(), Vec::new()),
-        }
-    };
-
-    let has_key = i18n_keys
-        .iter()
-        .chain(i18n_keys_prefix.iter())
-        .any(|key| memmem::find(&mmap, key.as_bytes()).is_some());
-
-    if !has_key {
-        return (FastHashMap::default(), Vec::new());
-    }
-
-    let code = match std::str::from_utf8(&mmap) {
-        Ok(c) => c,
-        Err(_) => {
-            error!(target: "extractor:code", "Bad UTF-8 in {}", file.display());
-            return (FastHashMap::default(), Vec::new());
-        }
-    };
-    let module = match ruff_python_parser::parse_module(code) {
-        Ok(m) => m,
-        Err(_) => return (FastHashMap::default(), Vec::new()),
-    };
-
-    let mut matcher = I18nMatcher::collecting(
-        file.to_path_buf(),
         code,
-        default_ftl_file.to_path_buf(),
-        i18n_keys,
-        i18n_keys_prefix,
-        ignore_attributes,
-        ignore_kwargs,
+        options.default_ftl_file.to_path_buf(),
+        options.i18n_keys,
+        options.i18n_keys_prefix,
+        options.ignore_attributes,
+        options.ignore_kwargs,
     );
 
     matcher.visit_body(module.suite());
@@ -230,51 +223,7 @@ fn parse_file_collecting(
 
 fn extract_from_file(
     file: &PyFile,
-    i18n_keys: &FastHashSet<String>,
-    i18n_keys_prefix: &FastHashSet<String>,
-    ignore_attributes: &FastHashSet<String>,
-    ignore_kwargs: &FastHashSet<String>,
-    default_ftl_file: &Path,
-    cache: Option<&CacheFile>,
-) -> (FastHashMap<String, FluentKey>, Option<CacheUpdate>) {
-    let cache_key = file_cache_key(&file.path);
-    let cached_file = cache.and_then(|cache| cache.files.get(&cache_key));
-
-    if let Some(cached) = cached_file
-        .filter(|cached| cached.size == file.size && cached.modified_ns == file.modified_ns)
-    {
-        return (cached_file_to_keys(cached), None);
-    }
-
-    let keys = parse_file(
-        &file.path,
-        file.size,
-        i18n_keys,
-        i18n_keys_prefix,
-        ignore_attributes,
-        ignore_kwargs,
-        default_ftl_file,
-    );
-
-    if keys.is_empty() {
-        let update = cached_file
-            .is_some()
-            .then_some(CacheUpdate::Remove(cache_key));
-        return (keys, update);
-    }
-
-    let cached_file = keys_to_cached_file(file.size, file.modified_ns, &keys);
-
-    (keys, Some(CacheUpdate::Upsert(cache_key, cached_file)))
-}
-
-fn extract_from_file_collecting(
-    file: &PyFile,
-    i18n_keys: &FastHashSet<String>,
-    i18n_keys_prefix: &FastHashSet<String>,
-    ignore_attributes: &FastHashSet<String>,
-    ignore_kwargs: &FastHashSet<String>,
-    default_ftl_file: &Path,
+    options: ParseOptions<'_>,
     cache: Option<&CacheFile>,
 ) -> (
     FastHashMap<String, FluentKey>,
@@ -290,15 +239,7 @@ fn extract_from_file_collecting(
         return (cached_file_to_keys(cached), Vec::new(), None);
     }
 
-    let (keys, diagnostics) = parse_file_collecting(
-        &file.path,
-        file.size,
-        i18n_keys,
-        i18n_keys_prefix,
-        ignore_attributes,
-        ignore_kwargs,
-        default_ftl_file,
-    );
+    let (keys, diagnostics) = parse_file(&file.path, file.size, options);
 
     if keys.is_empty() || !diagnostics.is_empty() {
         let update = cached_file
@@ -336,13 +277,13 @@ fn conflict_diagnostic(
 ) -> ExtractionDiagnostic {
     ExtractionDiagnostic {
         kind,
-        key: key.to_string(),
+        key: Some(key.to_string()),
         message,
         locations: conflict_locations(existing, new_fluent_key),
     }
 }
 
-fn merge_fluent_key_collecting(
+fn merge_fluent_key(
     target: &mut FastHashMap<String, FluentKey>,
     diagnostics: &mut Vec<ExtractionDiagnostic>,
     key: String,
@@ -403,35 +344,32 @@ fn merge_fluent_key_collecting(
     }
 }
 
-fn merge_fluent_keys(target: &mut FastHashMap<String, FluentKey>, key: String, val: FluentKey) {
-    match target.entry(key) {
-        Entry::Occupied(entry) => {
-            let existing_key: &FluentKey = entry.get();
-            if existing_key.path != val.path {
-                panic!("FluentKey conflict during merge: {}", entry.key());
-            }
-        }
-        Entry::Vacant(entry) => {
-            entry.insert(val);
-        }
-    }
+/// Result of scanning a code tree for Fluent keys.
+pub(crate) struct CodeExtraction {
+    pub(crate) keys: FastHashMap<String, FluentKey>,
+    pub(crate) diagnostics: Vec<ExtractionDiagnostic>,
+    /// Number of Python files that were scanned.
+    pub(crate) py_files_count: usize,
+    /// Number of Python files that contained at least one Fluent key.
+    pub(crate) py_files_with_keys: usize,
 }
 
-pub(crate) fn extract_fluent_keys<'a>(
-    path: &'a Path,
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn extract_fluent_keys(
+    path: &Path,
     i18n_keys: FastHashSet<String>,
     i18n_keys_prefix: FastHashSet<String>,
-    exclude_dirs: &ExcludeMatcher,
+    exclude_dirs: &FastHashSet<String>,
     ignore_attributes: FastHashSet<String>,
     ignore_kwargs: FastHashSet<String>,
-    default_ftl_file: &'a Path,
+    default_ftl_file: &Path,
     use_cache: bool,
     cache_path: Option<&Path>,
     clear_cache: bool,
-    statistics: &mut ExtractionStatistics,
-) -> FastHashMap<String, FluentKey> {
-    let py_files = find_py_files(path, exclude_dirs);
-    let py_files_count = AtomicUsize::new(0);
+) -> Result<CodeExtraction> {
+    let exclude_matcher = build_exclude_matcher(path, exclude_dirs)?;
+    let py_files = find_py_files(path, &exclude_matcher);
+    let py_files_with_keys = AtomicUsize::new(0);
     let options = cache_options(
         &i18n_keys,
         &i18n_keys_prefix,
@@ -441,99 +379,65 @@ pub(crate) fn extract_fluent_keys<'a>(
     );
     let cache_file_path = cache_file_path(cache_path);
     let cache = use_cache.then(|| load_cache(&cache_file_path, &options, clear_cache));
+    let parse_options = ParseOptions {
+        i18n_keys: &i18n_keys,
+        i18n_keys_prefix: &i18n_keys_prefix,
+        ignore_attributes: &ignore_attributes,
+        ignore_kwargs: &ignore_kwargs,
+        default_ftl_file,
+    };
 
     // Parallel Map-Reduce
-    let (fluent_keys, cache_updates): (FastHashMap<String, FluentKey>, Vec<CacheUpdate>) = py_files
+    let (fluent_keys, mut diagnostics, cache_updates): (
+        FastHashMap<String, FluentKey>,
+        Vec<ExtractionDiagnostic>,
+        Vec<CacheUpdate>,
+    ) = py_files
         .par_iter()
         .fold(
-            || (FastHashMap::default(), Vec::new()),
-            |(mut acc, mut updates), file| {
-                let (keys, cache_update) = extract_from_file(
-                    file,
-                    &i18n_keys,
-                    &i18n_keys_prefix,
-                    &ignore_attributes,
-                    &ignore_kwargs,
-                    default_ftl_file,
-                    cache.as_ref(),
-                );
+            || (FastHashMap::default(), Vec::new(), Vec::new()),
+            |(mut acc, mut diagnostics, mut updates), file| {
+                let (keys, mut file_diagnostics, cache_update) =
+                    extract_from_file(file, parse_options, cache.as_ref());
 
                 if !keys.is_empty() {
-                    py_files_count.fetch_add(1, Ordering::Relaxed);
+                    py_files_with_keys.fetch_add(1, Ordering::Relaxed);
                 }
 
+                diagnostics.append(&mut file_diagnostics);
                 if let Some(update) = cache_update {
                     updates.push(update);
                 }
 
-                // Merge found keys into local accumulator
-                for (key, new_fluent_key) in keys {
-                    match acc.entry(key) {
-                        Entry::Occupied(entry) => {
-                            let existing_key: &FluentKey = entry.get();
-
-                            // Validation Logic
-                            if existing_key.path != new_fluent_key.path {
-                                panic!(
-                                    "FluentKey conflict: {} in {} and {}",
-                                    entry.key(),
-                                    existing_key.path.display(),
-                                    new_fluent_key.path.display()
-                                )
-                            }
-
-                            match (&existing_key.entry.as_ref(), &new_fluent_key.entry.as_ref()) {
-                                (FluentEntry::Message(a), FluentEntry::Message(b)) if a != b => {
-                                    panic!(
-                                        "FluentKey conflict: {} in {} and {}",
-                                        entry.key(),
-                                        existing_key.path.display(),
-                                        new_fluent_key.path.display()
-                                    );
-                                }
-                                (a, b) if a != b => {
-                                    panic!(
-                                        "FluentKey type conflict: {} ({:?} vs {:?})",
-                                        entry.key(),
-                                        a,
-                                        b
-                                    );
-                                }
-                                _ => {}
-                            }
-                        }
-                        Entry::Vacant(entry) => {
-                            entry.insert(new_fluent_key);
-                        }
-                    }
+                for (key, fluent_key) in keys {
+                    merge_fluent_key(&mut acc, &mut diagnostics, key, fluent_key);
                 }
-                (acc, updates)
+
+                (acc, diagnostics, updates)
             },
         )
         .reduce(
-            || (FastHashMap::default(), Vec::new()),
+            || (FastHashMap::default(), Vec::new(), Vec::new()),
             |a, b| {
-                // Merge two Maps (a and b)
-                // We iterate over the smaller map and insert into the larger one for efficiency
-                let ((mut target, mut target_updates), (source, source_updates)) =
-                    if a.0.len() > b.0.len() {
-                        (a, b)
-                    } else {
-                        (b, a)
-                    };
+                // Merge the smaller map into the larger one for efficiency.
+                let (
+                    (mut target, mut target_diagnostics, mut target_updates),
+                    (source, source_diagnostics, source_updates),
+                ) = if a.0.len() > b.0.len() {
+                    (a, b)
+                } else {
+                    (b, a)
+                };
 
-                for (key, val) in source {
-                    // Same conflict logic as above needed here strictly speaking,
-                    // but if keys are unique per file or conflicts handled in fold,
-                    // we just insert. To be safe, we use the same check:
-                    merge_fluent_keys(&mut target, key, val);
+                for (key, fluent_key) in source {
+                    merge_fluent_key(&mut target, &mut target_diagnostics, key, fluent_key);
                 }
+                target_diagnostics.extend(source_diagnostics);
                 target_updates.extend(source_updates);
-                (target, target_updates)
+
+                (target, target_diagnostics, target_updates)
             },
         );
-
-    statistics.py_files_count += py_files_count.load(Ordering::Relaxed);
 
     if let Some(mut cache) = cache
         && !cache_updates.is_empty()
@@ -551,7 +455,19 @@ pub(crate) fn extract_fluent_keys<'a>(
         save_cache(&cache_file_path, &cache);
     }
 
-    fluent_keys
+    diagnostics.sort_by(|a, b| {
+        a.key
+            .cmp(&b.key)
+            .then_with(|| a.message.cmp(&b.message))
+            .then_with(|| a.kind.as_str().cmp(b.kind.as_str()))
+    });
+
+    Ok(CodeExtraction {
+        keys: fluent_keys,
+        diagnostics,
+        py_files_count: py_files.len(),
+        py_files_with_keys: py_files_with_keys.load(Ordering::Relaxed),
+    })
 }
 
 pub fn kwargs_from_key(fluent_key: &FluentKey) -> Vec<String> {
@@ -592,11 +508,11 @@ pub fn extract_code_with_diagnostics(
     path: &Path,
     i18n_keys: FastHashSet<String>,
     i18n_keys_prefix: FastHashSet<String>,
-    exclude_dirs: &ExcludeMatcher,
+    exclude_dirs: &FastHashSet<String>,
     ignore_attributes: FastHashSet<String>,
     ignore_kwargs: FastHashSet<String>,
     default_ftl_file: &Path,
-) -> ExtractedCode {
+) -> Result<ExtractedCode> {
     extract_code_with_diagnostics_cached(
         path,
         i18n_keys,
@@ -616,117 +532,39 @@ pub fn extract_code_with_diagnostics_cached(
     path: &Path,
     i18n_keys: FastHashSet<String>,
     i18n_keys_prefix: FastHashSet<String>,
-    exclude_dirs: &ExcludeMatcher,
+    exclude_dirs: &FastHashSet<String>,
     ignore_attributes: FastHashSet<String>,
     ignore_kwargs: FastHashSet<String>,
     default_ftl_file: &Path,
     use_cache: bool,
     cache_path: Option<&Path>,
     clear_cache: bool,
-) -> ExtractedCode {
-    let py_files = find_py_files(path, exclude_dirs);
-    let options = cache_options(
-        &i18n_keys,
-        &i18n_keys_prefix,
-        &ignore_attributes,
-        &ignore_kwargs,
+) -> Result<ExtractedCode> {
+    let extraction = extract_fluent_keys(
+        path,
+        i18n_keys,
+        i18n_keys_prefix,
+        exclude_dirs,
+        ignore_attributes,
+        ignore_kwargs,
         default_ftl_file,
-    );
-    let cache_file_path = cache_file_path(cache_path);
-    let cache = use_cache.then(|| load_cache(&cache_file_path, &options, clear_cache));
+        use_cache,
+        cache_path,
+        clear_cache,
+    )?;
 
-    let (fluent_keys, mut diagnostics, cache_updates): (
-        FastHashMap<String, FluentKey>,
-        Vec<ExtractionDiagnostic>,
-        Vec<CacheUpdate>,
-    ) = py_files
-        .par_iter()
-        .fold(
-            || (FastHashMap::default(), Vec::new(), Vec::new()),
-            |(mut acc, mut diagnostics, mut updates), file| {
-                let (keys, mut file_diagnostics, cache_update) = extract_from_file_collecting(
-                    file,
-                    &i18n_keys,
-                    &i18n_keys_prefix,
-                    &ignore_attributes,
-                    &ignore_kwargs,
-                    default_ftl_file,
-                    cache.as_ref(),
-                );
-
-                diagnostics.append(&mut file_diagnostics);
-                if let Some(update) = cache_update {
-                    updates.push(update);
-                }
-
-                for (key, fluent_key) in keys {
-                    merge_fluent_key_collecting(&mut acc, &mut diagnostics, key, fluent_key);
-                }
-
-                (acc, diagnostics, updates)
-            },
-        )
-        .reduce(
-            || (FastHashMap::default(), Vec::new(), Vec::new()),
-            |a, b| {
-                let (
-                    (mut target, mut target_diagnostics, mut target_updates),
-                    (source, source_diagnostics, source_updates),
-                ) = if a.0.len() > b.0.len() {
-                    (a, b)
-                } else {
-                    (b, a)
-                };
-
-                for (key, fluent_key) in source {
-                    merge_fluent_key_collecting(
-                        &mut target,
-                        &mut target_diagnostics,
-                        key,
-                        fluent_key,
-                    );
-                }
-                target_diagnostics.extend(source_diagnostics);
-                target_updates.extend(source_updates);
-
-                (target, target_diagnostics, target_updates)
-            },
-        );
-
-    if let Some(mut cache) = cache
-        && !cache_updates.is_empty()
-    {
-        for update in cache_updates {
-            match update {
-                CacheUpdate::Upsert(path, cached_file) => {
-                    cache.files.insert(path, cached_file);
-                }
-                CacheUpdate::Remove(path) => {
-                    cache.files.remove(&path);
-                }
-            }
-        }
-        save_cache(&cache_file_path, &cache);
-    }
-
-    diagnostics.sort_by(|a, b| {
-        a.key
-            .cmp(&b.key)
-            .then_with(|| a.message.cmp(&b.message))
-            .then_with(|| format!("{:?}", a.kind).cmp(&format!("{:?}", b.kind)))
-    });
-
-    let mut keys = fluent_keys
+    let mut keys = extraction
+        .keys
         .into_values()
         .map(extracted_key_from_fluent_key)
         .collect::<Vec<_>>();
     keys.sort_by(|a, b| a.key.cmp(&b.key));
 
-    ExtractedCode {
+    Ok(ExtractedCode {
         keys,
-        diagnostics,
-        py_files_count: py_files.len(),
-    }
+        diagnostics: extraction.diagnostics,
+        py_files_count: extraction.py_files_count,
+    })
 }
 
 pub(crate) fn sort_fluent_keys_by_path(
@@ -750,13 +588,14 @@ pub(crate) fn sort_fluent_keys_by_path(
 
 #[cfg(test)]
 mod tests {
+    use super::{ParseOptions, extract_fluent_keys};
     use crate::ftl::consts;
     use crate::ftl::diagnostics::ExtractionDiagnosticKind;
     use crate::ftl::matcher::{FluentEntry, FluentKey};
     use crate::ftl::utils::{FastHashMap, FastHashSet};
     use pretty_assertions::assert_eq;
     use std::path::{Path, PathBuf};
-    use std::sync::Arc;
+    use std::sync::{Arc, LazyLock};
     use tempfile::TempDir;
 
     const DEFAULT_PY: &str = r#"
@@ -807,6 +646,21 @@ class Mock:
         cls.cls_i18n.cls.key(some_kwarg="...", _path="classlike.ftl")
         cls.cls_i18n.get("cls-get-key", some_kwarg="...", _path="classlike.ftl")
 "#;
+
+    static EMPTY: LazyLock<FastHashSet<String>> = LazyLock::new(FastHashSet::default);
+    static I18N_ONLY: LazyLock<FastHashSet<String>> =
+        LazyLock::new(|| FastHashSet::from_iter(["i18n".to_string()]));
+    static DEFAULT_FTL: LazyLock<PathBuf> = LazyLock::new(|| PathBuf::from("_default.ftl"));
+
+    fn i18n_options() -> ParseOptions<'static> {
+        ParseOptions {
+            i18n_keys: &I18N_ONLY,
+            i18n_keys_prefix: &EMPTY,
+            ignore_attributes: &EMPTY,
+            ignore_kwargs: &EMPTY,
+            default_ftl_file: &DEFAULT_FTL,
+        }
+    }
 
     fn write_python_fixture(dir: &Path) {
         std::fs::write(dir.join("__init__.py"), "").unwrap();
@@ -874,24 +728,25 @@ class Mock:
         let mut key_prefixes = consts::DEFAULT_I18N_KEYS.clone();
         key_prefixes.insert("self".to_string());
         key_prefixes.insert("cls".to_string());
-        let mut statistics = super::ExtractionStatistics::new();
 
-        let fluent_keys = super::extract_fluent_keys(
+        let extraction = extract_fluent_keys(
             &code_path,
             key_prefixes.clone(),
             FastHashSet::default(),
-            &empty_exclude_matcher(&code_path),
+            &FastHashSet::default(),
             FastHashSet::default(),
             FastHashSet::default(),
             &PathBuf::from("locales/en.ftl"),
             false,
             None,
             false,
-            &mut statistics,
-        );
+        )
+        .unwrap();
+        let fluent_keys = extraction.keys;
 
         eprintln!("Extracted Fluent Keys: {:?}", fluent_keys.keys());
 
+        assert!(extraction.diagnostics.is_empty());
         assert_eq!(fluent_keys.len(), 14);
         assert!(fluent_keys.contains_key("text"));
         assert!(fluent_keys.contains_key("text-kwargs"));
@@ -903,7 +758,8 @@ class Mock:
         assert!(fluent_keys.contains_key("text-selector-selectors"));
         assert!(fluent_keys.contains_key("text-selector-kwargs"));
         assert!(fluent_keys.contains_key("text-selector-reference-selector-kwargs-terms"));
-        assert_eq!(statistics.py_files_count, 2);
+        assert_eq!(extraction.py_files_count, 3);
+        assert_eq!(extraction.py_files_with_keys, 2);
     }
 
     #[test]
@@ -939,22 +795,22 @@ unknown("ignored")
         let mut ignore_kwargs = FastHashSet::default();
         ignore_kwargs.insert("when".to_string());
 
-        let mut statistics = super::ExtractionStatistics::new();
-        let fluent_keys = super::extract_fluent_keys(
+        let extraction = extract_fluent_keys(
             &code_path,
             i18n_keys,
             prefixes,
-            &empty_exclude_matcher(&code_path),
+            &FastHashSet::default(),
             ignore_attributes,
             ignore_kwargs,
             &PathBuf::from("_default.ftl"),
             false,
             None,
             false,
-            &mut statistics,
-        );
+        )
+        .unwrap();
+        let fluent_keys = extraction.keys;
 
-        assert_eq!(statistics.py_files_count, 1);
+        assert_eq!(extraction.py_files_with_keys, 1);
         assert!(fluent_keys.contains_key("named-key"));
         assert!(fluent_keys.contains_key("folder-key"));
         assert!(fluent_keys.contains_key("file-key"));
@@ -990,18 +846,16 @@ unknown("ignored")
         )
         .unwrap();
 
-        let mut i18n_keys = FastHashSet::default();
-        i18n_keys.insert("i18n".to_string());
-
         let extracted = super::extract_code_with_diagnostics(
             &code_path,
-            i18n_keys,
+            I18N_ONLY.clone(),
             FastHashSet::default(),
-            &empty_exclude_matcher(&code_path),
+            &FastHashSet::default(),
             FastHashSet::default(),
             FastHashSet::default(),
             &PathBuf::from("_default.ftl"),
-        );
+        )
+        .unwrap();
 
         assert!(extracted.diagnostics.is_empty());
         assert_eq!(extracted.py_files_count, 1);
@@ -1028,18 +882,16 @@ i18n.get("hello", _path="two.ftl")
         )
         .unwrap();
 
-        let mut i18n_keys = FastHashSet::default();
-        i18n_keys.insert("i18n".to_string());
-
         let extracted = super::extract_code_with_diagnostics(
             &code_path,
-            i18n_keys,
+            I18N_ONLY.clone(),
             FastHashSet::default(),
-            &empty_exclude_matcher(&code_path),
+            &FastHashSet::default(),
             FastHashSet::default(),
             FastHashSet::default(),
             &PathBuf::from("_default.ftl"),
-        );
+        )
+        .unwrap();
 
         assert_eq!(extracted.keys.len(), 1);
         assert_eq!(extracted.diagnostics.len(), 1);
@@ -1047,7 +899,7 @@ i18n.get("hello", _path="two.ftl")
             extracted.diagnostics[0].kind,
             ExtractionDiagnosticKind::KeyPathConflict
         );
-        assert_eq!(extracted.diagnostics[0].key, "hello");
+        assert_eq!(extracted.diagnostics[0].key.as_deref(), Some("hello"));
         assert_eq!(extracted.diagnostics[0].locations.len(), 2);
         assert_eq!(extracted.diagnostics[0].locations[0].line, 1);
         assert_eq!(extracted.diagnostics[0].locations[1].line, 2);
@@ -1061,18 +913,16 @@ i18n.get("hello", _path="two.ftl")
         std::fs::write(code_dir.join("a.py"), r#"i18n.get("hello", name="Andrew")"#).unwrap();
         std::fs::write(code_dir.join("b.py"), r#"i18n.get("hello", title="Dr")"#).unwrap();
 
-        let mut i18n_keys = FastHashSet::default();
-        i18n_keys.insert("i18n".to_string());
-
         let extracted = super::extract_code_with_diagnostics(
             &code_dir,
-            i18n_keys,
+            I18N_ONLY.clone(),
             FastHashSet::default(),
-            &empty_exclude_matcher(&code_dir),
+            &FastHashSet::default(),
             FastHashSet::default(),
             FastHashSet::default(),
             &PathBuf::from("_default.ftl"),
-        );
+        )
+        .unwrap();
 
         assert_eq!(extracted.keys.len(), 1);
         assert_eq!(extracted.py_files_count, 2);
@@ -1081,37 +931,114 @@ i18n.get("hello", _path="two.ftl")
             extracted.diagnostics[0].kind,
             ExtractionDiagnosticKind::KeyMessageConflict
         );
-        assert_eq!(extracted.diagnostics[0].key, "hello");
+        assert_eq!(extracted.diagnostics[0].key.as_deref(), Some("hello"));
         assert_eq!(extracted.diagnostics[0].locations.len(), 2);
     }
 
     #[test]
-    fn test_parse_file_empty_no_key_invalid_utf8_and_invalid_python() {
+    fn test_parse_file_skips_empty_and_keyless_files() {
         let temp = TempDir::new().unwrap();
         let empty = temp.path().join("empty.py");
         let no_key = temp.path().join("no_key.py");
-        let invalid_utf8 = temp.path().join("invalid_utf8.py");
-        let invalid_python = temp.path().join("invalid_python.py");
         std::fs::write(&empty, "").unwrap();
         std::fs::write(&no_key, "print('hello')").unwrap();
-        std::fs::write(&invalid_utf8, b"i18n.get('\xFF')").unwrap();
-        std::fs::write(&invalid_python, "i18n.get(").unwrap();
 
-        let mut i18n_keys = FastHashSet::default();
-        i18n_keys.insert("i18n".to_string());
-
-        for path in [&empty, &no_key, &invalid_utf8, &invalid_python] {
-            let keys = super::parse_file(
-                path,
-                std::fs::metadata(path).unwrap().len(),
-                &i18n_keys,
-                &FastHashSet::default(),
-                &FastHashSet::default(),
-                &FastHashSet::default(),
-                &PathBuf::from("_default.ftl"),
-            );
+        for path in [&empty, &no_key] {
+            let (keys, diagnostics) =
+                super::parse_file(path, std::fs::metadata(path).unwrap().len(), i18n_options());
             assert!(keys.is_empty());
+            assert!(diagnostics.is_empty(), "{}", path.display());
         }
+    }
+
+    #[test]
+    fn test_parse_file_reports_invalid_utf8() {
+        let temp = TempDir::new().unwrap();
+        let invalid_utf8 = temp.path().join("invalid_utf8.py");
+        std::fs::write(&invalid_utf8, b"x = 1\ni18n.get('\xFF')").unwrap();
+
+        let (keys, diagnostics) = super::parse_file(
+            &invalid_utf8,
+            std::fs::metadata(&invalid_utf8).unwrap().len(),
+            i18n_options(),
+        );
+
+        assert!(keys.is_empty());
+        assert_eq!(diagnostics.len(), 1);
+        assert_eq!(diagnostics[0].kind, ExtractionDiagnosticKind::InvalidUtf8);
+        assert_eq!(diagnostics[0].key, None);
+        assert!(diagnostics[0].message.contains("invalid_utf8.py"));
+        assert_eq!(diagnostics[0].locations.len(), 1);
+        assert_eq!(diagnostics[0].locations[0].path, invalid_utf8);
+        assert_eq!(diagnostics[0].locations[0].line, 2);
+        assert_eq!(diagnostics[0].locations[0].column, 11);
+    }
+
+    #[test]
+    fn test_parse_file_reports_python_syntax_errors_with_location() {
+        let temp = TempDir::new().unwrap();
+        let invalid_python = temp.path().join("invalid_python.py");
+        std::fs::write(&invalid_python, "x = 1\ni18n.get(\"ok\")\ni18n.get(\n").unwrap();
+
+        let (keys, diagnostics) = super::parse_file(
+            &invalid_python,
+            std::fs::metadata(&invalid_python).unwrap().len(),
+            i18n_options(),
+        );
+
+        assert!(keys.is_empty(), "no keys are trusted from a broken file");
+        assert_eq!(diagnostics.len(), 1);
+        assert_eq!(diagnostics[0].kind, ExtractionDiagnosticKind::ParseError);
+        assert_eq!(diagnostics[0].key, None);
+        assert!(diagnostics[0].message.contains("invalid_python.py"));
+        assert_eq!(diagnostics[0].locations.len(), 1);
+        assert_eq!(diagnostics[0].locations[0].path, invalid_python);
+        assert!(diagnostics[0].locations[0].line >= 3);
+    }
+
+    #[test]
+    fn test_parse_file_reports_unreadable_files() {
+        let temp = TempDir::new().unwrap();
+        let missing = temp.path().join("missing.py");
+
+        let (keys, diagnostics) = super::parse_file(&missing, 1, i18n_options());
+
+        assert!(keys.is_empty());
+        assert_eq!(diagnostics.len(), 1);
+        assert_eq!(diagnostics[0].kind, ExtractionDiagnosticKind::ReadError);
+        assert!(diagnostics[0].message.contains("missing.py"));
+        assert_eq!(diagnostics[0].locations[0].path, missing);
+    }
+
+    #[test]
+    fn test_extract_fluent_keys_collects_file_errors_from_directory() {
+        let temp = TempDir::new().unwrap();
+        let code_dir = temp.path().join("py");
+        std::fs::create_dir_all(&code_dir).unwrap();
+        std::fs::write(code_dir.join("good.py"), r#"i18n.get("hello")"#).unwrap();
+        std::fs::write(code_dir.join("broken.py"), "i18n.get(").unwrap();
+
+        let extraction = extract_fluent_keys(
+            &code_dir,
+            I18N_ONLY.clone(),
+            FastHashSet::default(),
+            &FastHashSet::default(),
+            FastHashSet::default(),
+            FastHashSet::default(),
+            &PathBuf::from("_default.ftl"),
+            false,
+            None,
+            false,
+        )
+        .unwrap();
+
+        assert!(extraction.keys.contains_key("hello"));
+        assert_eq!(extraction.diagnostics.len(), 1);
+        assert!(extraction.diagnostics[0].is_file_error());
+        assert_eq!(
+            extraction.diagnostics[0].locations[0].path,
+            code_dir.join("broken.py")
+        );
     }
 
     #[test]
@@ -1126,25 +1053,15 @@ i18n.get("hello", _path="two.ftl")
             modified_ns: super::file_modified_ns(&metadata),
         };
 
-        let mut i18n_keys = FastHashSet::default();
-        i18n_keys.insert("i18n".to_string());
-
-        let (keys, update) = super::extract_from_file(
-            &py_file,
-            &i18n_keys,
-            &FastHashSet::default(),
-            &FastHashSet::default(),
-            &FastHashSet::default(),
-            &PathBuf::from("_default.ftl"),
-            None,
-        );
+        let (keys, diagnostics, update) = super::extract_from_file(&py_file, i18n_options(), None);
         assert!(keys.contains_key("hello"));
+        assert!(diagnostics.is_empty());
         assert!(matches!(update, Some(super::CacheUpdate::Upsert(_, _))));
 
         let mut cache = super::CacheFile {
             schema_version: 1,
             options: super::cache_options(
-                &i18n_keys,
+                &I18N_ONLY,
                 &FastHashSet::default(),
                 &FastHashSet::default(),
                 &FastHashSet::default(),
@@ -1157,36 +1074,36 @@ i18n.get("hello", _path="two.ftl")
         };
         cache.files.insert(cache_key, cached_file);
 
-        let (cached_keys, cached_update) = super::extract_from_file(
-            &py_file,
-            &i18n_keys,
-            &FastHashSet::default(),
-            &FastHashSet::default(),
-            &FastHashSet::default(),
-            &PathBuf::from("_default.ftl"),
-            Some(&cache),
-        );
+        let (cached_keys, _, cached_update) =
+            super::extract_from_file(&py_file, i18n_options(), Some(&cache));
         assert!(cached_keys.contains_key("hello"));
         assert!(cached_update.is_none());
 
         std::fs::write(&path, "print('hello')").unwrap();
         let metadata = std::fs::metadata(&path).unwrap();
         let changed = super::PyFile {
+            path: path.clone(),
+            size: metadata.len(),
+            modified_ns: super::file_modified_ns(&metadata),
+        };
+        let (empty_keys, _, remove_update) =
+            super::extract_from_file(&changed, i18n_options(), Some(&cache));
+        assert!(empty_keys.is_empty());
+        assert!(matches!(remove_update, Some(super::CacheUpdate::Remove(_))));
+
+        // A file that fails to parse is never cached, and drops a stale cache entry.
+        std::fs::write(&path, "i18n.get(").unwrap();
+        let metadata = std::fs::metadata(&path).unwrap();
+        let broken = super::PyFile {
             path,
             size: metadata.len(),
             modified_ns: super::file_modified_ns(&metadata),
         };
-        let (empty_keys, remove_update) = super::extract_from_file(
-            &changed,
-            &i18n_keys,
-            &FastHashSet::default(),
-            &FastHashSet::default(),
-            &FastHashSet::default(),
-            &PathBuf::from("_default.ftl"),
-            Some(&cache),
-        );
-        assert!(empty_keys.is_empty());
-        assert!(matches!(remove_update, Some(super::CacheUpdate::Remove(_))));
+        let (broken_keys, broken_diagnostics, broken_update) =
+            super::extract_from_file(&broken, i18n_options(), Some(&cache));
+        assert!(broken_keys.is_empty());
+        assert_eq!(broken_diagnostics.len(), 1);
+        assert!(matches!(broken_update, Some(super::CacheUpdate::Remove(_))));
     }
 
     #[test]

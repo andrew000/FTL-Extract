@@ -1,6 +1,7 @@
 use crate::tree::{Metadata, TreeNode, sorted_keys};
 use anyhow::Result;
 use indexmap::IndexMap;
+use std::fmt::Write as _;
 
 pub fn generate_stub_content(tree: &IndexMap<String, TreeNode>) -> Result<String> {
     let mut content = String::new();
@@ -36,7 +37,7 @@ fn generate_class_body(
     let keys = sorted_keys(tree);
 
     if keys.is_empty() {
-        content.push_str(&format!("{}pass\n", indent));
+        let _ = writeln!(content, "{}pass", indent);
         return Ok(());
     }
 
@@ -84,14 +85,15 @@ fn generate_overloaded_node(
 
     let return_type = format!("Literal[{}]", format_literal_value(&meta.translation));
 
-    content.push_str(&format!("{}@staticmethod\n", indent));
-    content.push_str(&format!("{}@overload\n", indent));
+    let _ = writeln!(content, "{}@staticmethod", indent);
+    let _ = writeln!(content, "{}@overload", indent);
 
     if meta.args.is_empty() {
-        content.push_str(&format!(
-            "{}def {}(**kwargs: Any) -> {}:\n",
+        let _ = writeln!(
+            content,
+            "{}def {}(**kwargs: Any) -> {}:",
             indent, key, return_type
-        ));
+        );
     } else {
         let keyword_args: Vec<String> = meta
             .args
@@ -99,12 +101,13 @@ fn generate_overloaded_node(
             .map(|arg| format!("{}: Any", arg))
             .collect();
         let args_str = keyword_args.join(", ");
-        content.push_str(&format!(
-            "{}def {}(*, {}, **kwargs: Any) -> {}:\n",
+        let _ = writeln!(
+            content,
+            "{}def {}(*, {}, **kwargs: Any) -> {}:",
             indent, key, args_str, return_type
-        ));
+        );
     }
-    content.push_str(&format!("{}    ...\n", indent));
+    let _ = writeln!(content, "{}    ...", indent);
     content.push('\n');
 
     generate_inner_class(key, children, content, indent_level)?;
@@ -144,13 +147,14 @@ fn generate_method(key: &str, meta: &Metadata, content: &mut String, indent_leve
     let indent = "    ".repeat(indent_level);
     let return_type = format!("Literal[{}]", format_literal_value(&meta.translation));
 
-    content.push_str(&format!("{}@staticmethod\n", indent));
+    let _ = writeln!(content, "{}@staticmethod", indent);
 
     if meta.args.is_empty() {
-        content.push_str(&format!(
-            "{}def {}(**kwargs: Any) -> {}:\n",
+        let _ = writeln!(
+            content,
+            "{}def {}(**kwargs: Any) -> {}:",
             indent, key, return_type
-        ));
+        );
     } else {
         let keyword_args: Vec<String> = meta
             .args
@@ -158,12 +162,13 @@ fn generate_method(key: &str, meta: &Metadata, content: &mut String, indent_leve
             .map(|arg| format!("{}: Any", arg))
             .collect();
         let args_str = keyword_args.join(", ");
-        content.push_str(&format!(
-            "{}def {}(*, {}, **kwargs: Any) -> {}:\n",
+        let _ = writeln!(
+            content,
+            "{}def {}(*, {}, **kwargs: Any) -> {}:",
             indent, key, args_str, return_type
-        ));
+        );
     }
-    content.push_str(&format!("{}    ...\n", indent));
+    let _ = writeln!(content, "{}    ...", indent);
 
     content.push('\n');
 }
@@ -178,10 +183,10 @@ fn generate_inner_class(
     let indent = "    ".repeat(indent_level);
     let class_name = format!("__{}", to_pascal_case(key));
 
-    content.push_str(&format!("{}class {}:\n", indent, class_name));
+    let _ = writeln!(content, "{}class {}:", indent, class_name);
     generate_class_body(children, content, indent_level + 1)?;
 
-    content.push_str(&format!("{}{} = {}\n", indent, key, class_name));
+    let _ = writeln!(content, "{}{} = {}", indent, key, class_name);
 
     Ok(())
 }

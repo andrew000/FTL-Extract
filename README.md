@@ -380,9 +380,9 @@ brand = brand
 
 The marker is `# ftl-extract: ignore` followed by the checks to skip: `stale`, `untranslated`, `kwargs`, several names
 separated by commas or spaces, or `all`. A bare `# ftl-extract: ignore` means `all`. Each command acts on the names it
-knows and skips the rest: `ftl check` knows `stale` and `untranslated`, `ftl extract` knows `stale` and `kwargs`. A
-message ignored for `stale` also keeps the messages and terms it references alive, in both commands, exactly as if
-Python code used it.
+knows and skips the rest: `ftl check` knows `stale`, `untranslated` and `kwargs` (a message marked `kwargs` is left
+out of `ftl check --check kwargs`), `ftl extract` knows `stale` and `kwargs`. A message ignored for `stale` also keeps
+the messages and terms it references alive, in both commands, exactly as if Python code used it.
 
 For `ftl extract` the names mean:
 

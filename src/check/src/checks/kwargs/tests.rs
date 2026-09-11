@@ -477,3 +477,41 @@ i18n.get("bye", name=user.name)
     assert_eq!(result.mismatches.len(), 1);
     assert_eq!(result.mismatches[0].key, "bye");
 }
+
+#[test]
+fn test_check_kwargs_skips_messages_whose_marker_ignores_kwargs() {
+    let temp = TempDir::new().unwrap();
+    write(
+        &temp.path().join("code/app.py"),
+        r#"i18n.get("items")
+i18n.get("brand")
+i18n.get("old")
+i18n.get("plain")
+"#,
+    );
+    // Every message has a real mismatch; only the unmarked one (and the one whose marker names
+    // a check this one does not know) is reported.
+    write(
+        &temp.path().join("locales/uk/_default.ftl"),
+        "# ftl-extract: ignore kwargs\nitems = You have { $count } items\n\
+         # ftl-extract: ignore all\nbrand = { $name }\n\
+         # ftl-extract: ignore stale\nold = { $when }\n\
+         plain = Hello { $name }\n",
+    );
+
+    let result = check_kwargs(config(&temp, vec!["uk".to_string()])).unwrap();
+
+    let reported: Vec<(&str, &[String])> = result
+        .mismatches
+        .iter()
+        .map(|mismatch| (mismatch.key.as_str(), mismatch.missing_kwargs.as_slice()))
+        .collect();
+    assert_eq!(
+        reported,
+        vec![
+            ("old", &["when".to_string()][..]),
+            ("plain", &["name".to_string()][..]),
+        ]
+    );
+    assert!(result.extraction_errors.is_empty());
+}

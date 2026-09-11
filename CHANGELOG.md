@@ -80,6 +80,8 @@
   does not cover an uncalled key, a marker on a called and matching key changes nothing, and only a comment directly
   above the message (no blank line in between) is a marker. Because a kept key is walked like a called one, a
   reference to a missing message or term in it now aborts `extract` instead of vanishing with the commented-out key.
+  `ftl check --check kwargs` now honours `kwargs` as well: a marked message is left out of the check and listed with `--verbose` as
+  `key "items" is skipped in uk: marker ignores kwargs`.
 
 ## 0.12.0 — 2026-09-10
 

@@ -998,6 +998,48 @@ fn extract_reports_dangling_ftl_reference_instead_of_panicking() {
     );
 }
 
+#[test]
+fn extract_aborts_when_a_key_is_defined_twice_in_one_locale() {
+    let temp = TempDir::new().unwrap();
+    write(&temp.path().join("code/app.py"), r#"i18n.get("dup")"#);
+    write(&temp.path().join("locales/en/_default.ftl"), "dup = One\n");
+    write(&temp.path().join("locales/en/other.ftl"), "dup = Two\n");
+
+    let output = ftl()
+        .arg("extract")
+        .arg(temp.path().join("code"))
+        .arg(temp.path().join("locales"))
+        .arg("-l")
+        .arg("en")
+        .output()
+        .unwrap();
+
+    assert_eq!(output.status.code(), Some(1));
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains(
+            "Extraction aborted: 1 problem found in .ftl files, no .ftl files were written."
+        ),
+        "{stderr}"
+    );
+    assert!(
+        stderr.contains(&format!(
+            "  - Fluent key dup is defined more than once in locale en: {}:1 and {}:1",
+            Path::new("en").join("_default.ftl").display(),
+            Path::new("en").join("other.ftl").display()
+        )),
+        "{stderr}"
+    );
+    assert_eq!(
+        std::fs::read_to_string(temp.path().join("locales/en/_default.ftl")).unwrap(),
+        "dup = One\n"
+    );
+    assert_eq!(
+        std::fs::read_to_string(temp.path().join("locales/en/other.ftl")).unwrap(),
+        "dup = Two\n"
+    );
+}
+
 fn stale_only_project() -> TempDir {
     let temp = TempDir::new().unwrap();
     write(&temp.path().join("code/app.py"), r#"i18n.get("hello")"#);

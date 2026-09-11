@@ -14,74 +14,85 @@
 
 ### Fixed
 
-- `ftl extract` no longer comments out and replaces a valid translation whose variable appears only inside a Fluent
-  function call (`{ NUMBER($count) }`, also as a selector), only inside a referenced term
-  (`{ -brand(case: "gen") }` or `{ -brand }`), or only through a message attribute reference (`{ btn.title }`). The
-  extractor's own walk skipped function arguments, counted every variable inside a term as one the code had to pass,
-  and followed `{ msg.attr }` to the message value. `ftl check` used a different walk and passed, so the rewrite went
-  unnoticed.
-- `ftl extract` and `ftl check` now share one collector (`common::message_variables`) that decides which variables a
-  stored message needs, following the `fluent-bundle` resolver: function arguments count; `{ msg }` pulls in only the
-  value of `msg` and `{ msg.attr }` only that attribute; nothing inside a term is a caller variable, because a term
-  resolves variables against its own call arguments only.
-- `ftl extract` no longer merges the last two lines of an entry it comments out. A multiline message, a select
-  expression, a message with attributes or one with a comment above it (including the `# ftl-extract: ignore stale`
-  marker) used to end up as `#     Rule two.    Rule three.` or `# # ftl-extract: ignore stalestatus-ok = OK`, so the
-  commented copy could not be restored by uncommenting it. Every serialized line is now its own `# ` line.
+- `ftl extract` no longer comments out and replaces a valid translation because of the way its variables are
+  written. Three shapes were hit: a variable used only inside a Fluent function call (`{ NUMBER($count) }`, also as
+  a selector), which the extractor's own walk skipped; a term reference (`{ -brand(case: "gen") }` or `{ -brand }`),
+  who's every variable it counted as one the code had to pass; and a message attribute reference (`{ btn.title }`),
+  which it followed to the message value. `items = You have { NUMBER($count) } items` with `i18n.items(count=5)`
+  used to become `# items = You have { NUMBER($count) } items` followed by the placeholder `items = items{ $count }`;
+  the file is now left byte for byte as it was. `ftl check --check kwargs` used a different walk and passed, so the
+  rewrite went unnoticed.
+- `ftl extract` and `ftl check --check kwargs` no longer disagree about which variables a stored message needs. Both
+  now use one collector that follows the `fluent-bundle` resolver: a variable in the value of the message being
+  formatted counts, also inside a selector, a nested placeable or a function argument; `{ msg }` pulls in the value
+  of `msg` and `{ msg.attr }` only that attribute; nothing inside a term is a caller variable, because a term
+  resolves variables against its own call arguments only; and a variable used only in the called message's own
+  attributes does not count, because `i18n.key()` renders only the value. What this changes for `check` is listed
+  under Behavior changes.
+- `ftl extract` no longer merges the last two lines of an entry it comments out, so the commented copy can be
+  restored by removing the `# ` prefixes. `old-rules =` with the lines `Rule one.`, `Rule two.` and `Rule three.`
+  used to be written as `# old-rules =`, `#     Rule one.`, `#     Rule two.    Rule three.`; it is now
+  `# old-rules =`, `#     Rule one.`, `#     Rule two.`, `#     Rule three.`, one `# ` line per serialized line.
 - `ftl extract` no longer aborts with `key-message-conflict` when the same key is called with the same keyword
   arguments in a different order (`i18n.get("order", a=1, b=2)` and `i18n.get("order", b=2, a=1)`), in one file or
   across files. A real conflict (`a, b` versus `a, c`) still aborts, and its message now names the key, both
-  keyword-argument sets and both locations instead of dumping the internal AST, and the two sides are listed in a
-  stable order (by file, line and column) whichever file was scanned first:
+  keyword-argument sets and both call sites in a stable order (by file, line and column), instead of dumping the
+  internal AST:
   `[key-message-conflict] Fluent key order is used with different keyword arguments: a, b and a, c (app/a.py:2:5, app/b.py:3:5)`.
-- `ftl extract` no longer comments out and replaces a translation because the code calls the key with `**kwargs`
-  (`i18n.get("welcome", **data)` with `welcome = Welcome, { $name }!` used to become `welcome = welcome`, silently).
-  Such a call can pass any variable, so the key's variables are unverifiable: `extract` leaves the stored message
-  alone and `ftl check --check kwargs` skips the key, both logging
+- `ftl extract` no longer comments out and replaces a translation because the code calls the key with `**kwargs`:
+  `i18n.get("welcome", **data)` with `welcome = Welcome, { $name }!` used to become `welcome = welcome`, silently.
+  Such a call can pass any variable, so the key cannot be verified: `extract` leaves the stored message alone and
+  `ftl check --check kwargs` skips the key, both logging
   `key "welcome" is called with **kwargs at app/a.py:3:5; its variables cannot be verified` with `--verbose`. A call
-  with `**` never takes part in the `key-message-conflict` comparison either, so `i18n.get("welcome", name=x)` next
-  to `i18n.get("welcome", **data)` is one key: a new key is written with the variables of the first call without
-  `**` (or of the first `**` call when there is no other), only calls without `**` are compared with each other, and
-  the other checks treat the key as usual.
+  with `**` also never takes part in the `key-message-conflict` comparison: next to `i18n.get("welcome", name=x)` it
+  is the same key, only the calls without `**` are compared with each other, and a new key is written with the
+  variables of the first call without `**` (or of the first `**` call when there is no other). The other checks
+  treat the key as usual.
 - When a locale file does not parse, `ftl extract` now reports the file, line and column and the parser's own
   description, like `ftl check --check syntax` does: `Failed to parse FTL file locales/en/_default.ftl:5:1: Expected
   a token starting with "}"` (plus `(and N more)` for further errors), instead of a debug dump of the error list.
 
 ### Behavior changes
+
 - The placeholder `ftl extract` writes for a new key lists its variables sorted by name (`order = order{ $a }{ $b }`)
-  instead of in call order, which was not even stable across runs because files are extracted in parallel. Existing
-  messages are compared by their set of variables, so nothing already stored is rewritten. Entries written
-  in call order by an older build are normalized when loaded.
+  instead of in call order, which was not even stable across runs because files are extracted in parallel. Stored
+  messages are compared by their set of variables, so nothing already stored is rewritten.
 - The extraction cache schema is now `v4` (`.ftl-extract-cache/extract-<version>-v4.bin`): cached keys record
   whether a call passes `**kwargs`. Older cache files are ignored and rebuilt on the next run.
-- `ftl extract`: a keyword argument in code that only matches a variable inside a referenced term
-  (`-brand = Bot { $suffix }`, `about = About { -brand }`, `i18n.about(suffix=...)`) is now a kwargs mismatch, so the
-  stored message is commented out and replaced, exactly as `0.12.0` already did for any other unused keyword argument
-  (`greet = Hello!` with `i18n.greet(name=...)`). `0.12.0` let the term case through only because it counted the
-  term's variable as satisfied by the caller.
-- `ftl check --check kwargs` no longer requires variables that exist only inside terms. `{ -brand }` with
-  `-brand = { $case -> ... }` used to report `case` as `missing in code`; an unbound term variable falls back to the
-  default variant and never reads the caller's arguments. The same message with `i18n.about(case=...)` in code is now
-  reported as `unused in ftl: case`.
+- `ftl extract`: a keyword argument in code that only matches a variable inside a referenced term is now a kwargs
+  mismatch, so the stored message is commented out and replaced, exactly as `0.12.0` already did for any other unused
+  keyword argument. `-brand = Bot { $suffix }`, `about = About { -brand }` and `i18n.about(suffix=...)` used to be
+  left alone, because the term's variable counted as satisfied by the caller.
+- `ftl check --check kwargs` no longer requires variables that exist only inside terms. `about = About { -brand }`
+  with `-brand = { $case -> ... }` used to report `case` as `missing in code`; an unbound term variable falls back to
+  the default variant and never reads the caller's arguments, so the message now passes, and `i18n.about(case=...)`
+  in code is reported as `unused in ftl: case` like any other unused keyword argument.
 - `ftl check --check kwargs` follows `{ msg }` to the value of `msg` only and `{ msg.attr }` to that attribute only.
   It used to count the value plus every attribute of every referenced message, so `a = { b }` reported the variables
   of `b`'s attributes as missing for `a`.
 - `ftl check --check kwargs` no longer requires variables that appear only in the called message's own attributes:
-  `i18n.save()` renders only the value of `save`, so `$name` in `.tooltip` is never read by that call. A keyword
-  argument that matches only such a variable is reported as `unused in ftl`, exactly as for any other unused keyword
-  argument. `ftl extract` already worked this way, so `extract` and `check` now agree on every message.
-- `ftl extract` now honors the `# ftl-extract: ignore ...` marker that `ftl check` already reads. A key the code
-  never calls is kept when its marker ignores `stale` (a dynamic key such as `i18n.get(f"status-{kind}")` with
-  `# ftl-extract: ignore stale` above `status-ok = OK` used to be commented out on every run although `check` passed),
-  and a called message whose variables differ from the code is kept when its marker ignores `kwargs`; `all` covers
-  both. A kept key keeps the messages and terms it references, is not counted as commented or updated, produces no
-  warning in `--comment-keys-mode warn`, and is listed with `--verbose` as
-  `key "status-ok" is kept: marker ignores stale`. `ignore stale` does not cover a kwargs mismatch, `ignore kwargs`
-  does not cover an uncalled key, a marker on a called and matching key changes nothing, and only a comment directly
-  above the message (no blank line in between) is a marker. Because a kept key is walked like a called one, a
-  reference to a missing message or term in it now aborts `extract` instead of vanishing with the commented-out key.
-  `ftl check --check kwargs` now honours `kwargs` as well: a marked message is left out of the check and listed with `--verbose` as
-  `key "items" is skipped in uk: marker ignores kwargs`.
+  `i18n.save()` renders only the value of `save`, so `$name` in its `.tooltip` attribute is never read by that call
+  and is no longer reported as missing. A keyword argument that matches only such a variable is `unused in ftl`, as
+  for any other unused keyword argument. `ftl extract` already worked this way.
+- The `# ftl-extract: ignore ...` marker is now read by both commands, and `kwargs` joins `stale` and `untranslated`
+  as a name. `ftl extract` keeps a key the code never calls when its marker ignores `stale`, together with the
+  messages and terms it references, and keeps a called message whose variables differ from the code when its marker
+  ignores `kwargs`; `ftl check --check kwargs` leaves such a message out; `all` covers both. A dynamic key such as
+  `i18n.get(f"status-{kind}")` with `# ftl-extract: ignore stale` above `status-ok = OK` used to be commented out by
+  `extract` on every run although `check` passed; it is now left alone. Kept keys are not counted as commented or
+  updated, produce no warning in `--comment-keys-mode warn`, and are listed with `--verbose` as
+  `key "status-ok" is kept: marker ignores stale` (`extract`) or `key "items" is skipped in uk: marker ignores kwargs`
+  (`check`). `ignore stale` does not cover a kwargs mismatch, `ignore kwargs` does not cover an uncalled key, a marker
+  on a called and matching key changes nothing, and only a comment directly above the message (no blank line in
+  between) is a marker. Because a kept key is walked like a called one, a reference to a missing message or term in
+  it now aborts `extract` instead of vanishing with the commented-out key.
+
+### Internal
+
+- The variable collector (`common::message_variables`, `common::term_variables`) and the ignore-marker parser
+  (`common::IgnoreMarker`) live in the `common` crate and are the only implementations; the extractor and check
+  crates no longer carry their own walks and parsers. `src/check/tests/extract_check_agreement.rs` runs
+  `ftl check --check kwargs` and `ftl extract` on the same fixtures and fails when they disagree.
 
 ## 0.12.0 — 2026-09-10
 

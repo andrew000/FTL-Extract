@@ -20,8 +20,9 @@
   who's every variable it counted as one the code had to pass; and a message attribute reference (`{ btn.title }`),
   which it followed to the message value. `items = You have { NUMBER($count) } items` with `i18n.items(count=5)`
   used to become `# items = You have { NUMBER($count) } items` followed by the placeholder `items = items{ $count }`;
-  the file is now left byte for byte as it was. `ftl check --check kwargs` used a different walk and passed, so the
-  rewrite went unnoticed.
+  the file is now left byte for byte as it was. For the function-argument and `{ -brand(case: "gen") }` shapes
+  `ftl check --check kwargs` passed, so the rewrite went unnoticed; for `{ -brand }` and `{ btn.title }` it failed for
+  reasons of its own (see Behavior changes).
 - `ftl extract` and `ftl check --check kwargs` no longer disagree about which variables a stored message needs. Both
   now use one collector that follows the `fluent-bundle` resolver: a variable in the value of the message being
   formatted counts, also inside a selector, a nested placeable or a function argument; `{ msg }` pulls in the value

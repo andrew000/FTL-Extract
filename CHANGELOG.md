@@ -24,12 +24,14 @@
   `ftl check --check kwargs` passed, so the rewrite went unnoticed; for `{ -brand }` and `{ btn.title }` it failed for
   reasons of its own (see Behavior changes).
 - `ftl extract` and `ftl check --check kwargs` no longer disagree about which variables a stored message needs. Both
-  now use one collector that follows the `fluent-bundle` resolver: a variable in the value of the message being
-  formatted counts, also inside a selector, a nested placeable or a function argument; `{ msg }` pulls in the value
-  of `msg` and `{ msg.attr }` only that attribute; nothing inside a term is a caller variable, because a term
-  resolves variables against its own call arguments only; and a variable used only in the called message's own
-  attributes does not count, because `i18n.key()` renders only the value. What this changes for `check` is listed
-  under Behavior changes.
+  now use one collector that follows the Fluent spec as python-fluent implements it: a variable in the value of the
+  message being formatted counts, also inside a selector, a nested placeable or a function argument; `{ msg }` pulls
+  in the value of `msg` and `{ msg.attr }` only that attribute; nothing inside a term is a caller variable, because
+  a term resolves variables against its own call arguments only; and a variable used only in the called message's
+  own attributes does not count, because `i18n.key()` renders only the value. `fluent-bundle` at the pinned rev
+  differs for one shape, `-outer = { -inner } { $case }`: it discards the enclosing term's arguments after the
+  nested term reference and reads `$case` from the caller, which the collector deliberately does not follow. What
+  this changes for `check` is listed under Behavior changes.
 - `ftl extract` no longer merges the last two lines of an entry it comments out, so the commented copy can be
   restored by removing the `# ` prefixes. `old-rules =` with the lines `Rule one.`, `Rule two.` and `Rule three.`
   used to be written as `# old-rules =`, `#     Rule one.`, `#     Rule two.    Rule three.`; it is now

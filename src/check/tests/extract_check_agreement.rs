@@ -64,6 +64,9 @@ const AGREED: &[Fixture] = &[
         ftl: "-brand =\n    { $case ->\n        [gen] Bota\n       *[nom] Bot\n    }\nabout = Pro { -brand(case: \"gen\") } ({ $case })\n",
     },
     Fixture {
+        // `$case` after the nested `{ -outer(...) }` inside `-inner` stays bound by `-inner`'s
+        // own call arguments (Fluent spec, python-fluent). fluent-bundle at the pinned rev would
+        // read it from the caller; both commands deliberately follow the spec.
         name: "recursive terms with literal bindings",
         code: "i18n.title()\n",
         ftl: "title = { -outer(case: \"genitive\") }\n-outer = { -inner(case: \"genitive\") }\n-inner = { -outer(case: \"genitive\") } { $case }\n",

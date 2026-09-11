@@ -116,6 +116,13 @@ const AGREED: &[Fixture] = &[
         code: "i18n.a(x=1, y=2)\ni18n.b(x=1, y=2)\n",
         ftl: "a = { $x } { b }\nb = { $y } { a }\n",
     },
+    Fixture {
+        // The dynamic key is never called by name; `# ftl-extract: ignore stale` keeps it in
+        // both commands.
+        name: "uncalled key marked ignore stale",
+        code: "i18n.get(f\"status-{kind}\")\ni18n.hello()\n",
+        ftl: "hello = Hello\n# ftl-extract: ignore stale\nstatus-ok = OK\n",
+    },
 ];
 
 fn write_fixture(fixture: &Fixture) -> TempDir {

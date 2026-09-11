@@ -112,6 +112,13 @@ fn log_kwargs_unknown(in_code_fluent_keys: &FastHashMap<String, FluentKey>) {
     }
 }
 
+/// Whether the stored entry carries a `# ftl-extract: ignore ...` marker covering `check`.
+fn marker_ignores(stored_key: &FluentKey, check: &str) -> bool {
+    stored_key
+        .ignore_marker()
+        .is_some_and(|marker| marker.ignores(check))
+}
+
 /// Fails when extraction reported problems that make the key set untrustworthy
 fn check_extraction_diagnostics(
     diagnostics: &[ExtractionDiagnostic],
@@ -230,6 +237,11 @@ fn process_language(
         )?;
 
         if code_args != stored_args {
+            // The message opted out of the kwargs comparison with `# ftl-extract: ignore kwargs`.
+            if marker_ignores(stored_key, "kwargs") {
+                debug!(target: "extractor::ftl", "key \"{key}\" is kept: marker ignores kwargs");
+                continue;
+            }
             kwargs_mismatches.push((key, fluent_key));
         }
     }
@@ -244,9 +256,34 @@ fn process_language(
         }
     }
 
+    // Stored keys the code never calls but which opted out of the stale check with
+    // `# ftl-extract: ignore stale` are treated as if the code used them: kept, and walked so
+    // that the messages they reference are kept too (the same roots `ftl check` uses).
+    let mut kept_by_marker: Vec<&String> = stored_fluent_keys
+        .iter()
+        .filter(|(key, stored_key)| {
+            !in_code_fluent_keys.contains_key(*key) && marker_ignores(stored_key, "stale")
+        })
+        .map(|(key, _)| key)
+        .collect();
+    kept_by_marker.sort();
+    for key in &kept_by_marker {
+        debug!(target: "extractor::ftl", "key \"{key}\" is kept: marker ignores stale");
+        extract_kwargs(
+            &stored_fluent_keys[*key],
+            &stored_terms,
+            &stored_fluent_keys,
+            &mut depend_keys,
+        )?;
+    }
+    let kept_by_marker: FastHashSet<String> = kept_by_marker.into_iter().cloned().collect();
+
     // Identify obsolete keys (in stored but not in code)
     stored_fluent_keys.retain(|key, val| {
-        if in_code_fluent_keys.contains_key(key) || depend_keys.contains(key) {
+        if in_code_fluent_keys.contains_key(key)
+            || depend_keys.contains(key)
+            || kept_by_marker.contains(key)
+        {
             true
         } else {
             keys_to_comment.insert(key.clone(), val.clone());
@@ -925,8 +962,8 @@ i18n.get("nested", _path="pages/main.ftl")
                 "hello = Hello\n\n# btn = Click\n#     .title = Tooltip\n\n",
             ),
             (
-                "hello = Hello\n\n# ftl-extract: ignore stale\nstatus-ok = OK\n",
-                "hello = Hello\n\n# # ftl-extract: ignore stale\n# status-ok = OK\n\n",
+                "hello = Hello\n\n# Shown while the status is unknown\nstatus-ok = OK\n",
+                "hello = Hello\n\n# # Shown while the status is unknown\n# status-ok = OK\n\n",
             ),
             (
                 "hello = Hello\n\nold-rules =\n    Правило перше.\n    Правило друге.\n",
@@ -1048,6 +1085,249 @@ i18n.get("nested", _path="pages/main.ftl")
         assert_eq!(
             fs::read_to_string(locales_path.join("en").join("_default.ftl")).unwrap(),
             "welcome = welcome{ $name }\n"
+        );
+    }
+
+    /// Captures every `log` record of the test binary, so tests can assert on the `--verbose`
+    /// lines and on the absence of warnings. Records of tests running in parallel land here
+    /// too, which is why callers filter by a key name unique to their fixture.
+    mod log_capture {
+        use std::sync::{Mutex, Once};
+
+        static RECORDS: Mutex<Vec<String>> = Mutex::new(Vec::new());
+        static CAPTURE: Capture = Capture;
+
+        struct Capture;
+
+        impl log::Log for Capture {
+            fn enabled(&self, _: &log::Metadata) -> bool {
+                true
+            }
+
+            fn log(&self, record: &log::Record) {
+                RECORDS
+                    .lock()
+                    .unwrap()
+                    .push(format!("{} {}", record.level(), record.args()));
+            }
+
+            fn flush(&self) {}
+        }
+
+        pub(super) fn install() {
+            static ONCE: Once = Once::new();
+            ONCE.call_once(|| {
+                log::set_logger(&CAPTURE).expect("no other logger in the test binary");
+                log::set_max_level(log::LevelFilter::Debug);
+            });
+        }
+
+        /// The records mentioning `needle`, each as `LEVEL message`.
+        pub(super) fn records_mentioning(needle: &str) -> Vec<String> {
+            RECORDS
+                .lock()
+                .unwrap()
+                .iter()
+                .filter(|record| record.contains(needle))
+                .cloned()
+                .collect()
+        }
+    }
+
+    #[test]
+    fn test_extract_keeps_uncalled_key_marked_ignore_stale() {
+        log_capture::install();
+        assert_extract_leaves_unchanged(
+            "i18n.get(f\"kept-stale-{kind}\")\ni18n.hello()\n",
+            "hello = Hello\n# ftl-extract: ignore stale\nkept-stale-ok = OK\n",
+        );
+        assert_eq!(
+            log_capture::records_mentioning("kept-stale-ok"),
+            vec!["DEBUG key \"kept-stale-ok\" is kept: marker ignores stale"]
+        );
+    }
+
+    #[test]
+    fn test_extract_keeps_uncalled_key_marked_ignore_all() {
+        log_capture::install();
+        assert_extract_leaves_unchanged(
+            "i18n.get(f\"kept-all-{kind}\")\ni18n.hello()\n",
+            "hello = Hello\n# ftl-extract: ignore all\nkept-all-ok = OK\n",
+        );
+        assert_eq!(
+            log_capture::records_mentioning("kept-all-ok"),
+            vec!["DEBUG key \"kept-all-ok\" is kept: marker ignores stale"]
+        );
+    }
+
+    #[test]
+    fn test_extract_keeps_mismatching_key_marked_ignore_kwargs() {
+        log_capture::install();
+        // Control in `test_extract_unchanged_harness_detects_a_rewrite`: without the marker this
+        // exact mismatch is commented out and replaced.
+        assert_extract_leaves_unchanged(
+            "i18n.kept_kwargs_items()\n",
+            "# ftl-extract: ignore kwargs\nkept_kwargs_items = You have { $count } items\n",
+        );
+        assert_eq!(
+            log_capture::records_mentioning("kept_kwargs_items"),
+            vec!["DEBUG key \"kept_kwargs_items\" is kept: marker ignores kwargs"]
+        );
+    }
+
+    #[test]
+    fn test_extract_ignore_stale_does_not_cover_a_kwargs_mismatch() {
+        let (stats, output, _temp) = extract_fixture(
+            "i18n.items()\n",
+            "# ftl-extract: ignore stale\nitems = You have { $count } items\n",
+        );
+
+        assert_eq!(stats.ftl_keys_commented["en"], 1);
+        assert_eq!(stats.ftl_keys_updated["en"], 1);
+        // The backup keeps the marker line; the placeholder written from code has no comment.
+        assert_eq!(
+            output,
+            "# # ftl-extract: ignore stale\n# items = You have { $count } items\n\nitems = items\n"
+        );
+    }
+
+    #[test]
+    fn test_extract_ignore_kwargs_does_not_cover_an_uncalled_key() {
+        let (stats, output, _temp) = extract_fixture(
+            "i18n.hello()\n",
+            "hello = Hello\n# ftl-extract: ignore kwargs\nold = Old\n",
+        );
+
+        assert_eq!(stats.ftl_keys_commented["en"], 1);
+        assert_eq!(stats.ftl_keys_updated["en"], 0);
+        assert_eq!(
+            output,
+            "hello = Hello\n\n# # ftl-extract: ignore kwargs\n# old = Old\n\n"
+        );
+    }
+
+    #[test]
+    fn test_extract_marker_on_called_matching_key_changes_nothing() {
+        log_capture::install();
+        assert_extract_leaves_unchanged(
+            "i18n.marked_hello(name=user.name)\n",
+            "# ftl-extract: ignore all\nmarked_hello = Hello { $name }\n",
+        );
+        // Nothing to skip, so nothing is logged about the key either.
+        assert_eq!(
+            log_capture::records_mentioning("marked_hello"),
+            Vec::<String>::new()
+        );
+    }
+
+    #[test]
+    fn test_extract_marker_with_irrelevant_name_changes_nothing() {
+        // `untranslated` means nothing to `extract`: the uncalled key is commented out as usual,
+        // and the unknown name is not an error.
+        let (stats, output, _temp) = extract_fixture(
+            "i18n.hello()\n",
+            "hello = Hello\n# ftl-extract: ignore untranslated\nold = Old\n",
+        );
+
+        assert_eq!(stats.ftl_keys_commented["en"], 1);
+        assert_eq!(
+            output,
+            "hello = Hello\n\n# # ftl-extract: ignore untranslated\n# old = Old\n\n"
+        );
+    }
+
+    #[test]
+    fn test_extract_keeps_uncalled_key_marked_ignore_stale_with_ukrainian_text() {
+        assert_extract_leaves_unchanged(
+            "i18n.get(f\"status-{kind}\")\ni18n.hello()\n",
+            "hello = Привіт\n# ftl-extract: ignore stale\nstatus-ok = Гаразд, усе добре\n",
+        );
+    }
+
+    #[test]
+    fn test_extract_warn_mode_does_not_warn_about_key_marked_ignore_stale() {
+        log_capture::install();
+        let temp = TempDir::new().unwrap();
+        let code_path = temp.path().join("code");
+        let locales_path = temp.path().join("locales");
+        let locale_path = locales_path.join("en");
+        fs::create_dir_all(&code_path).unwrap();
+        fs::create_dir_all(&locale_path).unwrap();
+        fs::write(code_path.join("app.py"), "i18n.hello()\n").unwrap();
+        let ftl = "hello = Hello\n# ftl-extract: ignore stale\nwarn-kept = Kept\nwarn-obsolete = Obsolete\n";
+        let ftl_path = locale_path.join("_default.ftl");
+        fs::write(&ftl_path, ftl).unwrap();
+
+        let mut cfg = config(code_path, locales_path);
+        cfg.comment_keys_mode = CommentsKeyModes::Warn;
+        let stats = extract(cfg).unwrap();
+
+        // Only the unmarked key is reported; the marked one is neither counted nor warned about.
+        assert_eq!(stats.ftl_keys_commented["en"], 1);
+        assert_eq!(fs::read_to_string(ftl_path).unwrap(), ftl);
+        assert_eq!(
+            log_capture::records_mentioning("warn-kept"),
+            vec!["DEBUG key \"warn-kept\" is kept: marker ignores stale"]
+        );
+        let warned = log_capture::records_mentioning("warn-obsolete");
+        assert_eq!(warned.len(), 1, "{warned:?}");
+        assert!(
+            warned[0].starts_with("WARN Key `warn-obsolete` in "),
+            "{warned:?}"
+        );
+    }
+
+    #[test]
+    fn test_extract_standalone_comment_before_blank_line_is_not_a_marker() {
+        // A blank line detaches the comment from the message, for `extract` as for `check`: the
+        // key is commented out and the comment stays a free-standing comment.
+        let (stats, output, _temp) = extract_fixture(
+            "i18n.hello()\n",
+            "hello = Hello\n# ftl-extract: ignore stale\n\nstatus-ok = OK\n",
+        );
+
+        assert_eq!(stats.ftl_keys_commented["en"], 1);
+        // The serializer separates a standalone comment from what follows it with a blank line
+        // and puts one before every comment entry, hence two between the two comments.
+        assert_eq!(
+            output,
+            "hello = Hello\n\n# ftl-extract: ignore stale\n\n\n# status-ok = OK\n\n"
+        );
+    }
+
+    #[test]
+    fn test_extract_key_marked_ignore_stale_keeps_what_it_references() {
+        // The same fixture `check --check stale` accepts: the marked message is a root, so the
+        // message and term it references stay too.
+        assert_extract_leaves_unchanged(
+            "i18n.hello()\n",
+            "hello = Hello\n# ftl-extract: ignore stale\ndynamic = { part } and { -brand }\npart = Part\n-brand = Brand\n",
+        );
+    }
+
+    #[test]
+    fn test_extract_key_marked_ignore_stale_with_unknown_reference_is_an_error() {
+        // Kept keys are walked like called ones, so a dangling reference in a marked message is
+        // reported instead of being silently commented out with the message.
+        let temp = TempDir::new().unwrap();
+        let code_path = temp.path().join("code");
+        let locales_path = temp.path().join("locales");
+        let locale_path = locales_path.join("en");
+        fs::create_dir_all(&code_path).unwrap();
+        fs::create_dir_all(&locale_path).unwrap();
+        fs::write(code_path.join("app.py"), "i18n.hello()\n").unwrap();
+        let ftl_path = locale_path.join("_default.ftl");
+        fs::write(
+            &ftl_path,
+            "hello = Hello\n# ftl-extract: ignore stale\nbroken = { missing }\n",
+        )
+        .unwrap();
+
+        let error = extract(config(code_path, locales_path)).unwrap_err();
+
+        assert_eq!(
+            error.to_string(),
+            "Message `broken` in _default.ftl references unknown message `missing`"
         );
     }
 }

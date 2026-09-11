@@ -221,7 +221,7 @@ page-title = Page title
 ```
 
 This is intentional: `ftl extract` owns the file layout and always writes a key to the file named by `_path=` (or to
-the default file when `_path=` is absent). It surprises people who organised their locale files by hand. To fix it,
+the default file when `_path=` is absent). It surprises people who organized their locale files by hand. To fix it,
 either add the matching `_path=` argument in code, or run `ftl extract`, which moves the key to the expected file and
 comments out the old copy.
 
@@ -230,16 +230,16 @@ comments out the old copy.
 Every diagnostic is either an `error` or a `warn`. Errors mean the application is broken or will break at runtime;
 warnings mean the translation catalogue is untidy. The defaults are:
 
-| Check          | Default severity | Why                                                             |
-|----------------|------------------|-----------------------------------------------------------------|
-| `syntax`       | `error`          | The `.ftl` file cannot be loaded at all.                        |
-| `references`   | `error`          | A message references a message or term that does not exist.    |
-| `missing`      | `error`          | Code uses a key that the locale does not provide.               |
-| `kwargs`       | `error`          | Code passes different variables than the message expects.       |
-| `extraction`   | `error`          | A Python file could not be analysed, so the other results are   |
-|                |                  | incomplete.                                                     |
-| `stale`        | `warn`           | The locale contains a key that code no longer uses.             |
-| `untranslated` | `warn`           | A message is still equal to its key.                            |
+| Check          | Default severity | Why                                                           |
+|----------------|------------------|---------------------------------------------------------------|
+| `syntax`       | `error`          | The `.ftl` file cannot be loaded at all.                      |
+| `references`   | `error`          | A message references a message or term that does not exist.   |
+| `missing`      | `error`          | Code uses a key that the locale does not provide.             |
+| `kwargs`       | `error`          | Code passes different variables than the message expects.     |
+| `extraction`   | `error`          | A Python file could not be analysed, so the other results are |
+|                |                  | incomplete.                                                   |
+| `stale`        | `warn`           | The locale contains a key that code no longer uses.           |
+| `untranslated` | `warn`           | A message is still equal to its key.                          |
 
 With the default `--fail-on error`, a project that only has stale or untranslated keys exits `0` and reports
 `FTL check passed with warnings`. Use `--fail-on warn` to fail on warnings too, or change the severity of individual
@@ -364,7 +364,8 @@ report-format = "json"
 
 Some keys are intentional exceptions: brand or domain terms that must stay equal to their key, or keys that are built
 dynamically in Python (f-strings, variables, `getattr`), which the extractor cannot see and would otherwise report as
-stale forever. Add a comment marker above such a message to opt it out of specific checks:
+stale forever. Add a comment marker directly above such a message (no blank line in between, otherwise it is a
+standalone comment and not a marker) to opt it out of specific checks. Both `ftl check` and `ftl extract` honour it:
 
 ```ftl
 # ftl-extract: ignore untranslated
@@ -377,9 +378,42 @@ dynamic-key = Built from an f-string in Python
 brand = brand
 ```
 
-The marker is `# ftl-extract: ignore` followed by the checks to skip: `stale`, `untranslated`, several names separated
-by commas or spaces, or `all`. A bare `# ftl-extract: ignore` means `all`. A message ignored for `stale` also keeps the
-messages and terms it references alive, exactly as if Python code used it.
+The marker is `# ftl-extract: ignore` followed by the checks to skip: `stale`, `untranslated`, `kwargs`, several names
+separated by commas or spaces, or `all`. A bare `# ftl-extract: ignore` means `all`. Each command acts on the names it
+knows and skips the rest: `ftl check` knows `stale` and `untranslated`, `ftl extract` knows `stale` and `kwargs`. A
+message ignored for `stale` also keeps the messages and terms it references alive, in both commands, exactly as if
+Python code used it.
+
+For `ftl extract` the names mean:
+
+- `stale`: a key the code never calls is kept as it is instead of being commented out. This is the marker for keys
+  built dynamically in Python:
+
+  ```python
+  i18n.get(f"status-{kind}")
+  ```
+
+  ```ftl
+  # ftl-extract: ignore stale
+  status-ok = OK
+  ```
+
+- `kwargs`: a called message whose variables differ from the keyword arguments in code is kept as it is instead of
+  being commented out and replaced by a placeholder. Use it when the variables are passed in a way the extractor
+  cannot follow:
+
+  ```python
+  i18n.get("items", **build_kwargs(user))
+  ```
+
+  ```ftl
+  # ftl-extract: ignore kwargs
+  items = You have { $count } items
+  ```
+
+Kept keys are listed with `--verbose` (`key "status-ok" is kept: marker ignores stale`). `ignore stale` does not
+cover a kwargs mismatch and `ignore kwargs` does not cover an uncalled key; `ignore all` covers both. A message
+kept by a marker is checked like a called one, so a reference to a message or term that does not exist aborts the run.
 
 The older spelling `# ftl-extract: ignore-untranslated` (and a bare `# ignore` line) still works as an alias of
 `# ftl-extract: ignore untranslated`.

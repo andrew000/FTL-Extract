@@ -70,6 +70,16 @@
   `i18n.save()` renders only the value of `save`, so `$name` in `.tooltip` is never read by that call. A keyword
   argument that matches only such a variable is reported as `unused in ftl`, exactly as for any other unused keyword
   argument. `ftl extract` already worked this way, so `extract` and `check` now agree on every message.
+- `ftl extract` now honors the `# ftl-extract: ignore ...` marker that `ftl check` already reads. A key the code
+  never calls is kept when its marker ignores `stale` (a dynamic key such as `i18n.get(f"status-{kind}")` with
+  `# ftl-extract: ignore stale` above `status-ok = OK` used to be commented out on every run although `check` passed),
+  and a called message whose variables differ from the code is kept when its marker ignores `kwargs`; `all` covers
+  both. A kept key keeps the messages and terms it references, is not counted as commented or updated, produces no
+  warning in `--comment-keys-mode warn`, and is listed with `--verbose` as
+  `key "status-ok" is kept: marker ignores stale`. `ignore stale` does not cover a kwargs mismatch, `ignore kwargs`
+  does not cover an uncalled key, a marker on a called and matching key changes nothing, and only a comment directly
+  above the message (no blank line in between) is a marker. Because a kept key is walked like a called one, a
+  reference to a missing message or term in it now aborts `extract` instead of vanishing with the commented-out key.
 
 ## 0.12.0 — 2026-09-10
 

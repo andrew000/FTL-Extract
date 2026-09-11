@@ -1,5 +1,7 @@
 use crate::parser::CheckLocaleCache;
-use common::{FastHashMap, FastHashSet, FluentEntries, VariableOptions, message_variables};
+use common::{
+    FastHashMap, FastHashSet, FluentEntries, IgnoreMarker, VariableOptions, message_variables,
+};
 use fluent_syntax::ast::{Entry, Message, Term};
 use std::path::PathBuf;
 
@@ -8,6 +10,8 @@ pub(super) struct LocaleMessage {
     pub(super) key: String,
     pub(super) path: PathBuf,
     pub(super) line: Option<usize>,
+    /// The message carries a `# ftl-extract: ignore kwargs` (or `ignore all`) marker.
+    pub(super) ignores_kwargs: bool,
 }
 
 #[derive(Debug)]
@@ -66,6 +70,8 @@ pub(super) fn read_locale_messages_with_ast(
                             key: message.id.name.clone(),
                             path: file.relative_to_locales.clone(),
                             line: located.line,
+                            ignores_kwargs: IgnoreMarker::parse(message.comment.as_ref())
+                                .is_some_and(|marker| marker.ignores("kwargs")),
                         },
                     );
                     messages.insert(message.id.name.clone(), message.clone());

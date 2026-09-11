@@ -60,6 +60,16 @@ pub fn check_kwargs_with_cache(
                 continue;
             };
 
+            // The message opted out of this check with `# ftl-extract: ignore kwargs`.
+            if locale_message.ignores_kwargs {
+                debug!(
+                    target: "check::kwargs",
+                    "key \"{}\" is skipped in {locale}: marker ignores kwargs",
+                    code_key.key
+                );
+                continue;
+            }
+
             let code_kwargs = code_key.kwargs.iter().cloned().collect::<FastHashSet<_>>();
             let ftl_kwargs = locale_messages
                 .message_kwargs(&locale_message.key)

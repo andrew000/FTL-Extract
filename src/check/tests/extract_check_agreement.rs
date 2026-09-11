@@ -123,6 +123,12 @@ const AGREED: &[Fixture] = &[
         code: "i18n.get(f\"status-{kind}\")\ni18n.hello()\n",
         ftl: "hello = Hello\n# ftl-extract: ignore stale\nstatus-ok = OK\n",
     },
+    Fixture {
+        // A real mismatch that both commands leave alone because of the marker.
+        name: "mismatching message marked ignore kwargs",
+        code: "i18n.items()\n",
+        ftl: "# ftl-extract: ignore kwargs\nitems = You have { $count } items\n",
+    },
 ];
 
 fn write_fixture(fixture: &Fixture) -> TempDir {

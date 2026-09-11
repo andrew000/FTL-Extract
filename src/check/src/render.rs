@@ -114,7 +114,12 @@ pub fn render_check_terminal(result: &CheckResult) -> String {
                     let _ = writeln!(out, "  file: {}", location.path.display());
                 }
             }
-            if let Some(location) = &diagnostic.code_location {
+            // An extraction conflict between several call sites names all of them in its
+            // message (`... (a.py:1:1, b.py:3:1)`) and carries the first one as
+            // `code_location`; a `code:` line would then list that site twice.
+            if let Some(location) = &diagnostic.code_location
+                && !diagnostic.message.contains(&location.to_string())
+            {
                 let column = location
                     .column
                     .map(|column| format!(":{column}"))
@@ -285,6 +290,72 @@ mod tests {
         assert!(rendered.contains(r#""path": "locales/uk/_default.ftl""#));
         assert!(rendered.contains(r#""value": "Welcome""#));
         assert!(rendered.contains(r#""checks""#));
+    }
+
+    /// The diagnostic `CodeExtractionError::into_diagnostic` builds for a conflict between two
+    /// call sites: both sites in the message, the first one as `code_location`.
+    fn two_site_conflict() -> CheckResult {
+        let sites = ["code/app.py:1:1", "code/other.py:3:5"];
+        CheckResult {
+            checked_kinds: vec![DiagnosticKind::Missing],
+            diagnostics: vec![Diagnostic {
+                severity: Severity::Error,
+                kind: DiagnosticKind::Extraction,
+                locale: None,
+                key: Some("conflict".to_string()),
+                ftl_location: None,
+                code_location: Some(SourceLocation {
+                    path: PathBuf::from("code/app.py"),
+                    line: Some(1),
+                    column: Some(1),
+                }),
+                message: format!(
+                    "Fluent key conflict has different paths: a.ftl and b.ftl ({}, {})",
+                    sites[0], sites[1]
+                ),
+                suggestions: Vec::new(),
+                missing_kwargs: Vec::new(),
+                unused_kwargs: Vec::new(),
+            }],
+        }
+    }
+
+    #[test]
+    fn test_render_terminal_prints_each_call_site_of_a_conflict_once() {
+        let rendered = render_check_terminal(&two_site_conflict());
+
+        assert_eq!(rendered.matches("code/app.py:1:1").count(), 1, "{rendered}");
+        assert_eq!(
+            rendered.matches("code/other.py:3:5").count(),
+            1,
+            "{rendered}"
+        );
+        assert!(!rendered.contains("  code: "), "{rendered}");
+        assert!(rendered.contains("error[extraction]: Fluent key conflict"));
+    }
+
+    #[test]
+    fn test_render_terminal_keeps_the_code_line_for_a_single_site() {
+        let mut result = two_site_conflict();
+        result.diagnostics[0].message = "Failed to parse Python file: unexpected EOF".to_string();
+
+        let rendered = render_check_terminal(&result);
+
+        assert!(rendered.contains("  code: code/app.py:1:1\n"), "{rendered}");
+    }
+
+    #[test]
+    fn test_render_json_keeps_the_sites_in_the_message_and_the_first_as_code_location() {
+        let rendered = render_check_json(&two_site_conflict());
+
+        assert!(
+            rendered.contains(
+                r#""message": "Fluent key conflict has different paths: a.ftl and b.ftl (code/app.py:1:1, code/other.py:3:5)""#
+            ),
+            "{rendered}"
+        );
+        assert!(rendered.contains(r#""path": "code/app.py""#), "{rendered}");
+        assert_eq!(rendered.matches(r#""code_location": {"#).count(), 1);
     }
 
     #[test]

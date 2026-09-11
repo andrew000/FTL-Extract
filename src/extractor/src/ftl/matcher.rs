@@ -4,7 +4,7 @@ use crate::ftl::code_extractor::kwargs_from_key;
 use crate::ftl::consts;
 use crate::ftl::diagnostics::{CodeLocation, ExtractionDiagnostic, ExtractionDiagnosticKind};
 use crate::ftl::utils::{FastHashMap, FastHashSet};
-use common::LineIndex;
+use common::{IgnoreMarker, LineIndex};
 use ruff_python_ast::visitor::source_order::SourceOrderVisitor;
 use smallvec::SmallVec;
 use std::path::PathBuf;
@@ -64,6 +64,15 @@ impl FluentKey {
     /// [`merge_key_occurrence`]).
     pub(crate) fn kept_call_has_double_star(&self) -> bool {
         self.kwargs_unknown.is_some() && self.kwargs_unknown == self.source_location
+    }
+
+    /// The `# ftl-extract: ignore ...` marker in the comment attached to a stored message, if any.
+    /// Terms and comments carry none.
+    pub(crate) fn ignore_marker(&self) -> Option<IgnoreMarker> {
+        match self.entry.as_ref() {
+            FluentEntry::Message(message) => IgnoreMarker::parse(message.comment.as_ref()),
+            _ => None,
+        }
     }
 }
 

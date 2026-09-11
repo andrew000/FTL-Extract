@@ -1,8 +1,8 @@
 use crate::checks::{run_code_aware_check, run_code_aware_check_with_extracted};
-use crate::parser::{CheckLocaleCache, ignored_checks};
+use crate::parser::CheckLocaleCache;
 use crate::types::{CheckCodeAwareConfig, CheckStaleConfig, CheckStaleResult, StaleKey};
 use anyhow::Result;
-use common::{FastHashMap, FastHashSet};
+use common::{FastHashMap, FastHashSet, IgnoreMarker};
 use extractor::ftl::diagnostics::ExtractedCode;
 use fluent_syntax::ast::{Entry, Expression, InlineExpression, Pattern, PatternElement};
 
@@ -38,7 +38,7 @@ pub fn check_stale_with_cache(
                 .strip_prefix(&locale_path)
                 .unwrap_or(&entry.file_path)
                 .to_path_buf();
-            if entry.ignored.stale {
+            if entry.ignored.ignores("stale") {
                 continue;
             }
             if used_keys.contains(&(entry.key.clone(), relative_to_locale)) {
@@ -96,7 +96,8 @@ fn live_referenced_messages(
                 Entry::Message(message) => {
                     let node = ReferenceNode::Message(message.id.name.clone());
                     // Messages ignored for `stale` count as used, so what they reference stays live.
-                    if ignored_checks(message.comment.as_ref()).stale
+                    if IgnoreMarker::parse(message.comment.as_ref())
+                        .is_some_and(|marker| marker.ignores("stale"))
                         || used_keys
                             .contains(&(message.id.name.clone(), file.relative_to_locale.clone()))
                     {

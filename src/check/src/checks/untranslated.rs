@@ -60,7 +60,7 @@ pub fn check_untranslated_with_cache(
     let mut untranslated = checked_messages
         .iter()
         .filter(|(entry, value)| {
-            !entry.ignored.untranslated && is_placeholder_translation(&entry.key, value)
+            !entry.ignored.ignores("untranslated") && is_placeholder_translation(&entry.key, value)
         })
         .map(|(entry, value)| UntranslatedKey {
             locale: entry.locale.clone(),

@@ -1,7 +1,7 @@
 //! Which `$variables` a Fluent entry needs from the code that formats it.
 //!
-//! The rules follow the `fluent-bundle` resolver, so `ftl extract` and `ftl check` agree on the
-//! same answer:
+//! The rules follow the Fluent spec as python-fluent implements it, so `ftl extract` and
+//! `ftl check` agree on the same answer:
 //!
 //! - `{ $name }` in the pattern of the entry being formatted, in a selector, in a nested
 //!   placeable or as a function argument (`{ NUMBER($count) }`) is a caller variable.
@@ -18,6 +18,11 @@
 //! Every (entry, attribute, scope) triple is visited at most once, so reference cycles terminate.
 //! Unknown references are reported in [`CollectedVariables::unknown_references`] instead of
 //! failing, so each caller decides whether they are an error.
+//!
+//! `fluent-bundle` at the pinned rev differs for one shape: after a nested term reference it
+//! sets the local arguments to `None` instead of restoring the enclosing term's, so in
+//! `-outer = { -inner } { $case }` it reads `$case` from the caller, whereas the spec binds it
+//! to `-outer`'s own call arguments and this collector counts nothing.
 
 use crate::FastHashSet;
 use fluent_syntax::ast::{
@@ -489,7 +494,7 @@ mod tests {
     }
 
     #[test]
-    fn reference_cycles_terminate() {
+    fn reference_cycles_terminate_and_keep_term_scope() {
         let fixture = Fixture::parse(
             "a = { $x } { b }\nb = { $y } { a }\nself-ref = { self-ref } { $z }\n-t1 = { -t2 }\n-t2 = { -t1 } { $w }\nuses-terms = { -t1 }\n",
         );
@@ -498,9 +503,42 @@ mod tests {
         assert_eq!(sorted(&collected.referenced_messages), ["a", "b"]);
 
         assert_eq!(sorted(&fixture.message("self-ref", false).variables), ["z"]);
+        // `$w` follows the nested `{ -t1 }` inside `-t2` and stays a parameter of `-t2`, never a
+        // caller variable of `uses-terms`. This is the spec's scoping (see
+        // `variable_after_nested_term_reference_stays_in_term_scope`), chosen deliberately over
+        // fluent-bundle, which would read `$w` from the caller there.
         assert!(fixture.message("uses-terms", false).variables.is_empty());
         assert!(fixture.term("t1").variables.is_empty());
         assert_eq!(sorted(&fixture.term("t2").variables), ["w"]);
+    }
+
+    #[test]
+    fn variable_after_nested_term_reference_stays_in_term_scope() {
+        // Fluent spec and python-fluent: `$case` in `-outer` is bound by `-outer`'s own call
+        // arguments, also after the nested `{ -inner }`, so `m` renders `I x` and needs nothing
+        // from the caller. fluent-bundle at the pinned rev drops the enclosing term's arguments
+        // after a nested term reference and reports `Unknown variable: $case` instead; the
+        // collector does not follow it there.
+        let fixture = Fixture::parse(
+            "-inner = I\n-outer = { -inner } { $case }\nm = { -outer(case: \"x\") }\n",
+        );
+        let collected = fixture.message("m", false);
+        assert!(collected.variables.is_empty());
+        assert!(collected.referenced_messages.is_empty());
+        assert!(collected.unknown_references.is_empty());
+        assert_eq!(sorted(&fixture.term("outer").variables), ["case"]);
+    }
+
+    #[test]
+    fn missing_term_attribute_still_walks_the_variants() {
+        // `-t.missing` resolves to no pattern (the `references` check reports it), but the
+        // selector's variants are still the message's own text.
+        let fixture = Fixture::parse(
+            "-t = T\n    .known = K\nmsg = { -t.missing ->\n    [a] { $x }\n   *[b] { $y }\n}\n",
+        );
+        let collected = fixture.message("msg", false);
+        assert_eq!(sorted(&collected.variables), ["x", "y"]);
+        assert!(collected.unknown_references.is_empty());
     }
 
     #[test]

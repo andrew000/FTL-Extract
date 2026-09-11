@@ -20,18 +20,22 @@
   who's every variable it counted as one the code had to pass; and a message attribute reference (`{ btn.title }`),
   which it followed to the message value. `items = You have { NUMBER($count) } items` with `i18n.items(count=5)`
   used to become `# items = You have { NUMBER($count) } items` followed by the placeholder `items = items{ $count }`;
-  the file is now left byte for byte as it was. For the function-argument and `{ -brand(case: "gen") }` shapes
-  `ftl check --check kwargs` passed, so the rewrite went unnoticed; for `{ -brand }` and `{ btn.title }` it failed for
-  reasons of its own (see Behavior changes).
+  the message is now neither commented out nor replaced (a file that is not in the serializer's canonical form is
+  still reformatted, as before). For the function-argument and `{ -brand(case: "gen") }` shapes
+  `ftl check --check kwargs` passed, so the rewrite went unnoticed; for `{ -brand }` it failed for reasons of its
+  own, and for `{ btn.title }` it failed only when the referenced message had variables outside that attribute: with
+  `btn = B` and `.title = T { $x }` it passed while `extract` rewrote (see Behavior changes).
 - `ftl extract` and `ftl check --check kwargs` no longer disagree about which variables a stored message needs. Both
   now use one collector that follows the Fluent spec as python-fluent implements it: a variable in the value of the
   message being formatted counts, also inside a selector, a nested placeable or a function argument; `{ msg }` pulls
   in the value of `msg` and `{ msg.attr }` only that attribute; nothing inside a term is a caller variable, because
   a term resolves variables against its own call arguments only; and a variable used only in the called message's
-  own attributes does not count, because `i18n.key()` renders only the value. `fluent-bundle` at the pinned rev
-  differs for one shape, `-outer = { -inner } { $case }`: it discards the enclosing term's arguments after the
-  nested term reference and reads `$case` from the caller, which the collector deliberately does not follow. What
-  this changes for `check` is listed under Behavior changes.
+  own attributes does not count, because `i18n.key()` renders only the value. A positional term argument
+  (`{ -t($who) }`, outside the Fluent spec but accepted by the parser) is evaluated where the reference appears and
+  counts as a caller variable. `fluent-bundle` at the pinned rev differs for one shape,
+  `-outer = { -inner } { $case }`: it discards the enclosing term's arguments after the nested term reference and
+  reads `$case` from the caller, which the collector deliberately does not follow. What this changes for `check` is
+  listed under Behavior changes.
 - `ftl extract` no longer merges the last two lines of an entry it comments out, so the commented copy can be
   restored by removing the `# ` prefixes. `old-rules =` with the lines `Rule one.`, `Rule two.` and `Rule three.`
   used to be written as `# old-rules =`, `#     Rule one.`, `#     Rule two.    Rule three.`; it is now
@@ -99,6 +103,11 @@
   on a called and matching key changes nothing, and only a comment directly above the message (no blank line in
   between) is a marker. Because a kept key is walked like a called one, a reference to a missing message or term in
   it now aborts `extract` instead of vanishing with the commented-out key.
+- The three Python-file extraction diagnostics no longer embed the file path in their `message`:
+  `Failed to parse Python file: ...`, `Failed to read Python file: ...` and `Python file is not valid UTF-8: ...`
+  replace `0.12.0`'s `Failed to parse <path>: ...`, `Failed to read <path>: ...` and `Invalid UTF-8 in <path>: ...`.
+  The path is in `locations` (`extract`) and `code_location` (`check`), where it already was, so the `message`
+  field of the JSON check report changes for these three diagnostics; `kind`, `key` and `code_location` do not.
 
 ### Internal
 

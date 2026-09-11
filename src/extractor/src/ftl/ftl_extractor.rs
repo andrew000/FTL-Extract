@@ -1,7 +1,7 @@
 use crate::ftl::code_extractor::{extract_fluent_keys, sort_fluent_keys_by_path};
 use crate::ftl::consts::{CommentsKeyModes, LineEndings};
 use crate::ftl::diagnostics::ExtractionDiagnostic;
-use crate::ftl::ftl_importer::import_ftl_from_dir;
+use crate::ftl::ftl_importer::{DuplicateKey, ImportResult, import_ftl_from_dir};
 use crate::ftl::matcher::{FluentEntry, FluentKey};
 use crate::ftl::process::commentator::comment_ftl_key;
 use crate::ftl::process::kwargs_extractor::extract_kwargs;
@@ -68,16 +68,26 @@ pub fn extract(config: ExtractConfig) -> Result<ExtractionStatistics> {
     log_kwargs_unknown(&in_code_fluent_keys);
 
     let start = std::time::Instant::now();
-    let results: Result<Vec<ExtractionStatistics>> = config
-        .languages
-        .par_iter()
-        .map(|lang| {
-            let mut thread_local_stats = ExtractionStatistics::new();
-            thread_local_stats.init_lang(lang);
+    let imports = import_languages(&config)?;
+    let results: Result<Vec<ExtractionStatistics>> = imports
+        .into_par_iter()
+        .map(|imported| {
+            let LanguageImport {
+                lang,
+                stored,
+                mut statistics,
+                ..
+            } = imported;
 
-            process_language(lang, &in_code_fluent_keys, &config, &mut thread_local_stats)?;
+            process_language(
+                &lang,
+                stored,
+                &in_code_fluent_keys,
+                &config,
+                &mut statistics,
+            )?;
 
-            Ok(thread_local_stats)
+            Ok(statistics)
         })
         .collect();
 
@@ -166,14 +176,67 @@ fn check_extraction_diagnostics(
     bail!(message)
 }
 
+/// The stored `.ftl` files of one language, imported but not yet processed.
+struct LanguageImport {
+    lang: String,
+    stored: ImportResult,
+    duplicates: Vec<DuplicateKey>,
+    statistics: ExtractionStatistics,
+}
+
+/// Imports the `.ftl` files of every language before any language is processed, so that a
+/// locale which must not be written (a syntax error, a key defined more than once) stops the
+/// run while every file of every locale is still as it was.
+fn import_languages(config: &ExtractConfig) -> Result<Vec<LanguageImport>> {
+    let imports = config
+        .languages
+        .par_iter()
+        .map(|lang| {
+            let mut statistics = ExtractionStatistics::new();
+            statistics.init_lang(lang);
+            let (stored, duplicates) =
+                import_ftl_from_dir(&config.locales_path, lang, &mut statistics)?;
+            Ok(LanguageImport {
+                lang: lang.clone(),
+                stored,
+                duplicates,
+                statistics,
+            })
+        })
+        .collect::<Result<Vec<_>>>()?;
+
+    // Languages in the configured order, keys sorted by name within each language.
+    let duplicates: Vec<&DuplicateKey> = imports
+        .iter()
+        .flat_map(|imported| imported.duplicates.iter())
+        .collect();
+    if duplicates.is_empty() {
+        return Ok(imports);
+    }
+
+    let noun = if duplicates.len() == 1 {
+        "problem"
+    } else {
+        "problems"
+    };
+    let mut message = format!(
+        "Extraction aborted: {} {noun} found in .ftl files, no .ftl files were written.",
+        duplicates.len()
+    );
+    for duplicate in duplicates {
+        let _ = write!(message, "\n  - {duplicate}");
+    }
+    bail!(message)
+}
+
 fn process_language(
     lang: &String,
+    stored: ImportResult,
     in_code_fluent_keys: &FastHashMap<String, FluentKey>,
     config: &ExtractConfig,
     statistics: &mut ExtractionStatistics,
 ) -> Result<()> {
-    let (mut stored_fluent_keys, stored_terms, leave_as_is) =
-        import_ftl_from_dir(&config.locales_path, lang, statistics)?;
+    let (mut stored_fluent_keys, stored_terms, leave_as_is) = stored;
     let lang_dir = config.locales_path.join(lang);
 
     let mut keys_to_comment: FastHashMap<String, FluentKey> = FastHashMap::default();
@@ -496,6 +559,141 @@ mod tests {
             "existing .ftl must be left untouched"
         );
         assert!(!locale_path.join("hello.ftl").exists());
+    }
+
+    /// `en/<name>` with the platform's separator, as the duplicate-key error prints it.
+    fn en(name: &str) -> String {
+        PathBuf::from("en").join(name).display().to_string()
+    }
+
+    #[test]
+    fn test_extract_aborts_when_a_key_is_defined_in_two_files_of_one_locale() {
+        let temp = TempDir::new().unwrap();
+        let code_path = temp.path().join("code");
+        let locales_path = temp.path().join("locales");
+        let locale_path = locales_path.join("en");
+        fs::create_dir_all(&code_path).unwrap();
+        fs::create_dir_all(&locale_path).unwrap();
+        fs::write(code_path.join("app.py"), "i18n.get(\"dup\")\n").unwrap();
+        fs::write(locale_path.join("_default.ftl"), "dup = One\n").unwrap();
+        fs::write(locale_path.join("other.ftl"), "dup = Two\n").unwrap();
+
+        let error = extract(config(code_path, locales_path)).unwrap_err();
+
+        assert_eq!(
+            error.to_string(),
+            format!(
+                "Extraction aborted: 1 problem found in .ftl files, no .ftl files were written.\n  - Fluent key dup is defined more than once in locale en: {}:1 and {}:1",
+                en("_default.ftl"),
+                en("other.ftl")
+            )
+        );
+        assert_eq!(
+            fs::read_to_string(locale_path.join("_default.ftl")).unwrap(),
+            "dup = One\n"
+        );
+        assert_eq!(
+            fs::read_to_string(locale_path.join("other.ftl")).unwrap(),
+            "dup = Two\n"
+        );
+    }
+
+    #[test]
+    fn test_extract_aborts_on_a_duplicate_key_in_dry_run_and_warn_mode() {
+        for (dry_run, mode) in [
+            (true, CommentsKeyModes::Comment),
+            (false, CommentsKeyModes::Warn),
+            (true, CommentsKeyModes::Warn),
+        ] {
+            let temp = TempDir::new().unwrap();
+            let code_path = temp.path().join("code");
+            let locales_path = temp.path().join("locales");
+            let locale_path = locales_path.join("en");
+            fs::create_dir_all(&code_path).unwrap();
+            fs::create_dir_all(&locale_path).unwrap();
+            fs::write(code_path.join("app.py"), "i18n.get(\"dup\")\n").unwrap();
+            let ftl_path = locale_path.join("_default.ftl");
+            fs::write(&ftl_path, "dup = One\n-brand = B\ndup = Two\n-brand = C\n").unwrap();
+
+            let mut cfg = config(code_path, locales_path);
+            cfg.dry_run = dry_run;
+            cfg.comment_keys_mode = mode.clone();
+
+            let error = extract(cfg).unwrap_err();
+
+            assert_eq!(
+                error.to_string(),
+                format!(
+                    "Extraction aborted: 2 problems found in .ftl files, no .ftl files were written.\n  - Fluent key -brand is defined more than once in locale en: {0}:2 and {0}:4\n  - Fluent key dup is defined more than once in locale en: {0}:1 and {0}:3",
+                    en("_default.ftl")
+                ),
+                "dry_run={dry_run} mode={mode:?}"
+            );
+            assert_eq!(
+                fs::read_to_string(&ftl_path).unwrap(),
+                "dup = One\n-brand = B\ndup = Two\n-brand = C\n"
+            );
+        }
+    }
+
+    #[test]
+    fn test_extract_treats_the_same_key_in_two_locales_as_distinct() {
+        let temp = TempDir::new().unwrap();
+        let code_path = temp.path().join("code");
+        let locales_path = temp.path().join("locales");
+        fs::create_dir_all(&code_path).unwrap();
+        fs::create_dir_all(locales_path.join("en")).unwrap();
+        fs::create_dir_all(locales_path.join("uk")).unwrap();
+        fs::write(code_path.join("app.py"), "i18n.get(\"hello\")\n").unwrap();
+        fs::write(locales_path.join("en/_default.ftl"), "hello = Hello\n").unwrap();
+        fs::write(locales_path.join("uk/_default.ftl"), "hello = Привіт\n").unwrap();
+
+        let mut cfg = config(code_path, locales_path.clone());
+        cfg.languages = vec!["en".to_string(), "uk".to_string()];
+
+        let stats = extract(cfg).unwrap();
+
+        assert_eq!(stats.ftl_keys_commented["en"], 0);
+        assert_eq!(stats.ftl_keys_commented["uk"], 0);
+        assert_eq!(
+            fs::read_to_string(locales_path.join("en/_default.ftl")).unwrap(),
+            "hello = Hello\n"
+        );
+        assert_eq!(
+            fs::read_to_string(locales_path.join("uk/_default.ftl")).unwrap(),
+            "hello = Привіт\n"
+        );
+    }
+
+    #[test]
+    fn test_extract_duplicate_in_one_locale_leaves_the_other_locale_untouched() {
+        let temp = TempDir::new().unwrap();
+        let code_path = temp.path().join("code");
+        let locales_path = temp.path().join("locales");
+        fs::create_dir_all(&code_path).unwrap();
+        fs::create_dir_all(locales_path.join("en")).unwrap();
+        fs::create_dir_all(locales_path.join("uk")).unwrap();
+        fs::write(code_path.join("app.py"), "i18n.get(\"hello\")\n").unwrap();
+        fs::write(locales_path.join("en/_default.ftl"), "hello = Hello\n").unwrap();
+        fs::write(locales_path.join("en/other.ftl"), "hello = Hi\n").unwrap();
+        // `uk` would be rewritten on its own: `hello` is missing and `obsolete` is unused.
+        fs::write(locales_path.join("uk/_default.ftl"), "obsolete = Old\n").unwrap();
+
+        let mut cfg = config(code_path, locales_path.clone());
+        cfg.languages = vec!["uk".to_string(), "en".to_string()];
+
+        let error = extract(cfg).unwrap_err();
+
+        assert!(
+            error
+                .to_string()
+                .contains("Fluent key hello is defined more than once in locale en"),
+            "{error}"
+        );
+        assert_eq!(
+            fs::read_to_string(locales_path.join("uk/_default.ftl")).unwrap(),
+            "obsolete = Old\n"
+        );
     }
 
     #[test]

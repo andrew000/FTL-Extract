@@ -55,9 +55,8 @@ impl IgnoreMarker {
     }
 }
 
-/// Reads a check-comment line as an [`IgnoreMarker`] when it is one, or an empty marker when
-/// the line does not opt out of anything (an ordinary comment, or `ignore` followed only by
-/// nothing that names a check).
+/// Reads one comment line: `None` when it is not a marker (an ordinary comment, or `ftl-extract:`
+/// followed by something other than `ignore`), otherwise the checks that line opts out of.
 fn parse_line(line: &str) -> Option<IgnoreMarker> {
     const PREFIX: &str = "ftl-extract:";
 

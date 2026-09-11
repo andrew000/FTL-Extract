@@ -257,7 +257,7 @@ severity = { stale = "error", untranslated = "warn" }
 ```
 
 Command-line overrides take precedence over `pyproject.toml`. Syntax errors always stop the remaining checks, even
-when their severity is set to `warn`, because the broken files cannot be analysed.
+when their severity is set to `warn`, because the broken files cannot be analyzed.
 
 ### Config examples for each check
 
@@ -399,11 +399,12 @@ For `ftl extract` the names mean:
   ```
 
 - `kwargs`: a called message whose variables differ from the keyword arguments in code is kept as it is instead of
-  being commented out and replaced by a placeholder. Use it when the variables are passed in a way the extractor
-  cannot follow:
+  being commented out and replaced by a placeholder. Use it when a variable is supplied by something the extractor
+  cannot see, such as a template or a frontend that renders the same message (a call with `**kwargs` needs no
+  marker, see the FAQ below):
 
   ```python
-  i18n.get("items", **build_kwargs(user))
+  i18n.get("items")
   ```
 
   ```ftl

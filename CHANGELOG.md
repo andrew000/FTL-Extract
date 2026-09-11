@@ -58,12 +58,15 @@
 - When a locale file does not parse, `ftl extract` now reports the file, line and column and the parser's own
   description, like `ftl check --check syntax` does: `Failed to parse FTL file locales/en/_default.ftl:5:1: Expected
   a token starting with "}"` (plus `(and N more)` for further errors), instead of a debug dump of the error list.
+  Every locale is now imported before any is processed, so this error, like a duplicate key, stops the run before a
+  file of any locale is written; it used to stop only the locale it was found in.
 - `ftl extract` no longer rewrites a locale that defines the same key more than once, in two files or twice in one
   file, keeping one definition and dropping the other without a trace. `dup = One` in `en/_default.ftl` and
   `dup = Two` in `en/other.ftl` with `i18n.get("dup")` used to exit `0` and leave `dup = dup` in `_default.ftl` and
-  `# dup = Two` in `other.ftl`; `dup = One` was gone, with no commented-out copy, and `--dry-run` and
-  `--comment-keys-mode warn` said nothing. The run now exits `1` before any file of any locale is written, whatever
-  the mode, and lists every such key sorted by name with each of its definitions:
+  `# dup = Two` in `other.ftl`; `dup = One` was gone, with no commented-out copy. `--dry-run` said nothing, and
+  `--comment-keys-mode warn` only warned that `dup` in `other.ftl` was not in code, while it still dropped `dup = One`
+  silently when both definitions sat in one file. The run now exits `1` before any file of any locale is written,
+  whatever the mode, and lists every such key sorted by name with each of its definitions:
   `Extraction aborted: 1 problem found in .ftl files, no .ftl files were written.` followed by
   `- Fluent key dup is defined more than once in locale en: en/_default.ftl:1 and en/other.ftl:1`. Terms are keys
   too (`Fluent key -brand ...`); the same key in two different locales is not a duplicate. `ftl check` does not

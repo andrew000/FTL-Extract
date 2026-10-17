@@ -1,7 +1,7 @@
 use crate::ftl::code_extractor::{extract_fluent_keys, sort_fluent_keys_by_path};
 use crate::ftl::consts::{CommentsKeyModes, LineEndings};
 use crate::ftl::diagnostics::ExtractionDiagnostic;
-use crate::ftl::ftl_importer::{DuplicateKey, ImportResult, import_ftl_from_dir};
+use crate::ftl::ftl_importer::{DuplicateKey, ImportResult, Originals, import_ftl_from_dir};
 use crate::ftl::matcher::{FluentEntry, FluentKey};
 use crate::ftl::process::commentator::comment_ftl_key;
 use crate::ftl::process::kwargs_extractor::extract_kwargs;
@@ -90,6 +90,7 @@ pub fn extract(config: ExtractConfig) -> Result<ExtractionStatistics> {
             let LanguageImport {
                 lang,
                 stored,
+                originals,
                 mut statistics,
                 ..
             } = imported;
@@ -97,6 +98,7 @@ pub fn extract(config: ExtractConfig) -> Result<ExtractionStatistics> {
             process_language(
                 &lang,
                 stored,
+                &originals,
                 &in_code_fluent_keys,
                 &code_kwargs,
                 &config,
@@ -227,6 +229,7 @@ fn check_extraction_diagnostics(
 struct LanguageImport {
     lang: String,
     stored: ImportResult,
+    originals: Originals,
     duplicates: Vec<DuplicateKey>,
     statistics: ExtractionStatistics,
 }
@@ -241,11 +244,12 @@ fn import_languages(config: &ExtractConfig) -> Result<Vec<LanguageImport>> {
         .map(|lang| {
             let mut statistics = ExtractionStatistics::new();
             statistics.init_lang(lang);
-            let (stored, duplicates) =
+            let (stored, originals, duplicates) =
                 import_ftl_from_dir(&config.locales_path, lang, &mut statistics)?;
             Ok(LanguageImport {
                 lang: lang.clone(),
                 stored,
+                originals,
                 duplicates,
                 statistics,
             })
@@ -279,6 +283,7 @@ fn import_languages(config: &ExtractConfig) -> Result<Vec<LanguageImport>> {
 fn process_language(
     lang: &String,
     stored: ImportResult,
+    originals: &Originals,
     in_code_fluent_keys: &FastHashMap<String, FluentKey>,
     code_kwargs: &FastHashMap<&str, FastHashSet<String>>,
     config: &ExtractConfig,
@@ -405,6 +410,7 @@ fn process_language(
         keys_to_comment,
         stored_terms,
         leave_as_is,
+        originals,
         &lang_dir,
         config,
         statistics,
@@ -444,6 +450,7 @@ fn write_results(
     commented_keys: FastHashMap<String, FluentKey>,
     terms: FastHashMap<String, FluentKey>,
     leave_as_is: Vec<FluentKey>,
+    originals: &Originals,
     lang_dir: &Path,
     config: &ExtractConfig,
     statistics: &mut ExtractionStatistics,
@@ -500,7 +507,12 @@ fn write_results(
                     "[DRY-RUN] Would write to {}. {entries} entries.",
                     full_path.display()
                 )
-            } else if let Err(err) = write(&full_path, ftl_content, &config.line_endings) {
+            } else if let Err(err) = write(
+                &full_path,
+                ftl_content,
+                &config.line_endings,
+                originals.get(path.as_ref()),
+            ) {
                 return Some(format!("{}: {err}", full_path.display()));
             } else {
                 debug!("Saved {}. {entries} entries.", full_path.display());
@@ -540,8 +552,18 @@ fn normalize_line_endings(s: String, line_endings: &LineEndings) -> String {
     }
 }
 
-fn write(path: &Path, ftl: String, line_endings: &LineEndings) -> std::io::Result<()> {
+/// Writes `ftl` to `path` unless `original`, the file's content as the import read it, already
+/// equals it: the common case of a re-run then does not open the file a second time.
+fn write(
+    path: &Path,
+    ftl: String,
+    line_endings: &LineEndings,
+    original: Option<&String>,
+) -> std::io::Result<()> {
     let ftl_with_line_endings = normalize_line_endings(ftl, line_endings);
+    if original.is_some_and(|original| *original == ftl_with_line_endings) {
+        return Ok(());
+    }
     write_atomically(path, ftl_with_line_endings.as_bytes())
 }
 
@@ -604,6 +626,34 @@ mod tests {
             "existing .ftl must be left untouched"
         );
         assert!(!locale_path.join("hello.ftl").exists());
+    }
+
+    #[test]
+    fn test_write_skips_a_file_whose_imported_content_is_unchanged() {
+        let temp = TempDir::new().unwrap();
+        let path = temp.path().join("messages.ftl");
+        let content = "hello = Hello\r\n".to_string();
+
+        // The content the import read matches: nothing is opened or written, so a file that
+        // is not even there stays absent.
+        write(
+            &path,
+            "hello = Hello\n".to_string(),
+            &LineEndings::CRLF,
+            Some(&content),
+        )
+        .unwrap();
+        assert!(!path.exists());
+
+        // A different original content means the file is written.
+        write(
+            &path,
+            "hello = Hello\n".to_string(),
+            &LineEndings::CRLF,
+            Some(&"hello = Old\r\n".to_string()),
+        )
+        .unwrap();
+        assert_eq!(fs::read_to_string(&path).unwrap(), content);
     }
 
     /// `en/<name>` with the platform's separator, as the duplicate-key error prints it.

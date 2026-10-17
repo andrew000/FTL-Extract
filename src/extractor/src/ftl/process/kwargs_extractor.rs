@@ -200,9 +200,7 @@ mod tests {
                 comment: None,
             }),
             Arc::new(PathBuf::from("tmp.ftl")),
-            Some("en".to_string()),
             Some(0),
-            FastHashSet::default(),
         )
     }
 
@@ -217,9 +215,7 @@ mod tests {
                 comment: None,
             }),
             Arc::new(PathBuf::from("tmp.ftl")),
-            Some("en".to_string()),
             Some(0),
-            FastHashSet::default(),
         )
     }
 
@@ -299,8 +295,6 @@ mod tests {
             FluentEntry::Comment(fluent_syntax::ast::Comment { content: vec![] }),
             Arc::new(PathBuf::from("tmp.ftl")),
             None,
-            None,
-            FastHashSet::default(),
         );
 
         for key in [empty_message, valueless, comment] {

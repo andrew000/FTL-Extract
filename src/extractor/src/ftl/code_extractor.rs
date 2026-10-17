@@ -9,9 +9,9 @@ use crate::ftl::matcher::{FluentEntry, FluentKey, I18nMatcher, merge_key_occurre
 use crate::ftl::utils::{FastHashMap, FastHashSet};
 use anyhow::Result;
 use common::LineIndex;
+use ignore::WalkBuilder;
 use ignore::overrides::{Override, OverrideBuilder};
 use ignore::types::TypesBuilder;
-use ignore::{WalkBuilder, WalkState};
 use log::error;
 use memchr::memmem;
 use memmap2::Mmap;
@@ -21,7 +21,6 @@ use std::collections::hash_map::Entry;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use std::sync::Mutex;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 #[derive(Clone, Debug)]
@@ -55,12 +54,15 @@ fn find_py_files(search_path: &Path, exclude_matcher: &ExcludeMatcher) -> Vec<Py
         type_builder.add("py", "*.py").unwrap();
         type_builder.select("py");
 
-        let result_paths_parallel = Arc::new(Mutex::new(Vec::new()));
         // `.gitignore` files inside `search_path` are honored with or without a git
         // repository, as before. Registering the name as a custom ignore file (instead of
         // `git_ignore(true)` + `require_git(false)`) lets the `ignore` crate skip its
         // ancestor scan, see `common::ftl_files`.
-        WalkBuilder::new(search_path)
+        //
+        // The walk is sequential: the parallel walker starts a thread per core on every run,
+        // which costs several milliseconds and dominates small projects, while on large ones
+        // the walk runs alongside the `.ftl` import anyway (see `extract`).
+        for result in WalkBuilder::new(search_path)
             .parents(false)
             .ignore(false)
             .git_ignore(false)
@@ -69,32 +71,23 @@ fn find_py_files(search_path: &Path, exclude_matcher: &ExcludeMatcher) -> Vec<Py
             .add_custom_ignore_filename(".gitignore")
             .overrides(exclude_matcher.clone())
             .types(type_builder.build().unwrap())
-            .build_parallel()
-            .run(|| {
-                let result_paths = Arc::clone(&result_paths_parallel);
-                Box::new(move |result| {
-                    match result {
-                        Ok(entry) => {
-                            let path = entry.path();
-                            if entry.file_type().is_some_and(|ft| ft.is_file())
-                                && let Ok(metadata) = entry.metadata()
-                            {
-                                result_paths.lock().unwrap().push(PyFile {
-                                    path: path.to_path_buf(),
-                                    size: metadata.len(),
-                                    modified_ns: file_modified_ns(&metadata),
-                                });
-                            }
-                        }
-                        Err(err) => error!(target: "extractor:code", "{}", err),
+            .build()
+        {
+            match result {
+                Ok(entry) => {
+                    if entry.file_type().is_some_and(|ft| ft.is_file())
+                        && let Ok(metadata) = entry.metadata()
+                    {
+                        result_paths.push(PyFile {
+                            path: entry.into_path(),
+                            size: metadata.len(),
+                            modified_ns: file_modified_ns(&metadata),
+                        });
                     }
-                    WalkState::Continue
-                })
-            });
-        result_paths = Arc::into_inner(result_paths_parallel)
-            .unwrap()
-            .into_inner()
-            .unwrap();
+                }
+                Err(err) => error!(target: "extractor:code", "{}", err),
+            }
+        }
     } else if search_path.is_file()
         && search_path.extension().unwrap_or_default() == "py"
         && !exclude_matcher.matched(search_path, false).is_ignore()
@@ -1157,9 +1150,7 @@ i18n.get("ok")
                     comment: None,
                 }),
                 ftl_path1.clone(),
-                Some("en".to_string()),
                 Some(0),
-                FastHashSet::default(),
             ),
         );
         fluent_keys.insert(
@@ -1176,9 +1167,7 @@ i18n.get("ok")
                     comment: None,
                 }),
                 ftl_path2.clone(),
-                Some("en".to_string()),
                 Some(0),
-                FastHashSet::default(),
             ),
         );
 

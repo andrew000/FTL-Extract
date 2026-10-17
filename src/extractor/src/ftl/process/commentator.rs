@@ -45,7 +45,6 @@ pub(crate) fn comment_ftl_key(key: &mut FluentKey) {
 mod tests {
     use crate::ftl::matcher::{FluentEntry, FluentKey};
     use crate::ftl::process::serializer::generate_ftl;
-    use crate::ftl::utils::FastHashSet;
     use fluent_syntax::ast::{Entry, Resource};
     use fluent_syntax::parser::parse;
     use pretty_assertions::assert_eq;
@@ -58,9 +57,7 @@ mod tests {
             String::from("key"),               // key
             entry,
             Arc::new(PathBuf::from("tmp.ftl")), // path
-            Some("en".to_string()),             // locale
             Some(0),
-            FastHashSet::default(),
         )
     }
 

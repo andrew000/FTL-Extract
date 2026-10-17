@@ -51,6 +51,7 @@ pub struct ExtractPyprojectConfig {
     pub cache_path: Option<PathBuf>,
     pub clear_cache: Option<bool>,
     pub allow_parse_errors: Option<bool>,
+    pub leak_memory: Option<bool>,
 }
 
 #[derive(Debug, Clone, Default, Deserialize)]
@@ -148,6 +149,8 @@ ignore-kwargs = ["when"]
 comment-keys-mode = "comment"
 line-endings = "lf"
 cache = true
+# Skip freeing parsed entries before exit: faster on large projects.
+leak-memory = false
 "#;
 
 const STUB_SAMPLE: &str = r#"[tool.ftl-extract.stub]

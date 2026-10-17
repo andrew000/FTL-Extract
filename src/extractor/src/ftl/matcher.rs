@@ -369,7 +369,7 @@ impl<'a> I18nMatcher<'a> {
         expr: &ruff_python_ast::ExprCall,
         attrs: SmallVec<&str, 8>,
     ) {
-        match attrs.as_slice() {
+        match &attrs[..] {
             // `self.i18n("key")` with `self` as a prefix: the prefix step removed the only
             // attribute, so treat it like `i18n("key")`.
             [] => self.process_name_call(expr),

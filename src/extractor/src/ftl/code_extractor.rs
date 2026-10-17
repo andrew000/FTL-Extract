@@ -14,7 +14,6 @@ use ignore::overrides::{Override, OverrideBuilder};
 use ignore::types::TypesBuilder;
 use log::error;
 use memchr::memmem;
-use memmap2::Mmap;
 use rayon::prelude::*;
 use ruff_python_ast::visitor::source_order::SourceOrderVisitor;
 use std::collections::hash_map::Entry;
@@ -148,17 +147,11 @@ fn parse_file(file: &Path, file_size: u64, options: ParseOptions<'_>) -> ParsedF
         return (FastHashMap::default(), Vec::new());
     }
 
-    let file_handle = match fs::File::open(file) {
-        Ok(f) => f,
+    // A plain read: Python sources are small, and mapping a file costs more than reading it
+    // (measured on Windows, where most of the time is spent opening the file anyway).
+    let content = match fs::read(file) {
+        Ok(content) => content,
         Err(err) => return (FastHashMap::default(), vec![read_error(file, &err)]),
-    };
-
-    // Unsafe is required for mmap (file could change under us), but standard for tools like this.
-    let mmap = unsafe {
-        match Mmap::map(&file_handle) {
-            Ok(m) => m,
-            Err(err) => return (FastHashMap::default(), vec![read_error(file, &err)]),
-        }
     };
 
     // Quick check: does the file contain any of the i18n keys or prefixes?
@@ -166,17 +159,17 @@ fn parse_file(file: &Path, file_size: u64, options: ParseOptions<'_>) -> ParsedF
         .i18n_keys
         .iter()
         .chain(options.i18n_keys_prefix.iter())
-        .any(|key| memmem::find(&mmap, key.as_bytes()).is_some());
+        .any(|key| memmem::find(&content, key.as_bytes()).is_some());
 
     if !has_key {
         return (FastHashMap::default(), Vec::new());
     }
 
-    let code = match std::str::from_utf8(&mmap) {
+    let code = match std::str::from_utf8(&content) {
         Ok(c) => c,
         Err(err) => {
             // Everything before `valid_up_to` is guaranteed to be valid UTF-8.
-            let valid = std::str::from_utf8(&mmap[..err.valid_up_to()]).unwrap_or_default();
+            let valid = std::str::from_utf8(&content[..err.valid_up_to()]).unwrap_or_default();
             let location = LineIndex::new(valid).line_column(valid, valid.len());
             return (
                 FastHashMap::default(),

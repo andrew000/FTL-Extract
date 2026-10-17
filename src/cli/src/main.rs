@@ -205,6 +205,8 @@ fn main() {
                 clear_cache: clear_cache || pyproject.clear_cache.unwrap_or(false),
                 allow_parse_errors: allow_parse_errors
                     || pyproject.allow_parse_errors.unwrap_or(false),
+                // The process exits right after the run, so freeing the entries is wasted work.
+                leak_memory: true,
             };
 
             let start_time = std::time::Instant::now();

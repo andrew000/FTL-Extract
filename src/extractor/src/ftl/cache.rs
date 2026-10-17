@@ -167,8 +167,6 @@ fn cached_key_to_fluent_key(cached: CachedFluentKey) -> FluentKey {
         FluentEntry::Message(code_message(cached.key, cached.kwargs)),
         Arc::new(cached.ftl_path),
         None,
-        None,
-        FastHashSet::default(),
     );
 
     if let (Some(line), Some(column)) = (cached.source_line, cached.source_column) {
@@ -285,8 +283,6 @@ mod tests {
             }),
             Arc::new(PathBuf::from("_default.ftl")),
             None,
-            None,
-            FastHashSet::default(),
         )
     }
 
@@ -304,8 +300,6 @@ mod tests {
             }),
             Arc::new(PathBuf::from("_default.ftl")),
             None,
-            None,
-            FastHashSet::default(),
         )
     }
 

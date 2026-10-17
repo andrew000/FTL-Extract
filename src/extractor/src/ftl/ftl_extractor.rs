@@ -43,21 +43,31 @@ pub fn extract(config: ExtractConfig) -> Result<ExtractionStatistics> {
         statistics.init_lang(lang);
     }
 
+    // The Python sources and the `.ftl` files are independent and both only read, so they are
+    // scanned at the same time. Errors keep their order: a problem in the Python sources is
+    // reported before one in the `.ftl` files, as if the import had not run.
     let start = std::time::Instant::now();
-    let extraction = extract_fluent_keys(
-        &config.code_path,
-        config.i18n_keys.clone(),
-        config.i18n_keys_prefix.clone(),
-        &config.exclude_dirs,
-        config.ignore_attributes.clone(),
-        config.ignore_kwargs.clone(),
-        &config.default_ftl_file,
-        config.cache,
-        config.cache_path.as_deref(),
-        config.clear_cache,
-    )?;
+    let (extraction, imports) = rayon::join(
+        || {
+            let extraction = extract_fluent_keys(
+                &config.code_path,
+                config.i18n_keys.clone(),
+                config.i18n_keys_prefix.clone(),
+                &config.exclude_dirs,
+                config.ignore_attributes.clone(),
+                config.ignore_kwargs.clone(),
+                &config.default_ftl_file,
+                config.cache,
+                config.cache_path.as_deref(),
+                config.clear_cache,
+            );
+            info!(target: "extractor::ftl", "FTL Extraction completed in {:.3?}s.", start.elapsed().as_secs_f64());
+            extraction
+        },
+        || import_languages(&config),
+    );
+    let extraction = extraction?;
     statistics.py_files_count += extraction.py_files_with_keys;
-    info!(target: "extractor::ftl", "FTL Extraction completed in {:.3?}s.", start.elapsed().as_secs_f64());
 
     // Abort before touching any .ftl file: keys from an unparseable file would otherwise look
     // unused and get commented out of every locale.
@@ -67,8 +77,8 @@ pub fn extract(config: ExtractConfig) -> Result<ExtractionStatistics> {
     statistics.ftl_in_code_keys_count = in_code_fluent_keys.len();
     log_kwargs_unknown(&in_code_fluent_keys);
 
-    let start = std::time::Instant::now();
-    let imports = import_languages(&config)?;
+    let imports = imports?;
+    let code_kwargs = code_kwargs(&in_code_fluent_keys)?;
     let results: Result<Vec<ExtractionStatistics>> = imports
         .into_par_iter()
         .map(|imported| {
@@ -83,6 +93,7 @@ pub fn extract(config: ExtractConfig) -> Result<ExtractionStatistics> {
                 &lang,
                 stored,
                 &in_code_fluent_keys,
+                &code_kwargs,
                 &config,
                 &mut statistics,
             )?;
@@ -120,6 +131,32 @@ fn log_kwargs_unknown(in_code_fluent_keys: &FastHashMap<String, FluentKey>) {
             );
         }
     }
+}
+
+/// The variables of every key found in code whose calls can be checked (no `**kwargs`).
+///
+/// A key found in code is a message of `{ $kwarg }` placeables and nothing that references
+/// another entry, so its variables are the same in every locale: they are collected once here
+/// instead of once per locale.
+fn code_kwargs(
+    in_code_fluent_keys: &FastHashMap<String, FluentKey>,
+) -> Result<FastHashMap<&str, FastHashSet<String>>> {
+    let no_terms = FastHashMap::default();
+    in_code_fluent_keys
+        .par_iter()
+        .filter(|(_, fluent_key)| fluent_key.kwargs_unknown.is_none())
+        .map(|(key, fluent_key)| {
+            let mut no_references = FastHashSet::default();
+            let kwargs = extract_kwargs(
+                fluent_key,
+                &no_terms,
+                in_code_fluent_keys,
+                &mut no_references,
+            )?;
+            debug_assert!(no_references.is_empty());
+            Ok((key.as_str(), kwargs))
+        })
+        .collect()
 }
 
 /// Whether the stored entry carries a `# ftl-extract: ignore ...` marker covering `check`.
@@ -233,6 +270,7 @@ fn process_language(
     lang: &String,
     stored: ImportResult,
     in_code_fluent_keys: &FastHashMap<String, FluentKey>,
+    code_kwargs: &FastHashMap<&str, FastHashSet<String>>,
     config: &ExtractConfig,
     statistics: &mut ExtractionStatistics,
 ) -> Result<()> {
@@ -287,19 +325,12 @@ fn process_language(
         )?;
 
         // A call with `**kwargs` can pass any variable, so the stored message cannot be
-        // checked against the code and is left alone.
-        if fluent_key.kwargs_unknown.is_some() {
+        // checked against the code and is left alone. Such keys have no `code_kwargs` entry.
+        let Some(code_args) = code_kwargs.get(key.as_str()) else {
             continue;
-        }
+        };
 
-        let code_args = extract_kwargs(
-            fluent_key,
-            &stored_terms,
-            in_code_fluent_keys,
-            &mut depend_keys,
-        )?;
-
-        if code_args != stored_args {
+        if *code_args != stored_args {
             // The message opted out of the kwargs comparison with `# ftl-extract: ignore kwargs`.
             if marker_ignores(stored_key, "kwargs") {
                 debug!(target: "extractor::ftl", "key \"{key}\" is kept: marker ignores kwargs");

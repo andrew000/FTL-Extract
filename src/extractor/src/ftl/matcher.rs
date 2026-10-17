@@ -25,9 +25,7 @@ pub struct FluentKey {
     pub key: String,
     pub entry: Arc<FluentEntry>,
     pub path: Arc<PathBuf>,
-    pub locale: Option<String>,
     pub position: usize,
-    pub depends_on_keys: FastHashSet<String>,
     pub source_location: Option<CodeLocation>,
     /// For a key found in code: the first call site that passed `**kwargs`, if any. Such a
     /// call can pass any variable, so the key's variables cannot be verified against the
@@ -41,18 +39,14 @@ impl FluentKey {
         key: String,
         entry: FluentEntry,
         path: Arc<PathBuf>,
-        locale: Option<String>,
         position: Option<usize>,
-        depends_on_keys: FastHashSet<String>,
     ) -> Self {
         Self {
             code_path,
             key,
             entry: Arc::new(entry),
             path,
-            locale,
             position: position.unwrap_or(usize::MAX),
-            depends_on_keys,
             source_location: None,
             kwargs_unknown: None,
         }
@@ -454,8 +448,6 @@ impl<'a> I18nMatcher<'a> {
             FluentEntry::Message(code_message(key, kwargs)),
             path,
             None,
-            None,
-            FastHashSet::default(),
         );
         fluent_key.source_location = Some(self.code_location(expr));
         fluent_key.kwargs_unknown = kwargs_unknown;
@@ -535,8 +527,6 @@ mod tests {
             FluentEntry::Message(message),
             Arc::new(PathBuf::from("_default.ftl")),
             None,
-            None,
-            FastHashSet::default(),
         );
         assert_eq!(kwargs_from_key(&key), vec!["alpha", "mid", "zeta"]);
     }

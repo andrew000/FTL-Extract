@@ -1,5 +1,5 @@
 use crate::ftl::matcher::{FluentEntry, FluentKey};
-use crate::ftl::utils::{ExtractionStatistics, FastHashMap, FastHashSet};
+use crate::ftl::utils::{ExtractionStatistics, FastHashMap};
 use anyhow::{Context, Result, bail};
 use common::{FtlWalk, ftl_files, line_column};
 use fluent_syntax::ast::Entry;
@@ -58,7 +58,6 @@ impl fmt::Display for DuplicateKey {
 fn process_raw_ftl(
     body: &[Entry<String>],
     path: &Path,
-    locale: &String,
     ftl_keys: &mut FastHashMap<String, FluentKey>,
     terms: &mut FastHashMap<String, FluentKey>,
     leave_as_is_keys: &mut Vec<FluentKey>,
@@ -73,9 +72,7 @@ fn process_raw_ftl(
                         message.id.name.clone(),
                         FluentEntry::Message(message.clone()),
                         Arc::new(path.to_path_buf()),
-                        Some(locale.to_string()),
                         Some(position),
-                        FastHashSet::default(),
                     ),
                 );
             }
@@ -87,9 +84,7 @@ fn process_raw_ftl(
                         term.id.name.clone(),
                         FluentEntry::Term(term.clone()),
                         Arc::new(path.to_path_buf()),
-                        Some(locale.to_string()),
                         Some(position),
-                        FastHashSet::default(),
                     ),
                 );
             }
@@ -98,9 +93,7 @@ fn process_raw_ftl(
                 "".to_string(),
                 FluentEntry::Comment(comment.clone()),
                 Arc::new(path.to_path_buf()),
-                Some(locale.to_string()),
                 Some(position),
-                FastHashSet::default(),
             )),
             Entry::GroupComment(comment) => {
                 leave_as_is_keys.push(FluentKey::new(
@@ -108,9 +101,7 @@ fn process_raw_ftl(
                     "".to_string(),
                     FluentEntry::GroupComment(comment.clone()),
                     Arc::new(path.to_path_buf()),
-                    Some(locale.to_string()),
                     Some(position),
-                    FastHashSet::default(),
                 ));
             }
             Entry::ResourceComment(comment) => {
@@ -119,9 +110,7 @@ fn process_raw_ftl(
                     "".to_string(),
                     FluentEntry::ResourceComment(comment.clone()),
                     Arc::new(path.to_path_buf()),
-                    Some(locale.to_string()),
                     Some(position),
-                    FastHashSet::default(),
                 ));
             }
             _ => {
@@ -159,7 +148,7 @@ fn ftl_syntax_error(path: &Path, errors: &[fluent_syntax::parser::ParserError]) 
     )
 }
 
-fn import_from_ftl(path: &Path, locale_dir: &Path, locale: &str) -> Result<FileImport> {
+fn import_from_ftl(path: &Path, locale_dir: &Path) -> Result<FileImport> {
     let content = fs::read_to_string(path)
         .with_context(|| format!("Failed to read FTL file: {}", path.display()))?;
 
@@ -187,9 +176,7 @@ fn import_from_ftl(path: &Path, locale_dir: &Path, locale: &str) -> Result<FileI
                 key_name,
                 entry_type,
                 path_arc.clone(),
-                Some(locale.to_string()),
                 Some(pos),
-                FastHashSet::default(),
             )
         };
 
@@ -198,24 +185,22 @@ fn import_from_ftl(path: &Path, locale_dir: &Path, locale: &str) -> Result<FileI
         match entry {
             Entry::Message(m) => {
                 let name = m.id.name.clone();
-                if keys
-                    .insert(
-                        name.clone(),
-                        make_key(name.clone(), FluentEntry::Message(m)),
-                    )
-                    .is_some()
+                if let Some(previous) =
+                    keys.insert(name.clone(), make_key(name, FluentEntry::Message(m)))
                 {
-                    duplicates.entry(name).or_default().insert(path_arc.clone());
+                    duplicates
+                        .entry(previous.key)
+                        .or_default()
+                        .insert(path_arc.clone());
                 }
             }
             Entry::Term(t) => {
                 let name = t.id.name.clone();
-                if terms
-                    .insert(name.clone(), make_key(name.clone(), FluentEntry::Term(t)))
-                    .is_some()
+                if let Some(previous) =
+                    terms.insert(name.clone(), make_key(name, FluentEntry::Term(t)))
                 {
                     duplicates
-                        .entry(format!("-{name}"))
+                        .entry(format!("-{}", previous.key))
                         .or_default()
                         .insert(path_arc.clone());
                 }
@@ -246,13 +231,11 @@ pub(crate) fn import_ftl_from_dir(
     let files_count = paths.len();
     *statistics.ftl_files_count.get_mut(locale).unwrap() += files_count;
 
-    let (stored_keys, stored_terms, stored_misc, duplicates) = paths
+    let imports = paths
         .par_iter()
-        .map(|file_path| import_from_ftl(file_path, &locale_dir, locale))
-        .try_fold(empty_import, |acc, result| {
-            Ok::<FileImport, anyhow::Error>(merge_imports(acc, result?))
-        })
-        .try_reduce(empty_import, |a, b| Ok(merge_imports(a, b)))?;
+        .map(|file_path| import_from_ftl(file_path, &locale_dir))
+        .collect::<Result<Vec<_>>>()?;
+    let (stored_keys, stored_terms, stored_misc, duplicates) = merge_all_imports(imports);
 
     let duplicates = duplicate_keys(&locale_dir, locale, duplicates);
     Ok(((stored_keys, stored_terms, stored_misc), duplicates))
@@ -265,6 +248,29 @@ fn empty_import() -> FileImport {
         Vec::new(),
         Duplicates::new(),
     )
+}
+
+/// Merges the imports of all files of a locale. The maps of the file with the most messages
+/// become the base, sized up front for every file, so each other entry is inserted exactly once.
+/// Folding the files in a tree instead re-inserts the same entries on every level.
+fn merge_all_imports(mut imports: Vec<FileImport>) -> FileImport {
+    let Some(largest) = imports
+        .iter()
+        .enumerate()
+        .max_by_key(|(_, import)| import.0.len())
+        .map(|(index, _)| index)
+    else {
+        return empty_import();
+    };
+    let mut merged = imports.swap_remove(largest);
+    merged
+        .0
+        .reserve(imports.iter().map(|import| import.0.len()).sum());
+
+    for import in imports {
+        merged = merge_imports(merged, import);
+    }
+    merged
 }
 
 /// Merges `b` into `a`. The common case is one `.ftl` file per locale, where `a` is still
@@ -447,9 +453,8 @@ JUNK!!!
     fn test_import_from_ftl() {
         let temp = TempDir::new().unwrap();
         let path = write_locale_fixture(temp.path());
-        let locale = "en".to_string();
         let (ftl_keys, terms, leave_as_is_keys, duplicates) =
-            super::import_from_ftl(&path, path.parent().unwrap(), &locale).unwrap();
+            super::import_from_ftl(&path, path.parent().unwrap()).unwrap();
         assert!(duplicates.is_empty());
 
         assert_eq!(ftl_keys.len(), 13);
@@ -465,7 +470,6 @@ JUNK!!!
     #[test]
     fn test_process_raw_ftl_supported_entries() {
         let path = PathBuf::from("messages.ftl");
-        let locale = "en".to_string();
         let body: Vec<Entry<String>> = vec![
             Entry::Message(Message {
                 id: Identifier {
@@ -500,7 +504,6 @@ JUNK!!!
         super::process_raw_ftl(
             &body,
             &path,
-            &locale,
             &mut ftl_keys,
             &mut terms,
             &mut leave_as_is_keys,
@@ -518,7 +521,6 @@ JUNK!!!
     #[should_panic = "Unsupported FTL entry type in file"]
     fn test_process_raw_ftl_with_junk() {
         let path = PathBuf::from("_junk.ftl");
-        let locale = "en".to_string();
         let body: Vec<Entry<String>> = vec![Junk {
             content: "This is junk".to_string(),
         }];
@@ -529,7 +531,6 @@ JUNK!!!
         super::process_raw_ftl(
             &body,
             &path,
-            &locale,
             &mut ftl_keys,
             &mut terms,
             &mut leave_as_is_keys,
@@ -543,9 +544,8 @@ JUNK!!!
         let temp = TempDir::new().unwrap();
         let path = temp.path().join("_junk.ftl");
         std::fs::write(&path, JUNK_FTL).unwrap();
-        let locale = "en".to_string();
         let (_ftl_keys, _terms, _leave_as_is_keys, _duplicates) =
-            super::import_from_ftl(&path, temp.path(), &locale).unwrap();
+            super::import_from_ftl(&path, temp.path()).unwrap();
     }
 
     #[test]
@@ -632,7 +632,7 @@ JUNK!!!
         let path = temp.path().join("_broken.ftl");
         std::fs::write(&path, "hello = Hello\n\nbroken = {\n    Text\n").unwrap();
 
-        let error = super::import_from_ftl(&path, temp.path(), "en").unwrap_err();
+        let error = super::import_from_ftl(&path, temp.path()).unwrap_err();
 
         assert_eq!(
             error.to_string(),
@@ -649,7 +649,7 @@ JUNK!!!
         let path = temp.path().join("_broken.ftl");
         std::fs::write(&path, "a = {\n\nb = fine\n\nc = {\n\nd = fine\n").unwrap();
 
-        let error = super::import_from_ftl(&path, temp.path(), "en").unwrap_err();
+        let error = super::import_from_ftl(&path, temp.path()).unwrap_err();
 
         // The first error is reported where the parser stopped inside `a`, the second one is
         // only counted.

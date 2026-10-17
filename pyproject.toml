@@ -24,8 +24,8 @@ Repository = "https://github.com/andrew000/FTL-Extract"
 
 [dependency-groups]
 dev = [
-    "cibuildwheel>=4.2.1,<4.3",
-    "pre-commit>=4.6.2,<4.7",
+    "cibuildwheel>=4.3,<4.4",
+    "pre-commit>=4.7,<4.8",
     "setuptools==84.0.0",
     "setuptools-rust>=1.13,<1.14",
     "wheel>=0.48,<0.49",

@@ -37,7 +37,7 @@ anyhow = { version = "1.0" }
 bincode-next = { version = "3.1", features = ["derive"] }
 clap = { version = "4.6", features = ["derive"] }
 env_logger = { version = "0.11" }
-fluent-syntax = { git = "https://github.com/projectfluent/fluent-rs.git", rev = "b822cfe0ac5f35099ee71d3cf6f43b7c01d5fc6d" }
+fluent-syntax = { git = "https://github.com/projectfluent/fluent-rs.git", rev = "0f87afbbc3fe7d20c61a3fc75cb5d0e123aefdda" }
 ignore = { version = "0.4" }
 indexmap = { version = "2.14", features = ["serde"] }
 log = { version = "0.4" }
@@ -45,12 +45,12 @@ memchr = { version = "2.8" }
 memmap2 = { version = "0.9" }
 mimalloc = { version = "0.1" }
 rayon = { version = "1.12" }
-ruff_python_ast = { version = "0.0.12" }
-ruff_python_parser = { version = "0.0.12" }
+ruff_python_ast = { version = "0.0.18" }
+ruff_python_parser = { version = "0.0.18" }
 rustc-hash = { version = "2.1" }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = { version = "1.0" }
-smallvec = { version = "2.0.0-alpha.13" }
+smallvec = { version = "2.0.0-beta.3" }
 toml = { version = "1.1" }
 
 [profile.release]

@@ -109,7 +109,7 @@ mod tests {
         let mut key = key_from_source(source);
         super::comment_ftl_key(&mut key);
 
-        let written = generate_ftl(vec![key]);
+        let written = generate_ftl(&[key]);
         let restored = parse_resource(&uncomment(&written));
 
         assert!(
@@ -220,7 +220,7 @@ mod tests {
             key
         };
         assert_eq!(
-            generate_ftl(vec![key]),
+            generate_ftl(&[key]),
             "# old-rules =\n#     Rule one.\n#     Rule two.\n\n"
         );
     }
@@ -275,7 +275,7 @@ mod tests {
         let mut key = key_from_source(source);
         super::comment_ftl_key(&mut key);
         assert_eq!(
-            generate_ftl(vec![key]),
+            generate_ftl(&[key]),
             "# msg =\n#     Line one.\n#\n#     Line two.\n\n"
         );
         assert_round_trip(source);

@@ -33,6 +33,11 @@ pub struct ExtractConfig {
     pub cache_path: Option<PathBuf>,
     pub clear_cache: bool,
     pub allow_parse_errors: bool,
+    /// Do not free the parsed entries once they are written. Freeing millions of small AST
+    /// nodes takes about a sixth of the CPU time on large projects, and a process that exits
+    /// right after `extract` gets that memory back from the OS for free. Leave this off when
+    /// `extract` runs more than once in the same process: every run then leaks its entries.
+    pub leak_memory: bool,
 }
 
 pub fn extract(config: ExtractConfig) -> Result<ExtractionStatistics> {
@@ -103,6 +108,11 @@ pub fn extract(config: ExtractConfig) -> Result<ExtractionStatistics> {
         .collect();
 
     let results = results?;
+
+    if config.leak_memory {
+        std::mem::forget(code_kwargs);
+        std::mem::forget(in_code_fluent_keys);
+    }
 
     info!(target: "extractor::ftl", "FTL Processing completed in {:.3?}s.", start.elapsed().as_secs_f64());
 
@@ -480,7 +490,10 @@ fn write_results(
                 .filter(|k| matches!(k.entry.as_ref(), FluentEntry::Message(_)))
                 .count();
 
-            let ftl_content = generate_ftl(keys);
+            let ftl_content = generate_ftl(&keys);
+            if config.leak_memory {
+                std::mem::forget(keys);
+            }
 
             if config.dry_run {
                 debug!(
@@ -561,6 +574,7 @@ mod tests {
             cache_path: None,
             clear_cache: false,
             allow_parse_errors: false,
+            leak_memory: false,
         }
     }
 

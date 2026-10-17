@@ -178,6 +178,7 @@ fn extract_config(temp: &TempDir) -> ExtractConfig {
         cache_path: None,
         clear_cache: false,
         allow_parse_errors: false,
+        leak_memory: false,
     }
 }
 

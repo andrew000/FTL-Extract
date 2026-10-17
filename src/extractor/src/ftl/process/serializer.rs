@@ -8,8 +8,8 @@ use fluent_syntax::ast::{
 ///
 /// The output is byte for byte what `fluent_syntax::serializer` writes for the same entries
 /// (without junk), but the entries are read in place: no `Resource` is built, so nothing is
-/// moved out of or cloned from its `Arc`.
-pub(crate) fn generate_ftl(fluent_keys: Vec<FluentKey>) -> String {
+/// moved out of or cloned from its `Arc`, and the caller decides when the keys are freed.
+pub(crate) fn generate_ftl(fluent_keys: &[FluentKey]) -> String {
     // Only the position and the entry matter from here on. Sorting those instead of the
     // whole keys keeps the sort from shuffling a few hundred bytes per key. The index
     // tie-break reproduces the stable order for equal positions: keys added from code all
@@ -423,7 +423,7 @@ mod tests {
         // the rest are moved; the output must not depend on which path was taken.
         let shared = fluent_keys[0].clone();
 
-        let ftl_output = super::generate_ftl(fluent_keys);
+        let ftl_output = super::generate_ftl(&fluent_keys);
         assert!(matches!(shared.entry.as_ref(), FluentEntry::Message(_)));
         let expected_output =
             "message = Test message.\n-term = Test term.\n\n# This is a comment.\n\n";
@@ -453,7 +453,7 @@ mod tests {
             ),
         ];
 
-        let ftl_output = super::generate_ftl(fluent_keys);
+        let ftl_output = super::generate_ftl(&fluent_keys);
 
         assert!(ftl_output.contains("## Group"));
         assert!(ftl_output.contains("### Resource"));
@@ -472,7 +472,7 @@ mod tests {
             .filter(|entry| !matches!(entry, fluent_syntax::ast::Entry::Junk { .. }))
             .collect();
 
-        let keys = body
+        let keys: Vec<FluentKey> = body
             .iter()
             .enumerate()
             .map(|(position, entry)| {
@@ -502,7 +502,7 @@ mod tests {
             &fluent_syntax::ast::Resource { body },
             fluent_syntax::serializer::Options { with_junk: false },
         );
-        (super::generate_ftl(keys), upstream)
+        (super::generate_ftl(&keys), upstream)
     }
 
     #[test]

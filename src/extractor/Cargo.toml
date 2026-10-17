@@ -30,6 +30,7 @@ smallvec.workspace = true
 [dev-dependencies]
 pretty_assertions.workspace = true
 criterion.workspace = true
+mimalloc.workspace = true
 tempfile.workspace = true
 
 [[bench]]

@@ -22,6 +22,10 @@ pub(crate) type ImportResult = (
 /// when the error is reported.
 type Duplicates = BTreeMap<String, BTreeSet<Arc<PathBuf>>>;
 
+/// The content of every imported file, keyed by its path relative to the locale directory.
+/// Writing compares against it, so an unchanged file is not opened a second time.
+pub(crate) type Originals = FastHashMap<Arc<PathBuf>, String>;
+
 type FileImport = (
     FastHashMap<String, FluentKey>,
     FastHashMap<String, FluentKey>,
@@ -148,11 +152,13 @@ fn ftl_syntax_error(path: &Path, errors: &[fluent_syntax::parser::ParserError]) 
     )
 }
 
-fn import_from_ftl(path: &Path, locale_dir: &Path) -> Result<FileImport> {
+/// Imports one `.ftl` file. Also returns the file's path relative to `locale_dir` and its
+/// content as read.
+fn import_from_ftl(path: &Path, locale_dir: &Path) -> Result<(FileImport, Arc<PathBuf>, String)> {
     let content = fs::read_to_string(path)
         .with_context(|| format!("Failed to read FTL file: {}", path.display()))?;
 
-    let resource = match fluent_syntax::parser::parse(content) {
+    let resource = match fluent_syntax::parser::parse(content.clone()) {
         Ok(resource) => resource,
         Err((_, errors)) => bail!(ftl_syntax_error(path, &errors)),
     };
@@ -214,7 +220,7 @@ fn import_from_ftl(path: &Path, locale_dir: &Path) -> Result<FileImport> {
         }
     }
 
-    Ok((keys, terms, misc, duplicates))
+    Ok(((keys, terms, misc, duplicates), path_arc, content))
 }
 
 /// Imports every `.ftl` file of `locale`. When a name is defined more than once in the locale,
@@ -224,7 +230,7 @@ pub(crate) fn import_ftl_from_dir(
     path: &Path,
     locale: &String,
     statistics: &mut ExtractionStatistics,
-) -> Result<(ImportResult, Vec<DuplicateKey>)> {
+) -> Result<(ImportResult, Originals, Vec<DuplicateKey>)> {
     let locale_dir = path.join(locale);
     let paths = ftl_files(&locale_dir, FtlWalk::Filtered)?;
 
@@ -235,10 +241,22 @@ pub(crate) fn import_ftl_from_dir(
         .par_iter()
         .map(|file_path| import_from_ftl(file_path, &locale_dir))
         .collect::<Result<Vec<_>>>()?;
+    let mut originals = Originals::with_capacity_and_hasher(imports.len(), Default::default());
+    let imports = imports
+        .into_iter()
+        .map(|(import, relative_path, content)| {
+            originals.insert(relative_path, content);
+            import
+        })
+        .collect();
     let (stored_keys, stored_terms, stored_misc, duplicates) = merge_all_imports(imports);
 
     let duplicates = duplicate_keys(&locale_dir, locale, duplicates);
-    Ok(((stored_keys, stored_terms, stored_misc), duplicates))
+    Ok((
+        (stored_keys, stored_terms, stored_misc),
+        originals,
+        duplicates,
+    ))
 }
 
 fn empty_import() -> FileImport {
@@ -453,7 +471,7 @@ JUNK!!!
     fn test_import_from_ftl() {
         let temp = TempDir::new().unwrap();
         let path = write_locale_fixture(temp.path());
-        let (ftl_keys, terms, leave_as_is_keys, duplicates) =
+        let ((ftl_keys, terms, leave_as_is_keys, duplicates), _, _) =
             super::import_from_ftl(&path, path.parent().unwrap()).unwrap();
         assert!(duplicates.is_empty());
 
@@ -544,7 +562,7 @@ JUNK!!!
         let temp = TempDir::new().unwrap();
         let path = temp.path().join("_junk.ftl");
         std::fs::write(&path, JUNK_FTL).unwrap();
-        let (_ftl_keys, _terms, _leave_as_is_keys, _duplicates) =
+        let ((_ftl_keys, _terms, _leave_as_is_keys, _duplicates), _, _) =
             super::import_from_ftl(&path, temp.path()).unwrap();
     }
 
@@ -557,7 +575,7 @@ JUNK!!!
         let mut statistics = super::ExtractionStatistics::new();
         statistics.ftl_files_count.insert(locale.clone(), 0);
 
-        let ((ftl_keys, terms, leave_as_is_keys), duplicates) =
+        let ((ftl_keys, terms, leave_as_is_keys), _, duplicates) =
             super::import_ftl_from_dir(&path, &locale, &mut statistics).unwrap();
         assert!(duplicates.is_empty());
         assert_eq!(ftl_keys.len(), 13);
@@ -592,7 +610,7 @@ JUNK!!!
         let mut statistics = super::ExtractionStatistics::new();
         statistics.ftl_files_count.insert(locale.clone(), 0);
 
-        let ((ftl_keys, terms, leave_as_is_keys), duplicates) =
+        let ((ftl_keys, terms, leave_as_is_keys), _, duplicates) =
             super::import_ftl_from_dir(&path, &locale, &mut statistics).unwrap();
         assert!(duplicates.is_empty());
 
@@ -617,7 +635,7 @@ JUNK!!!
         let mut statistics = super::ExtractionStatistics::new();
         statistics.ftl_files_count.insert(locale.clone(), 0);
 
-        let ((ftl_keys, _terms, _leave_as_is_keys), _duplicates) =
+        let ((ftl_keys, _terms, _leave_as_is_keys), _, _duplicates) =
             super::import_ftl_from_dir(&path, &locale, &mut statistics).unwrap();
 
         assert_eq!(
@@ -675,7 +693,9 @@ JUNK!!!
         let mut statistics = super::ExtractionStatistics::new();
         statistics.ftl_files_count.insert(locale.clone(), 0);
 
-        super::import_ftl_from_dir(&path, &locale, &mut statistics).unwrap()
+        let (stored, _, duplicates) =
+            super::import_ftl_from_dir(&path, &locale, &mut statistics).unwrap();
+        (stored, duplicates)
     }
 
     /// `en/<name>` with the platform's separator, as the error prints it.

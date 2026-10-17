@@ -100,6 +100,11 @@ pub(crate) enum Commands {
         /// Skip Python files that cannot be read or parsed instead of aborting
         #[arg(long, default_value_t = false)]
         allow_parse_errors: bool,
+
+        /// Do not free parsed entries before exiting: faster on large projects, the OS reclaims
+        /// the memory when the process ends
+        #[arg(long, default_value_t = false)]
+        leak_memory: bool,
     },
     Stub {
         /// Path to the FTL files directory

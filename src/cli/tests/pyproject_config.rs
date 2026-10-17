@@ -38,6 +38,7 @@ fn config_sample_prints_all_command_sections() {
     assert_success(&output);
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(stdout.contains("[tool.ftl-extract.extract]"));
+    assert!(stdout.contains("leak-memory = false"));
     assert!(stdout.contains("[tool.ftl-extract.stub]"));
     assert!(stdout.contains("[tool.ftl-extract.check]"));
 }
@@ -905,6 +906,38 @@ allow-parse-errors = true
 
     assert_success(&output);
     assert!(temp.path().join("locales/en/_default.ftl").exists());
+}
+
+#[test]
+fn extract_leak_memory_from_flag_or_pyproject_writes_the_same_files() {
+    let run = |flag: bool, config: bool| {
+        let temp = TempDir::new().unwrap();
+        write(
+            &temp.path().join("code/app.py"),
+            r#"i18n.get("hello", name=user)
+i18n.get("bye")"#,
+        );
+        write(
+            &pyproject(&temp),
+            &format!(
+                "[tool.ftl-extract.extract]\ncode-path = \"code\"\nlocales-path = \"locales\"\n{}",
+                if config { "leak-memory = true\n" } else { "" }
+            ),
+        );
+        let mut command = ftl();
+        command.arg("--config").arg(pyproject(&temp)).arg("extract");
+        if flag {
+            command.arg("--leak-memory");
+        }
+        let output = command.output().unwrap();
+        assert_success(&output);
+        std::fs::read_to_string(temp.path().join("locales/en/_default.ftl")).unwrap()
+    };
+
+    let freed = run(false, false);
+    assert!(freed.contains("hello = hello{ $name }"), "{freed}");
+    assert_eq!(run(true, false), freed);
+    assert_eq!(run(false, true), freed);
 }
 
 #[test]

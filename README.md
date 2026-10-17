@@ -155,6 +155,9 @@ reports the file, line and column.
   commented out. With this flag, the affected files are reported as warnings and skipped. Conflicting key usage
   (the same key with different `_path=` values or different kwargs) always aborts the run.
   Config key: `allow-parse-errors = true`.
+- `--leak-memory` - do not free the parsed `.ftl` entries before the process exits. Freeing them takes a noticeable
+  share of the run on large projects (about 12% on 30k keys in 10 locales), and the operating system reclaims the
+  memory when `ftl` ends anyway. Off by default. Config key: `leak-memory = true`.
 
 ***
 

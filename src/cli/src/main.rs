@@ -84,6 +84,7 @@ fn main() {
             cache_path,
             clear_cache,
             allow_parse_errors,
+            leak_memory,
         }) => {
             let config_source = project_config.as_ref();
             let pyproject = config_source
@@ -205,8 +206,7 @@ fn main() {
                 clear_cache: clear_cache || pyproject.clear_cache.unwrap_or(false),
                 allow_parse_errors: allow_parse_errors
                     || pyproject.allow_parse_errors.unwrap_or(false),
-                // The process exits right after the run, so freeing the entries is wasted work.
-                leak_memory: true,
+                leak_memory: leak_memory || pyproject.leak_memory.unwrap_or(false),
             };
 
             let start_time = std::time::Instant::now();

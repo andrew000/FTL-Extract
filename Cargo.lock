@@ -548,6 +548,7 @@ dependencies = [
  "log",
  "memchr",
  "memmap2",
+ "mimalloc",
  "pretty_assertions",
  "rayon",
  "ruff_python_ast",

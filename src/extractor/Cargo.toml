@@ -21,7 +21,6 @@ fluent-syntax.workspace = true
 ignore.workspace = true
 log.workspace = true
 memchr.workspace = true
-memmap2.workspace = true
 rayon.workspace = true
 ruff_python_ast.workspace = true
 ruff_python_parser.workspace = true

@@ -10,21 +10,25 @@ use fluent_syntax::ast::{
 /// (without junk), but the entries are read in place: no `Resource` is built, so nothing is
 /// moved out of or cloned from its `Arc`, and the caller decides when the keys are freed.
 pub(crate) fn generate_ftl(fluent_keys: &[FluentKey]) -> String {
-    // Only the position and the entry matter from here on. Sorting those instead of the
-    // whole keys keeps the sort from shuffling a few hundred bytes per key. The index
-    // tie-break reproduces the stable order for equal positions: keys added from code all
-    // share `usize::MAX` and keep their input order.
-    let mut entries: Vec<(usize, usize, &FluentEntry)> = fluent_keys
+    // Only the position, the name and the entry matter from here on. Sorting those instead
+    // of the whole keys keeps the sort from shuffling a few hundred bytes per key.
+    //
+    // Keys added from code all share the position `usize::MAX`, and they arrive in the
+    // iteration order of a hash map built by a parallel reduction, which differs from run to
+    // run. Breaking the tie on the name (unique within a locale) appends them in alphabetical
+    // order, so the same input always gives the same file. The index only orders entries that
+    // share both, which leaves the order of the input as it is.
+    let mut entries: Vec<(usize, &str, usize, &FluentEntry)> = fluent_keys
         .iter()
         .enumerate()
-        .map(|(index, key)| (key.position, index, key.entry.as_ref()))
+        .map(|(index, key)| (key.position, key.key.as_str(), index, key.entry.as_ref()))
         .collect();
-    entries.sort_unstable_by_key(|&(position, index, _)| (position, index));
+    entries.sort_unstable_by_key(|&(position, name, index, _)| (position, name, index));
 
     // A typical entry serializes to well under a hundred bytes; reserving that up front
     // saves most of the regrowth of the buffer.
     let mut writer = Writer::with_capacity(entries.len() * 96);
-    for (_, _, entry) in entries {
+    for (_, _, _, entry) in entries {
         writer.entry(entry);
     }
     writer.buffer
@@ -577,5 +581,34 @@ mod tests {
         // Junk is never written; the entries around it serialize as if it were not there.
         let (ours, upstream) = both_serializations("a = A\nbroken =\n# c\nb = B\n");
         assert_eq!(ours, upstream);
+    }
+
+    #[test]
+    fn test_generate_ftl_appends_added_keys_by_name_whatever_the_input_order() {
+        let key = |name: &str, position: Option<usize>| {
+            FluentKey::new(
+                Arc::new(PathBuf::from("app.py")),
+                name.to_string(),
+                FluentEntry::Message(crate::ftl::matcher::code_message(name.to_string(), vec![])),
+                Arc::new(PathBuf::from("tmp.ftl")),
+                position,
+            )
+        };
+        // `stored` sits at its place in the file; the added keys (no position) follow it.
+        let expected = "stored = stored\nalpha = alpha\nmiddle = middle\nzulu = zulu\n";
+
+        for names in [
+            ["zulu", "alpha", "middle"],
+            ["middle", "zulu", "alpha"],
+            ["alpha", "middle", "zulu"],
+        ] {
+            let mut keys: Vec<FluentKey> = names.iter().map(|name| key(name, None)).collect();
+            keys.push(key("stored", Some(0)));
+            assert_eq!(
+                super::generate_ftl(&keys),
+                expected,
+                "input order {names:?}"
+            );
+        }
     }
 }

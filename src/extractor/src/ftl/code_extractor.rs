@@ -233,13 +233,16 @@ fn extract_from_file(
 
     let (keys, diagnostics) = parse_file(&file.path, file.size, options);
 
-    if keys.is_empty() || !diagnostics.is_empty() {
+    // A file with problems is never cached, so they are reported again on the next run.
+    if !diagnostics.is_empty() {
         let update = cached_file
             .is_some()
             .then_some(CacheUpdate::Remove(cache_key));
         return (keys, diagnostics, update);
     }
 
+    // Files without keys are cached too, with an empty key list: most files of a project have
+    // none, and without an entry each of them would be read and parsed again on every run.
     let cached_file = keys_to_cached_file(file.size, file.modified_ns, &keys);
 
     (
@@ -1055,7 +1058,7 @@ i18n.get("ok")
     }
 
     #[test]
-    fn test_extract_from_file_cache_hit_and_stale_remove() {
+    fn test_extract_from_file_cache_hit_keyless_entry_and_stale_remove() {
         let temp = TempDir::new().unwrap();
         let path = temp.path().join("app.py");
         std::fs::write(&path, r#"i18n.get("hello")"#).unwrap();
@@ -1100,10 +1103,35 @@ i18n.get("ok")
             size: metadata.len(),
             modified_ns: super::file_modified_ns(&metadata),
         };
-        let (empty_keys, _, remove_update) =
+        // A file without keys is cached as well, so the next run neither reads nor parses it.
+        let (empty_keys, _, keyless_update) =
             super::extract_from_file(&changed, i18n_options(), Some(&cache));
         assert!(empty_keys.is_empty());
-        assert!(matches!(remove_update, Some(super::CacheUpdate::Remove(_))));
+        let Some(super::CacheUpdate::Upsert(cache_key, keyless_file)) = keyless_update else {
+            panic!("expected a cache upsert for a file without keys")
+        };
+        cache.files.insert(cache_key, keyless_file);
+
+        let (cached_empty, _, keyless_hit) =
+            super::extract_from_file(&changed, i18n_options(), Some(&cache));
+        assert!(cached_empty.is_empty());
+        assert!(keyless_hit.is_none());
+
+        // Once the file gains a key, the stale empty entry is not used.
+        std::fs::write(&path, r#"i18n.get("hello-again")"#).unwrap();
+        let metadata = std::fs::metadata(&path).unwrap();
+        let regained = super::PyFile {
+            path: path.clone(),
+            size: metadata.len(),
+            modified_ns: super::file_modified_ns(&metadata),
+        };
+        let (regained_keys, _, regained_update) =
+            super::extract_from_file(&regained, i18n_options(), Some(&cache));
+        assert!(regained_keys.contains_key("hello-again"));
+        assert!(matches!(
+            regained_update,
+            Some(super::CacheUpdate::Upsert(_, _))
+        ));
 
         // A file that fails to parse is never cached, and drops a stale cache entry.
         std::fs::write(&path, "i18n.get(").unwrap();
@@ -1220,6 +1248,58 @@ i18n.get("ok")
         assert!(cache.files.keys().all(|file| file.ends_with("app.py")));
 
         assert_eq!(run(&everything).keys.len(), 2);
+    }
+
+    #[test]
+    fn test_cache_keeps_keyless_files_and_reports_broken_files_every_run() {
+        let temp = TempDir::new().unwrap();
+        let code_dir = temp.path().join("py");
+        let cache_dir = temp.path().join("cache");
+        std::fs::create_dir_all(&code_dir).unwrap();
+        std::fs::write(code_dir.join("app.py"), r#"i18n.get("hello")"#).unwrap();
+        std::fs::write(code_dir.join("plain.py"), "print('no keys here')").unwrap();
+        std::fs::write(code_dir.join("broken.py"), "i18n.get(").unwrap();
+
+        let run = || {
+            extract_fluent_keys(
+                &code_dir,
+                I18N_ONLY.clone(),
+                FastHashSet::default(),
+                &FastHashSet::default(),
+                FastHashSet::default(),
+                FastHashSet::default(),
+                &DEFAULT_FTL,
+                true,
+                Some(&cache_dir),
+                false,
+            )
+            .unwrap()
+        };
+
+        for _ in 0..2 {
+            let extraction = run();
+            assert_eq!(extraction.keys.len(), 1);
+            assert_eq!(extraction.py_files_with_keys, 1);
+            assert_eq!(
+                extraction.diagnostics.len(),
+                1,
+                "the broken file is reported every run"
+            );
+        }
+
+        let options = super::cache_options(
+            &I18N_ONLY,
+            &FastHashSet::default(),
+            &FastHashSet::default(),
+            &FastHashSet::default(),
+            &FastHashSet::default(),
+            &DEFAULT_FTL,
+        );
+        let cache = super::load_cache(&super::cache_file_path(Some(&cache_dir)), &options, false);
+        let mut cached: Vec<&str> = cache.files.keys().map(String::as_str).collect();
+        cached.sort_unstable();
+        assert_eq!(cached.len(), 2, "{cached:?}");
+        assert!(cached[0].ends_with("app.py") && cached[1].ends_with("plain.py"));
     }
 
     #[test]

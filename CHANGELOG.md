@@ -10,6 +10,25 @@
   locally and `just docs-build` builds it with `--strict`.
 - `ftl --help` describes each subcommand.
 
+### Behavior changes
+
+- `ftl extract --dry-run` lists every `.ftl` file it would change (`[DRY-RUN] Would write ...`, at the default log
+  level instead of only with `--verbose`) and exits with `1` when there is at least one, so CI can check that the
+  locale files are up to date without modifying the checkout. A dry run that changes nothing still exits `0`.
+  The extraction statistics gain an `FTL files changed` line.
+
+### Fixed
+
+- `ftl check --check untranslated` reports placeholders with variables. `ftl extract` writes a new key called with
+  keyword arguments as `welcome = welcome{ $name }`, and the check only recognized `key = key`, so such messages
+  were never reported.
+- `ftl stub` adds the variables of referenced messages to a method's parameters. Fluent formats `{ hello }` with the
+  caller's arguments, so `greet = { hello } and { $x }` with `hello = Hi { $name }` needs `name` as well as `x`;
+  the stub only declared `x`. Variables inside terms are still not added, since a term only sees its own call
+  arguments.
+- The stub declared `LazyFactory.__call__(self, key, /, **kwargs: dict[str, Any])`, which told type checkers that
+  every keyword argument of `L("key", name="Bob")` must be a dict. It is now `**kwargs: Any`.
+
 ## 0.12.2 — 2026-10-18
 
 ### Added

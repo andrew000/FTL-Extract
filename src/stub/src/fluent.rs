@@ -1,6 +1,6 @@
 use anyhow::{Context, Result};
-use common::{FtlWalk, ftl_files};
-use fluent_syntax::ast::{Expression, InlineExpression, PatternElement, Resource};
+use common::{FastHashMap, FluentEntries, FtlWalk, VariableOptions, ftl_files, message_variables};
+use fluent_syntax::ast::{self, Expression, InlineExpression, PatternElement, Resource};
 use indexmap::IndexMap;
 use log::debug;
 use std::collections::HashSet;
@@ -254,7 +254,7 @@ pub fn parse_ftl_files<P: AsRef<Path>>(locales_path: P) -> Result<IndexMap<Strin
     debug!("Parsing FTL files from: {}", locales_path.display());
 
     let mut visitor = FluentVisitor::new();
-    let mut file_count = 0;
+    let mut resources = Vec::new();
 
     let paths = ftl_files(locales_path, FtlWalk::All)?;
 
@@ -274,14 +274,70 @@ pub fn parse_ftl_files<P: AsRef<Path>>(locales_path: P) -> Result<IndexMap<Strin
         })?;
 
         visitor.visit_resource(&resource);
-        file_count += 1;
+        resources.push(resource);
     }
 
-    debug!("Parsed {} FTL files", file_count);
-    let messages = visitor.into_messages();
+    debug!("Parsed {} FTL files", resources.len());
+    let mut messages = visitor.into_messages();
+    add_referenced_variables(&mut messages, &ParsedEntries::new(&resources));
     debug!("Extracted {} messages total", messages.len());
 
     Ok(messages)
+}
+
+/// Messages and terms of every parsed file; a later definition replaces an earlier one, as in
+/// [`FluentVisitor::visit_resource`].
+struct ParsedEntries<'a> {
+    messages: FastHashMap<&'a str, &'a ast::Message<String>>,
+    terms: FastHashMap<&'a str, &'a ast::Term<String>>,
+}
+
+impl<'a> ParsedEntries<'a> {
+    fn new(resources: &'a [Resource<String>]) -> Self {
+        let mut messages = FastHashMap::default();
+        let mut terms = FastHashMap::default();
+        for entry in resources.iter().flat_map(|resource| &resource.body) {
+            match entry {
+                ast::Entry::Message(message) => {
+                    messages.insert(message.id.name.as_str(), message);
+                }
+                ast::Entry::Term(term) => {
+                    terms.insert(term.id.name.as_str(), term);
+                }
+                _ => {}
+            }
+        }
+        Self { messages, terms }
+    }
+}
+
+impl FluentEntries for ParsedEntries<'_> {
+    fn message(&self, id: &str) -> Option<&ast::Message<String>> {
+        self.messages.get(id).copied()
+    }
+
+    fn term(&self, id: &str) -> Option<&ast::Term<String>> {
+        self.terms.get(id).copied()
+    }
+}
+
+/// Appends the variables a message needs through the messages it references, such as `$name` in
+/// `greet = { hello }` with `hello = Hi { $name }`. Own variables keep their order; the added
+/// ones are sorted so the stub is the same on every run.
+fn add_referenced_variables(messages: &mut IndexMap<String, Message>, entries: &ParsedEntries) {
+    for message in messages.values_mut() {
+        let Some(parsed) = entries.message(&message.id) else {
+            continue;
+        };
+        let collected = message_variables(entries, parsed, VariableOptions::default());
+        let mut extra: Vec<String> = collected
+            .variables
+            .into_iter()
+            .filter(|variable| !message.args.contains(variable))
+            .collect();
+        extra.sort_unstable();
+        message.args.extend(extra);
+    }
 }
 
 #[cfg(test)]
@@ -529,6 +585,35 @@ welcome = { -greeting }
         let messages = parse_ftl_files(temp_dir.path())?;
 
         assert_eq!(messages.keys().collect::<Vec<_>>(), ["hello"]);
+        Ok(())
+    }
+
+    #[test]
+    fn test_parse_ftl_files_adds_variables_of_referenced_messages() -> Result<()> {
+        let temp_dir = TempDir::new()?;
+        // `hello` and `-brand` live in another file to cover references across files.
+        fs::write(
+            temp_dir.path().join("a.ftl"),
+            "greet = { hello } and { $x }\n\
+             chain = { greet }\n\
+             branded = { -brand } for { $user }\n\
+             loop-a = { loop-b } { $a }\n\
+             loop-b = { loop-a } { $b }\n",
+        )?;
+        fs::write(
+            temp_dir.path().join("b.ftl"),
+            "hello = Hi { $name } { $zed }\n-brand = Bot { $version }\n",
+        )?;
+
+        let messages = parse_ftl_files(temp_dir.path())?;
+
+        assert_eq!(messages["greet"].args, ["x", "name", "zed"]);
+        assert_eq!(messages["chain"].args, ["name", "x", "zed"]);
+        // Variables inside a term come from its call arguments, never from the caller.
+        assert_eq!(messages["branded"].args, ["user"]);
+        assert_eq!(messages["loop-a"].args, ["a", "b"]);
+        assert_eq!(messages["loop-b"].args, ["b", "a"]);
+        assert_eq!(messages["hello"].args, ["name", "zed"]);
         Ok(())
     }
 

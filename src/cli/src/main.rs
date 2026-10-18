@@ -213,6 +213,7 @@ fn main() -> ExitCode {
                 leak_memory: leak_memory || pyproject.leak_memory.unwrap_or(false),
             };
 
+            let dry_run = config.dry_run;
             let start_time = std::time::Instant::now();
             match extract(config) {
                 Ok(statistics) => {
@@ -224,6 +225,17 @@ fn main() -> ExitCode {
                     info!(target: "cli", "  - FTL keys updated: {:?}", statistics.ftl_keys_updated);
                     info!(target: "cli", "  - FTL keys added: {:?}", statistics.ftl_keys_added);
                     info!(target: "cli", "  - FTL keys commented: {:?}", statistics.ftl_keys_commented);
+                    info!(target: "cli", "  - FTL files changed: {}", statistics.ftl_files_changed.len());
+
+                    // Lets CI fail when the .ftl files are out of date with the code.
+                    if dry_run && !statistics.ftl_files_changed.is_empty() {
+                        error!(
+                            target: "cli",
+                            "Dry run: {} .ftl file(s) would change",
+                            statistics.ftl_files_changed.len()
+                        );
+                        return ExitCode::from(1);
+                    }
                 }
                 Err(e) => {
                     error!(target: "cli", "Error during extraction: {}", e);

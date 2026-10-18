@@ -485,9 +485,10 @@ fn write_results(
     let stored_keys_count = std::sync::atomic::AtomicUsize::new(0);
 
     // Every file is attempted even if one fails, so the error lists all of them at once.
-    let mut write_errors = sorted_fluent_keys
+    // Each file yields its path when its content changed, or with `dry_run` would change.
+    let outcomes = sorted_fluent_keys
         .into_par_iter()
-        .filter_map(|(path, keys)| {
+        .map(|(path, keys)| {
             let full_path = lang_dir.join(path.as_ref());
             let entries = keys.len();
             let messages = keys
@@ -500,26 +501,41 @@ fn write_results(
                 std::mem::forget(keys);
             }
 
-            if config.dry_run {
-                debug!(
-                    "[DRY-RUN] Would write to {}. {entries} entries.",
-                    full_path.display()
-                )
-            } else if let Err(err) = write(
+            let changed = match write(
                 &full_path,
                 ftl_content,
                 &config.line_endings,
                 originals.get(path.as_ref()),
+                config.dry_run,
             ) {
-                return Some(format!("{}: {err}", full_path.display()));
+                Ok(changed) => changed,
+                Err(err) => return Err(format!("{}: {err}", full_path.display())),
+            };
+            if !changed {
+                debug!("Unchanged {}. {entries} entries.", full_path.display());
+            } else if config.dry_run {
+                info!(
+                    target: "extractor::ftl",
+                    "[DRY-RUN] Would write {}. {entries} entries.",
+                    full_path.display()
+                );
             } else {
                 debug!("Saved {}. {entries} entries.", full_path.display());
             }
 
             stored_keys_count.fetch_add(messages, std::sync::atomic::Ordering::Relaxed);
-            None
+            Ok(changed.then_some(full_path))
         })
         .collect::<Vec<_>>();
+
+    let mut write_errors = Vec::new();
+    for outcome in outcomes {
+        match outcome {
+            Ok(Some(changed)) => statistics.ftl_files_changed.push(changed),
+            Ok(None) => {}
+            Err(err) => write_errors.push(err),
+        }
+    }
 
     if !write_errors.is_empty() {
         write_errors.sort_unstable();
@@ -551,18 +567,23 @@ fn normalize_line_endings(s: String, line_endings: &LineEndings) -> String {
 }
 
 /// Writes `ftl` to `path` unless `original`, the file's content as the import read it, already
-/// equals it: the common case of a re-run then does not open the file a second time.
+/// equals it: the common case of a re-run then does not open the file a second time. Returns
+/// whether the content differs; with `dry_run` nothing is written either way.
 fn write(
     path: &Path,
     ftl: String,
     line_endings: &LineEndings,
     original: Option<&String>,
-) -> std::io::Result<()> {
+    dry_run: bool,
+) -> std::io::Result<bool> {
     let ftl_with_line_endings = normalize_line_endings(ftl, line_endings);
     if original.is_some_and(|original| *original == ftl_with_line_endings) {
-        return Ok(());
+        return Ok(false);
     }
-    write_atomically(path, ftl_with_line_endings.as_bytes())
+    if !dry_run {
+        write_atomically(path, ftl_with_line_endings.as_bytes())?;
+    }
+    Ok(true)
 }
 
 #[cfg(test)]
@@ -634,24 +655,73 @@ mod tests {
 
         // The content the import read matches: nothing is opened or written, so a file that
         // is not even there stays absent.
-        write(
+        let changed = write(
             &path,
             "hello = Hello\n".to_string(),
             &LineEndings::CRLF,
             Some(&content),
+            false,
         )
         .unwrap();
+        assert!(!changed);
         assert!(!path.exists());
 
-        // A different original content means the file is written.
-        write(
+        // A different original content is a change, but a dry run still writes nothing.
+        let old = "hello = Old\r\n".to_string();
+        let changed = write(
             &path,
             "hello = Hello\n".to_string(),
             &LineEndings::CRLF,
-            Some(&"hello = Old\r\n".to_string()),
+            Some(&old),
+            true,
         )
         .unwrap();
+        assert!(changed);
+        assert!(!path.exists());
+
+        // Without the dry run the file is written.
+        let changed = write(
+            &path,
+            "hello = Hello\n".to_string(),
+            &LineEndings::CRLF,
+            Some(&old),
+            false,
+        )
+        .unwrap();
+        assert!(changed);
         assert_eq!(fs::read_to_string(&path).unwrap(), content);
+    }
+
+    #[test]
+    fn test_extract_reports_the_files_a_dry_run_would_change() {
+        let temp = TempDir::new().unwrap();
+        let code_path = temp.path().join("code");
+        let locales_path = temp.path().join("locales");
+        let locale_path = locales_path.join("en");
+        fs::create_dir_all(&code_path).unwrap();
+        fs::create_dir_all(&locale_path).unwrap();
+        fs::write(
+            code_path.join("app.py"),
+            "i18n.get(\"hello\")\ni18n.get(\"menu\", _path=\"menu.ftl\")\n",
+        )
+        .unwrap();
+        fs::write(locale_path.join("_default.ftl"), "hello = Hello\n").unwrap();
+
+        let mut cfg = config(code_path, locales_path);
+        cfg.dry_run = true;
+        let stats = extract(cfg.clone()).unwrap();
+
+        // `_default.ftl` already matches; `menu.ftl` would be created, but is not.
+        assert_eq!(stats.ftl_files_changed, [locale_path.join("menu.ftl")]);
+        assert!(!locale_path.join("menu.ftl").exists());
+
+        cfg.dry_run = false;
+        let stats = extract(cfg.clone()).unwrap();
+        assert_eq!(stats.ftl_files_changed, [locale_path.join("menu.ftl")]);
+
+        // Once written, the same run has nothing left to change.
+        cfg.dry_run = true;
+        assert!(extract(cfg).unwrap().ftl_files_changed.is_empty());
     }
 
     /// `en/<name>` with the platform's separator, as the duplicate-key error prints it.

@@ -1,6 +1,6 @@
 //! Exit codes and messages of the error paths of `ftl`: configuration errors exit `2`, a failed
-//! `extract` or `stub` run, a broken `pyproject.toml` and an unwritable report exit `1`, and a
-//! failed `check` run exits `2`.
+//! `extract` or `stub` run, an `extract --dry-run` that would change a file, a broken
+//! `pyproject.toml` and an unwritable report exit `1`, and a failed `check` run exits `2`.
 
 use std::path::Path;
 use std::process::{Command, Output};
@@ -59,6 +59,20 @@ fn extract_without_paths_is_a_configuration_error() {
 }
 
 #[test]
+fn extract_dry_run_exits_1_only_when_a_file_would_change() {
+    let config = "[tool.ftl-extract.extract]\ncode-path = \"code\"\nlocales-path = \"locales\"\n";
+
+    // `en/_default.ftl` already holds the only key.
+    let output = run_with_config(config, &["extract", "--dry-run"]);
+    assert_exit(&output, 0, "FTL files changed: 0");
+
+    // A second locale would be created.
+    let output = run_with_config(config, &["extract", "--dry-run", "-l", "en", "-l", "uk"]);
+    assert_exit(&output, 1, "Dry run: 1 .ftl file(s) would change");
+    assert!(stderr(&output).contains("[DRY-RUN] Would write"));
+}
+
+#[test]
 fn extract_rejects_unknown_enum_values_in_pyproject() {
     let base = "[tool.ftl-extract.extract]\ncode-path = \"code\"\nlocales-path = \"locales\"\n";
 
@@ -87,7 +101,7 @@ fn extract_verbose_without_any_pyproject() {
     std::fs::create_dir_all(temp.path().join("locales/en")).unwrap();
 
     let output = ftl(temp.path())
-        .args(["extract", "code", "locales", "--verbose", "--dry-run"])
+        .args(["extract", "code", "locales", "--verbose"])
         .output()
         .unwrap();
 

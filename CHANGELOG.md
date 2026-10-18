@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+### Documentation
+
+- A documentation site built with Material for MkDocs, published on Read the Docs: getting started, a reference for
+  every `pyproject.toml` key and command option, how keys are found, `_path`, variables, ignore markers, CI and
+  pre-commit recipes, and an FAQ. The README is now a short overview that links to it. `just docs` serves the site
+  locally and `just docs-build` builds it with `--strict`.
+- `ftl --help` describes each subcommand.
+
 ## 0.12.2 — 2026-10-18
 
 ### Added

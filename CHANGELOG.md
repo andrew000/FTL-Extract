@@ -1,5 +1,55 @@
 # Changelog
 
+## 0.12.2 — 2026-10-18
+
+### Added
+
+- Python 3.15 is supported: `requires-python` is now `>=3.11, <3.16`. The extractor parses Python 3.15 syntax such
+  as `lazy import` and unpacking in comprehensions (`[*row for row in rows]`).
+- `ftl extract --leak-memory` / `leak-memory = true` under `[tool.ftl-extract.extract]`: do not free the parsed `.ftl`
+  entries before the process exits. Freeing millions of small entries takes about an eighth of the run on large
+  projects (30k keys in 10 locales: 556 → 489 ms), and the operating system reclaims the memory when `ftl` ends
+  anyway. Off by default; the written files are the same either way. `ftl config sample` lists the key.
+
+### Performance
+
+`ftl extract` is faster on every project size. A project with 30k keys in 10 locales goes from 694 to ~552 ms
+(~490 ms with `--leak-memory`); a project with 294 Python files and 114 `.ftl` files in 3 locales goes from 19 to
+15 ms; a single file with 500 keys goes from 8 to 3 ms. Where the time went:
+
+- The Python sources and the `.ftl` files are scanned at the same time instead of one after the other.
+- The code directory is walked by one thread. The parallel walker started a thread per core on every run, which cost
+  more than the whole walk on small projects.
+- The `.ftl` files of a locale are merged into one map once, instead of re-inserting the same entries at every level
+  of a parallel reduction.
+- The variables of the keys found in code are collected once, not once per locale.
+- `.ftl` files are written by a serializer that produces exactly what `fluent-syntax`'s does without copying the
+  entries first.
+- A file is compared with the content the import already read before it is written, instead of being read again.
+- With `cache = true`, Python files that contain no keys are cached too. Only files with keys used to be, so every
+  other file was read and parsed again on each run; the quick content check rarely skipped them, since the default
+  key `L` matches almost any file. Files that fail to parse are still never cached and reported on every run.
+
+### Behavior changes
+
+- Keys that `ftl extract` adds from code are appended to their `.ftl` file in alphabetical order. Their order used to
+  come from hash map iteration: it was arbitrary, and with the parallel scanning above it would also have changed
+  between runs. Keys already in a file keep their place.
+- The extraction cache file is named after the version (`.ftl-extract-cache/extract-0.12.2-v4.bin`), so the first
+  `0.12.2` run builds a new one. The format is unchanged.
+
+### Internal
+
+- `ruff_python_ast` / `ruff_python_parser` 0.0.18, a newer `fluent-rs` commit for `fluent-syntax`, `smallvec`
+  2.0.0-beta.3, `cibuildwheel` 4.3, `pre-commit` 4.7; CI uses `setup-uv` v10.3.0 and `codecov-action` v7.
+- Python sources are read with `fs::read` instead of a memory map, which removes the extractor's only `unsafe` block
+  and the `memmap2` dependency.
+- `ExtractConfig` has a new `leak_memory` field; `false` keeps the previous behavior.
+- The extractor benchmarks write their fixtures once and reuse them, so they measure extraction rather than the first
+  open of freshly written files, and run with mimalloc like the CLI. A `project_100files_5langs` benchmark is added.
+- CI and the release workflow run every built wheel on each supported Python, 3.11 to 3.15
+  (`WHEEL_TEST_PYTHONS`).
+
 ## 0.12.1 — 2026-09-11
 
 ### Breaking changes

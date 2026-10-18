@@ -6,6 +6,7 @@ use clap::ValueEnum;
 use log::error;
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
+use std::process::ExitCode;
 
 pub(crate) fn write_output_file(path: &Path, content: String) -> std::io::Result<()> {
     if let Some(parent) = path.parent()
@@ -164,9 +165,10 @@ fn parse_severity_level(value: &str) -> Result<Severity> {
     })
 }
 
-pub(crate) fn exit_config_error(error: anyhow::Error) -> ! {
+/// Logs a configuration error; `main` returns the exit code `2` it gives back.
+pub(crate) fn config_error(error: anyhow::Error) -> ExitCode {
     error!(target: "cli", "Configuration error: {}", error);
-    std::process::exit(2);
+    ExitCode::from(2)
 }
 
 #[cfg(test)]

@@ -1,4 +1,5 @@
 pub use common::{FastHashMap, FastHashSet};
+use std::path::PathBuf;
 
 #[derive(Debug)]
 pub struct ExtractionStatistics {
@@ -9,6 +10,8 @@ pub struct ExtractionStatistics {
     pub ftl_keys_updated: FastHashMap<String, usize>,
     pub ftl_keys_added: FastHashMap<String, usize>,
     pub ftl_keys_commented: FastHashMap<String, usize>,
+    /// `.ftl` files whose content changed, or with `dry_run` would change, sorted by path.
+    pub ftl_files_changed: Vec<PathBuf>,
 }
 
 impl ExtractionStatistics {
@@ -21,6 +24,7 @@ impl ExtractionStatistics {
             ftl_keys_updated: FastHashMap::default(),
             ftl_keys_added: FastHashMap::default(),
             ftl_keys_commented: FastHashMap::default(),
+            ftl_files_changed: Vec::new(),
         }
     }
 
@@ -50,5 +54,7 @@ impl ExtractionStatistics {
         for (k, v) in other.ftl_keys_commented {
             *self.ftl_keys_commented.entry(k).or_default() += v;
         }
+        self.ftl_files_changed.extend(other.ftl_files_changed);
+        self.ftl_files_changed.sort_unstable();
     }
 }

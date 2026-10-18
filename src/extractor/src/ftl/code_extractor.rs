@@ -1251,6 +1251,46 @@ i18n.get("ok")
     }
 
     #[test]
+    fn test_extracts_keys_from_python_3_15_syntax() {
+        // `lazy import` (PEP 810) and unpacking in comprehensions (PEP 798) are new in
+        // Python 3.15; a file using them must parse instead of aborting the run.
+        let temp = TempDir::new().unwrap();
+        std::fs::write(
+            temp.path().join("app.py"),
+            r#"lazy import json
+lazy from os import path
+
+def handler(i18n, rows, maps):
+    flat = [*row for row in rows]
+    merged = {**m for m in maps}
+    return i18n.get("py315-key", count=len(flat))
+"#,
+        )
+        .unwrap();
+
+        let extraction = extract_fluent_keys(
+            temp.path(),
+            I18N_ONLY.clone(),
+            FastHashSet::default(),
+            &FastHashSet::default(),
+            FastHashSet::default(),
+            FastHashSet::default(),
+            &DEFAULT_FTL,
+            false,
+            None,
+            false,
+        )
+        .unwrap();
+
+        assert!(
+            extraction.diagnostics.is_empty(),
+            "{:?}",
+            extraction.diagnostics
+        );
+        assert!(extraction.keys.contains_key("py315-key"));
+    }
+
+    #[test]
     fn test_cache_keeps_keyless_files_and_reports_broken_files_every_run() {
         let temp = TempDir::new().unwrap();
         let code_dir = temp.path().join("py");

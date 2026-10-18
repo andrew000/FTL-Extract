@@ -6,7 +6,7 @@ authors = [{ name = "andrew000", email = "help@kusbot.com" }]
 keywords = ["i18n", "ftl", "ftl-extract"]
 readme = "README.md"
 license = "MIT"
-requires-python = ">=3.11, <3.15"
+requires-python = ">=3.11, <3.16"
 classifiers = [
     "Programming Language :: Python :: Implementation :: CPython",
     "Programming Language :: Rust",
@@ -15,6 +15,7 @@ classifiers = [
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
     "Programming Language :: Python :: 3.14",
+    "Programming Language :: Python :: 3.15",
 ]
 
 [project.urls]

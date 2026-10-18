@@ -617,7 +617,10 @@ pub(crate) struct MessageEntry {
     pub(crate) locale: String,
     pub(crate) file_path: PathBuf,
     pub(crate) key: String,
+    /// The text of a message without placeables; `None` when it has any.
     pub(crate) value: Option<String>,
+    /// The message's text when it is still the placeholder `ftl extract` writes.
+    pub(crate) placeholder: Option<String>,
     pub(crate) line: Option<usize>,
     pub(crate) ignored: common::IgnoreMarker,
 }

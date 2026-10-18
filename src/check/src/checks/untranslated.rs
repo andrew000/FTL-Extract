@@ -47,21 +47,14 @@ pub fn check_untranslated_with_cache(
         }
     }
 
-    let checked_messages = checked_entries
-        .iter()
-        .filter_map(|entry| entry.value.as_ref().map(|value| (entry, value)))
-        .filter(|(_, value)| !value.is_empty())
-        .collect::<Vec<_>>();
-
     let suggestion_values = suggestion_values_by_locale_and_key(
         checked_entries.iter().chain(suggestion_only_entries.iter()),
     );
 
-    let mut untranslated = checked_messages
+    let mut untranslated = checked_entries
         .iter()
-        .filter(|(entry, value)| {
-            !entry.ignored.ignores("untranslated") && is_placeholder_translation(&entry.key, value)
-        })
+        .filter(|entry| !entry.ignored.ignores("untranslated"))
+        .filter_map(|entry| entry.placeholder.as_ref().map(|value| (entry, value)))
         .map(|(entry, value)| UntranslatedKey {
             locale: entry.locale.clone(),
             file_path: entry
@@ -119,16 +112,12 @@ fn suggestion_values_by_locale_and_key<'a>(
     entries
         .filter_map(|entry| {
             let value = entry.value.as_ref()?;
-            if value.is_empty() || is_placeholder_translation(&entry.key, value) {
+            if value.is_empty() || entry.placeholder.is_some() {
                 return None;
             }
             Some(((entry.locale.clone(), entry.key.clone()), value.clone()))
         })
         .collect()
-}
-
-fn is_placeholder_translation(key: &str, value: &str) -> bool {
-    key == value
 }
 
 #[cfg(test)]
@@ -138,9 +127,44 @@ mod tests {
     use tempfile::TempDir;
 
     #[test]
-    fn test_placeholder_detection() {
-        assert!(is_placeholder_translation("hello-world", "hello-world"));
-        assert!(!is_placeholder_translation("hello-world", "Hello world"));
+    fn test_placeholder_detection() -> Result<()> {
+        let temp_dir = TempDir::new()?;
+        let locales = temp_dir.path().join("locales");
+        fs::create_dir_all(locales.join("uk"))?;
+
+        // The first three are what `ftl extract` writes for a new key; the rest are translations.
+        fs::write(
+            locales.join("uk").join("_default.ftl"),
+            "plain = plain\n\
+             one-var = one-var{ $name }\n\
+             two-vars = two-vars{ $a }{ $b }\n\
+             hello-world = Hello world\n\
+             greeting = greeting, { $name }!\n\
+             prefixed = Hi prefixed{ $name }\n\
+             referenced = referenced{ plain }\n\
+             selected = selected{ $n ->\n   *[other] x\n}\n",
+        )?;
+
+        let result = check_untranslated(CheckUntranslatedConfig {
+            locales_path: locales,
+            locales: vec!["uk".to_string()],
+            suggest_from: vec![],
+        })?;
+
+        let found = result
+            .untranslated
+            .iter()
+            .map(|item| (item.key.as_str(), item.value.as_str()))
+            .collect::<Vec<_>>();
+        assert_eq!(
+            found,
+            [
+                ("one-var", "one-var{ $name }"),
+                ("plain", "plain"),
+                ("two-vars", "two-vars{ $a }{ $b }"),
+            ]
+        );
+        Ok(())
     }
 
     #[test]

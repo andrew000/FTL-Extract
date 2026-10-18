@@ -2,8 +2,9 @@ use crate::types::MessageEntry;
 use anyhow::{Context, Result, bail};
 use common::{FastHashMap, IgnoreMarker};
 use common::{FtlWalk, ftl_files, line_column};
-use fluent_syntax::ast::{Entry, Message, PatternElement, Resource};
+use fluent_syntax::ast::{Entry, Expression, InlineExpression, Message, PatternElement, Resource};
 use fluent_syntax::parser::ParserError;
+use std::fmt::Write as _;
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -234,6 +235,7 @@ fn message_entries_from_located_entries(
                 file_path: path.to_path_buf(),
                 key: message.id.name.clone(),
                 value: extract_message_value(message),
+                placeholder: placeholder_text(message),
                 line: located.line,
                 ignored: IgnoreMarker::parse(message.comment.as_ref()).unwrap_or_default(),
             })
@@ -253,6 +255,32 @@ fn extract_message_value(message: &Message<String>) -> Option<String> {
         }
     }
     Some(buffer.trim().to_string())
+}
+
+/// The message's text if it is still a placeholder: the key alone (`welcome = welcome`), or the
+/// key followed by nothing but variables, as `ftl extract` writes it for a call with keyword
+/// arguments (`welcome = welcome{ $name }`).
+fn placeholder_text(message: &Message<String>) -> Option<String> {
+    let (first, rest) = message.value.as_ref()?.elements.split_first()?;
+    let PatternElement::TextElement { value } = first else {
+        return None;
+    };
+    let key = message.id.name.as_str();
+    if value.trim() != key {
+        return None;
+    }
+
+    let mut text = key.to_string();
+    for element in rest {
+        let PatternElement::Placeable {
+            expression: Expression::Inline(InlineExpression::VariableReference { id }),
+        } = element
+        else {
+            return None;
+        };
+        let _ = write!(text, "{{ ${} }}", id.name);
+    }
+    Some(text)
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum EntryKind {

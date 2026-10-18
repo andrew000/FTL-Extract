@@ -59,7 +59,7 @@ repos:
         name: ftl extract
         entry: ftl extract
         language: python
-        additional_dependencies: ["FTL-Extract==0.12.2"]
+        additional_dependencies: ["FTL-Extract==0.12.3"]
         pass_filenames: false
         files: \.(py|ftl)$
 
@@ -67,7 +67,7 @@ repos:
         name: ftl check
         entry: ftl check
         language: python
-        additional_dependencies: ["FTL-Extract==0.12.2"]
+        additional_dependencies: ["FTL-Extract==0.12.3"]
         pass_filenames: false
         files: \.(py|ftl)$
 ```

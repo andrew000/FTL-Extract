@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.12.3 — 2026-10-18
 
 ### Documentation
 
@@ -16,6 +16,8 @@
   level instead of only with `--verbose`) and exits with `1` when there is at least one, so CI can check that the
   locale files are up to date without modifying the checkout. A dry run that changes nothing still exits `0`.
   The extraction statistics gain an `FTL files changed` line.
+- The extraction cache file is named after the version (`.ftl-extract-cache/extract-0.12.3-v4.bin`), so the first
+  `0.12.3` run builds a new one. The format is unchanged.
 
 ### Fixed
 

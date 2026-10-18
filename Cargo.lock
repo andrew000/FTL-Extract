@@ -238,7 +238,7 @@ dependencies = [
 
 [[package]]
 name = "check"
-version = "0.12.2"
+version = "0.12.3"
 dependencies = [
  "anyhow",
  "common",
@@ -318,7 +318,7 @@ checksum = "1c133bc6a41be0d194c306b5506d15e6feeea7b1d6604bd3f8310dfb2ca96486"
 
 [[package]]
 name = "cli"
-version = "0.12.2"
+version = "0.12.3"
 dependencies = [
  "anyhow",
  "check",
@@ -348,7 +348,7 @@ checksum = "1d07550c9036bf2ae0c684c4297d503f838287c83c53686d05370d0e139ae570"
 
 [[package]]
 name = "common"
-version = "0.12.2"
+version = "0.12.3"
 dependencies = [
  "anyhow",
  "fluent-syntax",
@@ -536,7 +536,7 @@ dependencies = [
 
 [[package]]
 name = "extractor"
-version = "0.12.2"
+version = "0.12.3"
 dependencies = [
  "anyhow",
  "bincode-next",
@@ -1425,7 +1425,7 @@ checksum = "7da8b5736845d9f2fcb837ea5d9e2628564b3b043a70948a3f0b778838c5fb4f"
 
 [[package]]
 name = "stub"
-version = "0.12.2"
+version = "0.12.3"
 dependencies = [
  "anyhow",
  "common",

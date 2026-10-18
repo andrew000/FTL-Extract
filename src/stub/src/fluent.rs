@@ -477,6 +477,77 @@ welcome = { -greeting }
         }
     }
 
+    /// The value of `message` in `ftl`, which must parse without errors.
+    fn message_pattern(ftl: &str) -> fluent_syntax::ast::Pattern<String> {
+        let resource = match fluent_syntax::parser::parse(ftl.to_string()) {
+            Ok(resource) => resource,
+            Err((_, errors)) => panic!("{ftl:?} does not parse: {errors:?}"),
+        };
+        match resource.body.into_iter().next() {
+            Some(fluent_syntax::ast::Entry::Message(message)) => message.value.unwrap(),
+            other => panic!("{ftl:?} is not a message with a value: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_pattern_to_text_renders_every_placeable_kind() {
+        let visitor = FluentVisitor::new();
+        let cases = [
+            ("{ \"literal\" }", "literal"),
+            ("{ 42 }", "42"),
+            ("{ { $nested } }", "{ $nested }"),
+            ("{ { msg } }", "{msg}"),
+            ("{ { -term } }", "{ -term }"),
+            ("{ { \"deep literal\" } }", "deep literal"),
+            ("{ { 7 } }", "7"),
+            ("{ { { $deeper } } }", "{ $deeper }"),
+            ("{ NUMBER($count) }", "{...}"),
+            ("{ { NUMBER($count) } }", "{...}"),
+            ("{ $n ->\n   *[other] many\n}", "{...}"),
+            ("before { $x } after", "before { $x } after"),
+        ];
+
+        for (value, expected) in cases {
+            let pattern = message_pattern(&format!("test = {value}\n"));
+            assert_eq!(
+                visitor.pattern_to_text(&pattern.elements),
+                expected,
+                "value {value:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn test_pattern_to_text_keeps_only_the_first_line() {
+        let visitor = FluentVisitor::new();
+        let pattern = message_pattern("test =\n    First line { $x }\n    second line\n");
+
+        assert_eq!(
+            visitor.pattern_to_text(&pattern.elements),
+            "First line { $x }"
+        );
+    }
+
+    #[test]
+    fn test_extract_args_from_function_and_term_call_arguments() {
+        let visitor = FluentVisitor::new();
+        let pattern = message_pattern(
+            "test = { NUMBER($count, minimumFractionDigits: 2) } { -brand($case, style: \"short\") } { DATETIME($when) } { $count }\n",
+        );
+
+        let mut args = Vec::new();
+        let mut seen = HashSet::new();
+        for element in &pattern.elements {
+            if let PatternElement::Placeable { expression } = element {
+                visitor.extract_args_from_expression(expression, &mut args, &mut seen);
+            }
+        }
+
+        // In order of appearance, each once; literals and the function and term names are not
+        // arguments.
+        assert_eq!(args, ["count", "case", "when"]);
+    }
+
     #[test]
     fn test_extract_args_from_expression_edge_cases() {
         let visitor = FluentVisitor::new();

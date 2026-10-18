@@ -1291,6 +1291,55 @@ def handler(i18n, rows, maps):
     }
 
     #[test]
+    fn test_cache_drops_the_entry_of_a_file_that_stops_parsing() {
+        let temp = TempDir::new().unwrap();
+        let code_dir = temp.path().join("py");
+        let cache_dir = temp.path().join("cache");
+        std::fs::create_dir_all(&code_dir).unwrap();
+        std::fs::write(code_dir.join("app.py"), r#"i18n.get("hello")"#).unwrap();
+
+        let run = || {
+            extract_fluent_keys(
+                &code_dir,
+                I18N_ONLY.clone(),
+                FastHashSet::default(),
+                &FastHashSet::default(),
+                FastHashSet::default(),
+                FastHashSet::default(),
+                &DEFAULT_FTL,
+                true,
+                Some(&cache_dir),
+                false,
+            )
+            .unwrap()
+        };
+        let options = super::cache_options(
+            &I18N_ONLY,
+            &FastHashSet::default(),
+            &FastHashSet::default(),
+            &FastHashSet::default(),
+            &FastHashSet::default(),
+            &DEFAULT_FTL,
+        );
+        let cached_files = || {
+            super::load_cache(&super::cache_file_path(Some(&cache_dir)), &options, false)
+                .files
+                .len()
+        };
+
+        assert_eq!(run().keys.len(), 1);
+        assert_eq!(cached_files(), 1);
+
+        // The file now fails to parse: its error is reported and its stale entry is removed, so
+        // the cached keys cannot stand in for it on a later run.
+        std::fs::write(code_dir.join("app.py"), "i18n.get(\"hello\"").unwrap();
+        let extraction = run();
+        assert!(extraction.keys.is_empty());
+        assert_eq!(extraction.diagnostics.len(), 1);
+        assert_eq!(cached_files(), 0);
+    }
+
+    #[test]
     fn test_cache_keeps_keyless_files_and_reports_broken_files_every_run() {
         let temp = TempDir::new().unwrap();
         let code_dir = temp.path().join("py");

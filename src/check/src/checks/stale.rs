@@ -333,6 +333,56 @@ mod tests {
     }
 
     #[test]
+    fn test_check_stale_keeps_messages_referenced_from_nested_places() {
+        let temp = TempDir::new().unwrap();
+        write(&temp.path().join("code/app.py"), r#"i18n.get("welcome")"#);
+        write(
+            &temp.path().join("locales/uk/_default.ftl"),
+            concat!(
+                "welcome = { $n ->
+",
+                "       *[other] { from-variant }
+",
+                "    } { NUMBER(from-function, style: from-named) } { { from-placeable } }
+",
+                "    { -brand } { -brand(from-term-positional) }
+",
+                "    .title = { from-attribute }
+",
+                "-brand = Brand
+",
+                "    .short = { from-term-attribute }
+",
+                "from-variant = V
+",
+                "from-function = F
+",
+                "from-named = N
+",
+                "from-term-positional = TP
+",
+                "from-placeable = P
+",
+                "from-attribute = A
+",
+                "from-term-attribute = T
+",
+                "unused = U
+",
+            ),
+        );
+
+        let result = check_stale(config(&temp, vec!["uk".to_string()])).unwrap();
+        let stale_keys = result
+            .stale_keys
+            .iter()
+            .map(|item| item.key.as_str())
+            .collect::<Vec<_>>();
+
+        assert_eq!(stale_keys, vec!["unused"]);
+    }
+
+    #[test]
     fn test_check_stale_reports_messages_referenced_only_by_stale_messages() {
         let temp = TempDir::new().unwrap();
         write(&temp.path().join("code/app.py"), r#"i18n.get("used")"#);

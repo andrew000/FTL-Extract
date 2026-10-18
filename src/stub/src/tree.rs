@@ -328,4 +328,50 @@ mod tests {
         assert!(branch.metadata().is_none());
         assert_eq!(branch.children().len(), 1);
     }
+
+    #[test]
+    fn test_parent_key_after_child_key_becomes_an_overloaded_leaf() {
+        let message = |id: &str, args: &[&str], translation: &str| Message {
+            id: id.to_string(),
+            args: args.iter().map(|arg| arg.to_string()).collect(),
+            translation: translation.to_string(),
+        };
+        let build = |order: &[&str]| {
+            let mut messages = IndexMap::new();
+            for id in order {
+                let entry = match *id {
+                    "menu" => message("menu", &[], "Menu"),
+                    "menu-title" => message("menu-title", &["name"], "Title { $name }"),
+                    _ => unreachable!(),
+                };
+                messages.insert(id.to_string(), entry);
+            }
+            build_tree(messages).unwrap()
+        };
+
+        // `menu-title` first makes `menu` a branch, which `menu` then turns into a leaf that
+        // keeps `title` as a child.
+        let child_first = build(&["menu-title", "menu"]);
+        let menu = child_first.get("menu").unwrap();
+        assert!(needs_overload(menu));
+        assert_eq!(menu.metadata().unwrap().translation, "Menu");
+        assert!(menu.children().contains_key("title"));
+
+        // The stub does not depend on which key came first.
+        let parent_first = build(&["menu", "menu-title"]);
+        let stub = crate::generator::generate_stub_content(&child_first).unwrap();
+        assert_eq!(
+            stub,
+            crate::generator::generate_stub_content(&parent_first).unwrap()
+        );
+        assert!(
+            stub.contains("def menu(**kwargs: Any) -> Literal['Menu']:"),
+            "{stub}"
+        );
+        assert!(stub.contains("class __Menu:"), "{stub}");
+        assert!(
+            stub.contains("def title(*, name: Any, **kwargs: Any)"),
+            "{stub}"
+        );
+    }
 }

@@ -15,6 +15,8 @@ Use `just` targets when possible:
 - `just test-cov`: write an LCOV report to `lcov.info`.
 - `just build`: build the Python wheel and sdist with `uv build`.
 - `just bench` or `just bench-cmp baseline`: run extractor Criterion benchmarks.
+- `just docs`: serve the MkDocs documentation from `docs/` with live reload.
+- `just docs-build`: build the documentation with `--strict`.
 
 Use `cargo test --workspace` for a quick correctness pass.
 

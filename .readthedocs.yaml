@@ -1,12 +1,20 @@
 version: 2
 
+# Only the documentation tools are installed: installing the project itself would compile the
+# Rust binary, and the build image has no Rust toolchain.
 build:
-  os: "ubuntu-22.04"
+  os: "ubuntu-24.04"
   tools:
-    python: "3.10"
+    python: "3.14"
   jobs:
-    post_install:
-      - pip install .[docs]
+    pre_create_environment:
+      - asdf plugin add uv
+      - asdf install uv latest
+      - asdf global uv latest
+    create_environment:
+      - uv venv "${READTHEDOCS_VIRTUALENV_PATH}"
+    install:
+      - UV_PROJECT_ENVIRONMENT="${READTHEDOCS_VIRTUALENV_PATH}" uv sync --only-group docs --no-install-project
 
-sphinx:
-  configuration: docs/source/conf.py
+mkdocs:
+  configuration: mkdocs.yml

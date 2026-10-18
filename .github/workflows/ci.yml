@@ -59,6 +59,13 @@ jobs:
           key: ${{ matrix.os }}-${{ matrix.arch }}-${{ matrix.libc }}
           cache-targets: true
 
+      - name: Build documentation
+        if: matrix.os == 'ubuntu-latest' && matrix.arch == 'x86_64' && matrix.libc == 'manylinux'
+        shell: bash
+        run: |
+          uv sync --no-install-project --group dev --group docs
+          uv run --no-sync mkdocs build --strict
+
       - name: Install cargo-llvm-cov
         if: matrix.os == 'ubuntu-latest' && matrix.arch == 'x86_64' && matrix.libc == 'manylinux'
         uses: taiki-e/install-action@cargo-llvm-cov

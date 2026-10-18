@@ -72,7 +72,7 @@ code-path = "app"
   [`ftl check`](https://ftl-extract.readthedocs.io/en/latest/commands/check/)
 - [CI integration](https://ftl-extract.readthedocs.io/en/latest/ci/)
 - [FAQ](https://ftl-extract.readthedocs.io/en/latest/faq/)
-- [Changelog](https://github.com/andrew000/FTL-Extract/blob/dev/CHANGELOG.md)
+- [Changelog](https://github.com/andrew000/FTL-Extract/blob/master/CHANGELOG.md)
 
 ## Contributing
 

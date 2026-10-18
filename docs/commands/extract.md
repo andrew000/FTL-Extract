@@ -93,7 +93,8 @@ instead. To exempt a single message, use an [ignore marker](../concepts/ignore-m
 :   `comment` (default) comments out unused and mismatched messages; `warn` only reports them.
 
 `--line-endings <MODE>`
-:   Line endings of written files: `default` (the platform's), `lf`, `cr` or `crlf`.
+:   Line endings of written files: `lf`, `cr` or `crlf`. With `default`, files are written with `\n` on every
+    platform; the line endings a file had before are not kept.
 
 `--dry-run`
 :   Do everything except writing files. Each file that would change is listed, and the command exits with `1` when
@@ -106,10 +107,12 @@ instead. To exempt a single message, use an [ignore marker](../concepts/ignore-m
 
 `--cache`
 :   Reuse the keys found in a Python file while its metadata and the extractor options are unchanged. The cache is
-    stored in `.ftl-extract-cache/extract-<version>-v<schema>.bin`. Files that fail to parse are never cached.
+    stored in `.ftl-extract-cache/extract-<version>-v<schema>.bin` under the current directory, so run `ftl` from the
+    same directory to reuse it. Files that fail to parse are never cached.
 
 `--cache-path <PATH>`
-:   A directory or file for the cache. Enables the cache.
+:   A directory or file for the cache. Enables the cache. In `pyproject.toml` a relative path is resolved from the
+    file's directory, which keeps the cache in one place wherever `ftl` runs.
 
 `--clear-cache`
 :   Delete the cache before running. Enables the cache.

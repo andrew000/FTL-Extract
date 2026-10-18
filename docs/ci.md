@@ -17,7 +17,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - uses: astral-sh/setup-uv@v10
+      - uses: astral-sh/setup-uv@v10.3.0
 
       - name: Validate translations
         run: uvx --from FTL-Extract ftl check
@@ -42,7 +42,7 @@ To keep the report as a build artifact:
       - name: Validate translations
         run: uvx --from FTL-Extract ftl check --report-path reports/ftl-check
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: ftl-check

@@ -137,8 +137,7 @@ fn generate_lazy_factory_class(content: &mut String) -> Result<()> {
     content.push_str("    key_separator: str\n\n");
     content.push_str("    def set_separator(self, key_separator: str) -> None:\n");
     content.push_str("        ...\n\n");
-    content
-        .push_str("    def __call__(self, key: str, /, **kwargs: dict[str, Any]) -> LazyProxy:\n");
+    content.push_str("    def __call__(self, key: str, /, **kwargs: Any) -> LazyProxy:\n");
     content.push_str("        ...\n");
     Ok(())
 }
@@ -322,11 +321,7 @@ mod tests {
         assert!(content.contains("class LazyFactory(I18nStub):"));
         assert!(content.contains("key_separator: str"));
         assert!(content.contains("def set_separator(self, key_separator: str) -> None:"));
-        assert!(
-            content.contains(
-                "def __call__(self, key: str, /, **kwargs: dict[str, Any]) -> LazyProxy:"
-            )
-        );
+        assert!(content.contains("def __call__(self, key: str, /, **kwargs: Any) -> LazyProxy:"));
 
         Ok(())
     }

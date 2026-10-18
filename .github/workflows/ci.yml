@@ -110,9 +110,26 @@ jobs:
             done
           done
 
+      # cibuildwheel copies the project into the container, so the wheel build cannot reuse
+      # the host `target`. It mounts the host root at /host instead: cargo writes its target
+      # directory through that mount to a host path outside the workspace, which this step
+      # restores and saves. The key ends with the run id so a new rustc gets saved too; the
+      # restore stays within one Cargo.lock so artifacts of old dependency versions do not
+      # pile up.
+      - name: Cache cibuildwheel target (Linux)
+        if: runner.os == 'Linux'
+        uses: actions/cache@v6
+        with:
+          path: ${{ runner.temp }}/cibw-target
+          key: cibw-target-${{ matrix.arch }}-${{ matrix.libc }}-${{ hashFiles('Cargo.lock') }}-${{ github.run_id }}
+          restore-keys: cibw-target-${{ matrix.arch }}-${{ matrix.libc }}-${{ hashFiles('Cargo.lock') }}-
+
       - name: Build, fix and test wheels (Linux manylinux)
         if: runner.os == 'Linux' && matrix.libc == 'manylinux'
         shell: bash
+        env:
+          CARGO_TARGET_DIR: /host${{ runner.temp }}/cibw-target
+          CIBW_ENVIRONMENT_PASS_LINUX: CARGO_TARGET_DIR
         run: |
           export CIBW_MANYLINUX_$(echo ${{ matrix.arch }} | tr '[:lower:]' '[:upper:]')_IMAGE="quay.io/pypa/manylinux_2_28_${{ matrix.arch }}"
           export CIBW_BUILD="cp314-manylinux_${{ matrix.arch }}"
@@ -129,6 +146,9 @@ jobs:
       - name: Build, fix and test wheels (Linux musllinux)
         if: runner.os == 'Linux' && matrix.libc == 'musllinux'
         shell: bash
+        env:
+          CARGO_TARGET_DIR: /host${{ runner.temp }}/cibw-target
+          CIBW_ENVIRONMENT_PASS_LINUX: CARGO_TARGET_DIR
         run: |
           export CIBW_MUSLLINUX_$(echo ${{ matrix.arch }} | tr '[:lower:]' '[:upper:]')_IMAGE="quay.io/pypa/musllinux_1_2_${{ matrix.arch }}"
           export CIBW_BUILD="cp314-musllinux_${{ matrix.arch }}"

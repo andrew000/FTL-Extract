@@ -48,7 +48,7 @@ finds exactly the keys `ftl extract` finds.
 |----------------|:-------------------:|-------------------------------------------------------------------------|
 | `syntax`       |                     | `.ftl` files that do not parse, with line and column.                   |
 | `references`   |                     | `{ message }` or `{ -term }` references to entries that do not exist.   |
-| `untranslated` |                     | Messages whose value is exactly the key, like `button-help = button-help`. A placeholder with variables, such as `welcome = welcome{ $name }`, is not detected. |
+| `untranslated` |                     | Messages that are still the placeholder `ftl extract` writes: the key alone (`button-help = button-help`) or the key followed only by variables (`welcome = welcome{ $name }`). |
 | `missing`      | yes                 | Keys used in code that the locale does not provide.                     |
 | `stale`        | yes                 | Messages in the locale that code no longer uses.                        |
 | `kwargs`       | yes                 | Messages whose variables differ from the keyword arguments in code.     |

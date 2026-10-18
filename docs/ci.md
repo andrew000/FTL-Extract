@@ -23,14 +23,15 @@ jobs:
         run: uvx --from FTL-Extract ftl check
 
       - name: Check that the .ftl files are up to date
-        run: |
-          uvx --from FTL-Extract ftl extract
-          git diff --exit-code
+        run: uvx --from FTL-Extract ftl extract --dry-run
 ```
 
 The first step fails when [`ftl check`](commands/check.md) finds errors. The second fails when someone changed the code
-without running `ftl extract`: the run rewrites the `.ftl` files, and `git diff --exit-code` exits with `1` on any
-change.
+without running `ftl extract`: with `--dry-run`, `ftl extract` writes nothing, lists every file it would change, and
+exits with `1` if there is any.
+
+`ftl extract` followed by `git diff --exit-code` does the same and also prints the diff, at the cost of modifying the
+checkout.
 
 If FTL-Extract is a dev dependency of the project, use `uv run ftl check` instead of `uvx`, so CI uses the version
 from your lock file.

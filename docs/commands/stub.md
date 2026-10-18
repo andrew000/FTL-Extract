@@ -37,8 +37,10 @@ class I18nStub:
         ...
 ```
 
-Only the variables written in the message itself become parameters. Variables of messages and terms it references
-(`greet = { hello } and { $x }`) are not added, so pass them through `**kwargs`.
+Variables of the messages a message references are parameters too, because Fluent formats a referenced message with
+the caller's arguments. For `greet = { hello } and { $x }` with `hello = Hi { $name }`, the stub declares
+`def greet(*, x: Any, name: Any, **kwargs: Any)`. Variables inside a term are not added: a term only sees the
+arguments of its own call, such as `{ -brand(case: "gen") }`.
 
 When a key is both a message and a prefix of other keys (`menu` and `menu-title`), the stub declares both an
 `@overload` method and a namespace class under that name.

@@ -27,5 +27,5 @@ ftl [--config <PATH>] [-v] <COMMAND>
 | Code | Meaning                                                                                              |
 |------|------------------------------------------------------------------------------------------------------|
 | `0`  | Success. For `ftl check`, no diagnostic reached the `fail-on` severity.                              |
-| `1`  | The command ran and failed: `ftl check` found problems, a file could not be parsed or written, or `pyproject.toml` is invalid TOML. |
+| `1`  | The command ran and failed: `ftl check` found problems, `ftl extract --dry-run` would change a file, a file could not be parsed or written, or `pyproject.toml` is invalid TOML. |
 | `2`  | Usage or configuration error: a required path is missing, an option has an unknown value, or a locale does not exist. |

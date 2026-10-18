@@ -96,7 +96,13 @@ instead. To exempt a single message, use an [ignore marker](../concepts/ignore-m
 :   Line endings of written files: `default` (the platform's), `lf`, `cr` or `crlf`.
 
 `--dry-run`
-:   Do everything except writing files.
+:   Do everything except writing files. Each file that would change is listed, and the command exits with `1` when
+    there is at least one, so CI can check that the `.ftl` files are up to date:
+
+    ```
+    [INFO  extractor::ftl] [DRY-RUN] Would write app/locales/uk/buttons.ftl. 1 entries.
+    [ERROR cli] Dry run: 1 .ftl file(s) would change
+    ```
 
 `--cache`
 :   Reuse the keys found in a Python file while its metadata and the extractor options are unchanged. The cache is

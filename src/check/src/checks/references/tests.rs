@@ -171,3 +171,44 @@ fn test_check_references_reports_real_source_line() -> Result<()> {
     assert_eq!(result.missing_references[0].line, Some(3));
     Ok(())
 }
+
+#[test]
+fn test_check_references_reports_missing_references_in_nested_places() -> Result<()> {
+    let temp_dir = TempDir::new()?;
+    let locales = temp_dir.path().join("locales");
+    fs::create_dir_all(locales.join("en"))?;
+    fs::write(
+        locales.join("en").join("_default.ftl"),
+        concat!(
+            "-brand = Brand\n",
+            "    .short = { missing-in-term-attribute }\n",
+            "welcome = { NUMBER(missing-positional, style: \"percent\") } { { missing-in-placeable } }\n",
+            "    { -brand(missing-term-positional) }\n",
+            "pick = { -brand.missing-attribute ->\n",
+            "       *[other] Other\n",
+            "    }\n",
+        ),
+    )?;
+
+    let result = check_references(CheckReferencesConfig {
+        locales_path: locales,
+        locales: vec!["en".to_string()],
+    })?;
+
+    let mut found = result
+        .missing_references
+        .iter()
+        .map(|item| (item.key.clone().unwrap_or_default(), item.reference.clone()))
+        .collect::<Vec<_>>();
+    found.sort();
+    let expected = [
+        ("-brand", "missing-in-term-attribute"),
+        ("pick", "-brand.missing-attribute"),
+        ("welcome", "missing-in-placeable"),
+        ("welcome", "missing-positional"),
+        ("welcome", "missing-term-positional"),
+    ]
+    .map(|(key, reference)| (key.to_string(), reference.to_string()));
+    assert_eq!(found, expected);
+    Ok(())
+}

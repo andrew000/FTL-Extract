@@ -213,6 +213,49 @@ report-format = "json"
 }
 
 #[test]
+fn check_loads_a_suggestion_locale_after_another_check_loaded_the_checked_ones() {
+    // `syntax` runs first and loads only `uk`; `untranslated` then needs `en` for its
+    // suggestions, which has to be loaded into the same cache on the way.
+    let temp = TempDir::new().unwrap();
+    write(
+        &temp.path().join("locales/en/_default.ftl"),
+        "hello = Hello
+",
+    );
+    write(
+        &temp.path().join("locales/uk/_default.ftl"),
+        "hello = hello
+",
+    );
+    write(
+        &pyproject(&temp),
+        r#"
+[tool.ftl-extract.check]
+locales-path = "locales"
+languages = ["uk"]
+checks = ["syntax", "untranslated"]
+suggest-from = ["en"]
+fail-on = []
+report-path = "reports/ftl-check"
+report-format = "json"
+"#,
+    );
+
+    let output = ftl()
+        .arg("--config")
+        .arg(pyproject(&temp))
+        .arg("check")
+        .output()
+        .unwrap();
+
+    assert_success(&output);
+    let report = std::fs::read_to_string(temp.path().join("reports/ftl-check.json")).unwrap();
+    assert!(report.contains(r#""key": "hello""#), "{report}");
+    assert!(report.contains(r#""locale": "en""#), "{report}");
+    assert!(report.contains("Hello"), "{report}");
+}
+
+#[test]
 fn check_untranslated_defaults_to_all_locales_from_cli() {
     let temp = TempDir::new().unwrap();
     write(

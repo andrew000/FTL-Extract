@@ -8,7 +8,7 @@ use crate::check_runner::{CheckRunConfig, expand_check_kinds, run_check};
 use crate::config::{load_pyproject_config, render_config_sample};
 use crate::options::{
     cli_or_config_enum, cli_or_config_enum_vec, cli_or_config_path, cli_or_config_vec,
-    exit_config_error, normalize_output_path, resolve_required_path, severity_overrides,
+    config_error, normalize_output_path, resolve_required_path, severity_overrides,
     write_output_file,
 };
 use check::{has_failing_diagnostics, render_check_json, render_check_terminal};
@@ -22,12 +22,16 @@ use extractor::ftl::utils::FastHashSet;
 use log::{error, info, warn};
 use mimalloc::MiMalloc;
 use std::path::{Path, PathBuf};
+use std::process::ExitCode;
 use stub::{StubConfig, generate_stub};
 
 #[global_allocator]
 static GLOBAL: MiMalloc = MiMalloc;
 
-fn main() {
+// `main` returns its exit code instead of calling `std::process::exit`, so the process ends
+// the normal way: destructors and exit handlers run, including the one that writes the
+// coverage profile when tests run under `cargo llvm-cov`.
+fn main() -> ExitCode {
     let cli = Cli::parse();
 
     env_logger::Builder::new()
@@ -50,7 +54,7 @@ fn main() {
             Ok(config) => config,
             Err(e) => {
                 error!(target: "cli", "Error loading config: {}", e);
-                std::process::exit(1);
+                return ExitCode::from(1);
             }
         }
     };
@@ -107,7 +111,7 @@ fn main() {
                 "Missing code path. Pass it as an argument or set tool.ftl-extract.extract.code-path",
             ) {
                 Ok(path) => path,
-                Err(e) => exit_config_error(e),
+                Err(e) => return config_error(e),
             };
             let locales_path = match resolve_required_path(
                 locales_path,
@@ -116,7 +120,7 @@ fn main() {
                 "Missing locales path. Pass locales path as an argument or set tool.ftl-extract.extract.locales-path",
             ) {
                 Ok(path) => path,
-                Err(e) => exit_config_error(e),
+                Err(e) => return config_error(e),
             };
             let default_ftl_file = default_ftl_file
                 .or(pyproject.default_ftl_file)
@@ -128,13 +132,13 @@ fn main() {
                 "comment-keys-mode",
             ) {
                 Ok(mode) => mode,
-                Err(e) => exit_config_error(e),
+                Err(e) => return config_error(e),
             }
             .unwrap_or(CommentsKeyModes::Comment);
             let line_endings =
                 match cli_or_config_enum(line_endings, pyproject.line_endings, "line-endings") {
                     Ok(line_endings) => line_endings,
-                    Err(e) => exit_config_error(e),
+                    Err(e) => return config_error(e),
                 }
                 .unwrap_or(LineEndings::Default);
 
@@ -223,7 +227,7 @@ fn main() {
                 }
                 Err(e) => {
                     error!(target: "cli", "Error during extraction: {}", e);
-                    std::process::exit(1);
+                    return ExitCode::from(1);
                 }
             }
             Some(start_time.elapsed())
@@ -247,7 +251,7 @@ fn main() {
                 "Missing locales path. Pass it as an argument or set tool.ftl-extract.stub.locales-path",
             ) {
                 Ok(path) => path,
-                Err(e) => exit_config_error(e),
+                Err(e) => return config_error(e),
             };
             let stub_path = match resolve_required_path(
                 stub_path,
@@ -256,7 +260,7 @@ fn main() {
                 "Missing stub path. Pass it as an argument or set tool.ftl-extract.stub.stub-path",
             ) {
                 Ok(path) => path,
-                Err(e) => exit_config_error(e),
+                Err(e) => return config_error(e),
             };
 
             info!(target: "cli", "Locales path: {}", locales_path.display());
@@ -275,7 +279,7 @@ fn main() {
                 }
                 Err(e) => {
                     error!(target: "cli", "Error during stub generation: {}", e);
-                    std::process::exit(1);
+                    return ExitCode::from(1);
                 }
             }
             Some(start_time.elapsed())
@@ -308,12 +312,12 @@ fn main() {
                 "Missing locales path. Pass it as an argument or set tool.ftl-extract.check.locales-path",
             ) {
                 Ok(path) => path,
-                Err(e) => exit_config_error(e),
+                Err(e) => return config_error(e),
             };
             let checks =
                 match cli_or_config_enum_vec(checks, pyproject.checks, "checks", Vec::new()) {
                     Ok(checks) => checks,
-                    Err(e) => exit_config_error(e),
+                    Err(e) => return config_error(e),
                 };
             let checks = expand_check_kinds(checks);
             let code_path = cli_or_config_path(
@@ -329,7 +333,7 @@ fn main() {
             let report_format =
                 match cli_or_config_enum(report_format, pyproject.report_format, "report-format") {
                     Ok(report_format) => report_format,
-                    Err(e) => exit_config_error(e),
+                    Err(e) => return config_error(e),
                 };
             let report_format = report_format.unwrap_or(CheckReportFormat::Json);
             let report = cli_or_config_path(report_path, pyproject.report_path, base_dir);
@@ -340,11 +344,11 @@ fn main() {
                 vec![FailSeverity::Error],
             ) {
                 Ok(fail_on) => fail_on.into_iter().map(Into::into).collect::<Vec<_>>(),
-                Err(e) => exit_config_error(e),
+                Err(e) => return config_error(e),
             };
             let severity_overrides = match severity_overrides(&severity, pyproject.severity) {
                 Ok(overrides) => overrides,
-                Err(e) => exit_config_error(e),
+                Err(e) => return config_error(e),
             };
 
             info!(target: "cli", "Locales path: {}", locales_path.display());
@@ -423,19 +427,19 @@ fn main() {
                                 report_path.display(),
                                 e
                             );
-                            std::process::exit(1);
+                            return ExitCode::from(1);
                         }
 
                         info!(target: "cli", "Saved report to {}", report_path.display());
                     }
 
                     if has_failing_diagnostics(&result, &fail_on) {
-                        std::process::exit(1);
+                        return ExitCode::from(1);
                     }
                 }
                 Err(e) => {
                     error!(target: "cli", "Error during check: {}", e);
-                    std::process::exit(2);
+                    return ExitCode::from(2);
                 }
             }
             Some(start_time.elapsed())
@@ -449,4 +453,5 @@ fn main() {
     if let Some(elapsed) = elapsed {
         info!(target: "cli", "✅ Done in {:.3?}s.", elapsed.as_secs_f64());
     }
+    ExitCode::SUCCESS
 }

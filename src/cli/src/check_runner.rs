@@ -336,6 +336,16 @@ mod tests {
     use tempfile::TempDir;
 
     #[test]
+    fn all_is_not_a_single_check() {
+        // `all` is expanded before single checks are resolved, so it never maps to one.
+        assert_eq!(ResolvedCheckKind::from_cli(&CheckKind::All), None);
+        assert_eq!(
+            ResolvedCheckKind::from_cli(&CheckKind::Stale),
+            Some(ResolvedCheckKind::Stale)
+        );
+    }
+
+    #[test]
     fn check_all_runs_syntax_first() {
         let expanded = expand_check_kinds(vec![CheckKind::All]);
 

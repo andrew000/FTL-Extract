@@ -332,36 +332,21 @@ mod tests {
         write(
             &temp.path().join("locales/uk/_default.ftl"),
             concat!(
-                "welcome = { $n ->
-",
-                "       *[other] { from-variant }
-",
-                "    } { NUMBER(from-function, style: from-named) } { { from-placeable } }
-",
-                "    { -brand } { -brand(from-term-positional) }
-",
-                "    .title = { from-attribute }
-",
-                "-brand = Brand
-",
-                "    .short = { from-term-attribute }
-",
-                "from-variant = V
-",
-                "from-function = F
-",
-                "from-named = N
-",
-                "from-term-positional = TP
-",
-                "from-placeable = P
-",
-                "from-attribute = A
-",
-                "from-term-attribute = T
-",
-                "unused = U
-",
+                "welcome = { $n ->\n",
+                "       *[other] { from-variant }\n",
+                "    } { NUMBER(from-function, style: from-named) } { { from-placeable } }\n",
+                "    { -brand } { -brand(from-term-positional) }\n",
+                "    .title = { from-attribute }\n",
+                "-brand = Brand\n",
+                "    .short = { from-term-attribute }\n",
+                "from-variant = V\n",
+                "from-function = F\n",
+                "from-named = N\n",
+                "from-term-positional = TP\n",
+                "from-placeable = P\n",
+                "from-attribute = A\n",
+                "from-term-attribute = T\n",
+                "unused = U\n",
             ),
         );
 
@@ -467,5 +452,33 @@ i18n.get("hello", _path="two.ftl")
 
         assert_eq!(result.stale_keys.len(), 1);
         assert_eq!(result.stale_keys[0].key, "unused");
+    }
+
+    #[test]
+    fn test_check_stale_skips_comments_and_references_to_missing_messages() {
+        let temp = TempDir::new().unwrap();
+        write(&temp.path().join("code/app.py"), r#"i18n.get("welcome")"#);
+        write(
+            &temp.path().join("locales/uk/_default.ftl"),
+            concat!(
+                "### Resource comment\n",
+                "\n",
+                "## Group comment\n",
+                "\n",
+                "# Standalone comment\n",
+                "\n",
+                "welcome = { not-defined-anywhere }\n",
+                "unused = U\n",
+            ),
+        );
+
+        let result = check_stale(config(&temp, vec!["uk".to_string()])).unwrap();
+        let stale_keys = result
+            .stale_keys
+            .iter()
+            .map(|item| item.key.as_str())
+            .collect::<Vec<_>>();
+
+        assert_eq!(stale_keys, vec!["unused"]);
     }
 }

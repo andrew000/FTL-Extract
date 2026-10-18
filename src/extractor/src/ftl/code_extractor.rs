@@ -1683,4 +1683,40 @@ def handler(i18n, rows, maps):
             );
         }
     }
+
+    #[test]
+    fn test_exclude_patterns_with_and_without_a_directory_suffix() {
+        let temp = TempDir::new().unwrap();
+        let code_dir = temp.path().join("py");
+        std::fs::create_dir_all(code_dir.join("generated")).unwrap();
+        std::fs::write(code_dir.join("app.py"), r#"i18n.get("kept")"#).unwrap();
+        std::fs::write(code_dir.join("skip_me.py"), r#"i18n.get("file-excluded")"#).unwrap();
+        std::fs::write(
+            code_dir.join("generated").join("gen.py"),
+            r#"i18n.get("dir-excluded")"#,
+        )
+        .unwrap();
+
+        let run = |exclude_dirs: &[&str]| {
+            super::extract_code_with_diagnostics_cached(
+                &code_dir,
+                I18N_ONLY.clone(),
+                FastHashSet::default(),
+                &exclude_dirs.iter().map(|dir| dir.to_string()).collect(),
+                FastHashSet::default(),
+                FastHashSet::default(),
+                &DEFAULT_FTL,
+                false,
+                None,
+                false,
+            )
+        };
+
+        let extracted = run(&["skip_me.py", "generated/**"]).unwrap();
+        let keys: Vec<&str> = extracted.keys.iter().map(|key| key.key.as_str()).collect();
+        assert_eq!(keys, ["kept"]);
+
+        // A pattern that is not a valid glob is an error, not a silently ignored exclude.
+        assert!(run(&["[unclosed"]).is_err());
+    }
 }

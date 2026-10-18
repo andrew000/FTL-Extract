@@ -485,4 +485,23 @@ mod tests {
         let kwargs = extract_kwargs(&terms["t2"], &terms, &messages, &mut depend_keys).unwrap();
         assert_eq!(names(&kwargs), vec!["w"]);
     }
+
+    #[test]
+    fn test_stored_entries_only_return_entries_of_the_requested_kind() {
+        use super::StoredEntries;
+        use common::FluentEntries;
+
+        // A term under the messages and a message under the terms are not returned.
+        let messages = keyed(vec![term("brand", vec![])]);
+        let terms = keyed(vec![message("hello", vec![])]);
+        let entries = StoredEntries {
+            messages: &messages,
+            terms: &terms,
+        };
+
+        assert!(entries.message("brand").is_none());
+        assert!(entries.term("hello").is_none());
+        assert!(entries.message("absent").is_none());
+        assert!(entries.term("absent").is_none());
+    }
 }

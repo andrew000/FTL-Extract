@@ -515,3 +515,20 @@ i18n.get("plain")
     );
     assert!(result.extraction_errors.is_empty());
 }
+
+#[test]
+fn test_check_kwargs_skips_comments_in_locale_files() {
+    let temp = TempDir::new().unwrap();
+    write(
+        &temp.path().join("code/app.py"),
+        r#"i18n.get("hello", name=user.name)"#,
+    );
+    write(
+        &temp.path().join("locales/uk/_default.ftl"),
+        "### Resource comment\n\n# Standalone comment\n\nhello = Hello { $name }\n",
+    );
+
+    let result = check_kwargs(config(&temp, vec!["uk".to_string()])).unwrap();
+
+    assert!(result.mismatches.is_empty(), "{:?}", result.mismatches);
+}

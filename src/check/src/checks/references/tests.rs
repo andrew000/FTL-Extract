@@ -212,3 +212,31 @@ fn test_check_references_reports_missing_references_in_nested_places() -> Result
     assert_eq!(found, expected);
     Ok(())
 }
+
+#[test]
+fn test_check_references_reports_the_line_after_lines_that_look_like_entries() -> Result<()> {
+    // Lines of a multiline value that start like a term or a message but have no `=` must
+    // not be taken for entry starts when the line of `broken` is looked up.
+    let temp_dir = TempDir::new()?;
+    let locales = temp_dir.path().join("locales");
+    fs::create_dir_all(locales.join("en"))?;
+    fs::write(
+        locales.join("en").join("_default.ftl"),
+        concat!(
+            "long =\n",
+            "    first line\n",
+            "    -not a term\n",
+            "    plain words\n",
+            "broken = { missing }\n",
+        ),
+    )?;
+
+    let result = check_references(CheckReferencesConfig {
+        locales_path: locales,
+        locales: vec!["en".to_string()],
+    })?;
+
+    assert_eq!(result.missing_references.len(), 1);
+    assert_eq!(result.missing_references[0].line, Some(5));
+    Ok(())
+}

@@ -137,4 +137,37 @@ mod tests {
             assert!(kind.is_file_error(), "{}", kind.as_str());
         }
     }
+
+    #[test]
+    fn test_kind_names_and_a_diagnostic_without_locations() {
+        let names = [
+            ExtractionDiagnosticKind::KeyPathConflict,
+            ExtractionDiagnosticKind::KeyMessageConflict,
+            ExtractionDiagnosticKind::ParseError,
+            ExtractionDiagnosticKind::ReadError,
+            ExtractionDiagnosticKind::InvalidUtf8,
+        ]
+        .map(ExtractionDiagnosticKind::as_str);
+        assert_eq!(
+            names,
+            [
+                "key-path-conflict",
+                "key-message-conflict",
+                "parse-error",
+                "read-error",
+                "invalid-utf8"
+            ]
+        );
+
+        let diagnostic = ExtractionDiagnostic {
+            kind: ExtractionDiagnosticKind::ReadError,
+            key: None,
+            message: "Failed to read Python file: denied".to_string(),
+            locations: Vec::new(),
+        };
+        assert_eq!(
+            diagnostic.to_string(),
+            "[read-error] Failed to read Python file: denied"
+        );
+    }
 }

@@ -20,10 +20,12 @@ pub(crate) struct Cli {
 
 #[derive(Subcommand)]
 pub(crate) enum Commands {
+    /// Print a sample pyproject.toml configuration
     Config {
         #[command(subcommand)]
         command: ConfigCommands,
     },
+    /// Find translation keys in Python code and update the .ftl files
     Extract {
         /// Path to the code directory
         #[arg()]
@@ -106,6 +108,7 @@ pub(crate) enum Commands {
         #[arg(long, default_value_t = false)]
         leak_memory: bool,
     },
+    /// Generate a .pyi stub from the .ftl files of one locale
     Stub {
         /// Path to the FTL files directory
         #[arg()]
@@ -119,6 +122,7 @@ pub(crate) enum Commands {
         #[arg(long, default_value_t = false)]
         export_tree: bool,
     },
+    /// Validate translations against each other and the Python code
     Check {
         /// Path to locales directory containing locale folders (e.g. en, uk)
         #[arg()]
@@ -160,6 +164,7 @@ pub(crate) enum Commands {
 
 #[derive(Subcommand)]
 pub(crate) enum ConfigCommands {
+    /// Print the sample for all commands, or for one with --command
     Sample {
         /// Print only one command-specific pyproject.toml section
         #[arg(long, value_enum)]

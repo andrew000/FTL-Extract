@@ -38,6 +38,14 @@ outdated:
 sync:
     uv sync --no-install-project --group dev
 
+docs:
+    uv sync --no-install-project --group dev --group docs
+    uv run --no-sync mkdocs serve
+
+docs-build:
+    uv sync --no-install-project --group dev --group docs
+    uv run --no-sync mkdocs build --strict
+
 [windows]
 clean:
     @echo "Removing build artifacts..."

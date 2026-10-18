@@ -3,9 +3,9 @@ mod locale;
 #[cfg(test)]
 mod tests;
 
-use crate::checks::{run_code_aware_check, run_code_aware_check_with_extracted};
+use crate::checks::run_code_aware_check;
 use crate::parser::CheckLocaleCache;
-use crate::types::{CheckCodeAwareConfig, CheckKwargsConfig, CheckKwargsResult, KwargsMismatch};
+use crate::types::{CheckKwargsConfig, CheckKwargsResult, KwargsMismatch};
 use anyhow::Result;
 use common::FastHashSet;
 use extractor::ftl::diagnostics::{ExtractedCode, ExtractedFluentKey};
@@ -14,13 +14,6 @@ use log::debug;
 
 pub fn check_kwargs(config: CheckKwargsConfig) -> Result<CheckKwargsResult> {
     run_code_aware_check(config, check_kwargs_with_cache)
-}
-
-pub fn check_kwargs_with_extracted(
-    config: CheckCodeAwareConfig,
-    extracted: &ExtractedCode,
-) -> Result<CheckKwargsResult> {
-    run_code_aware_check_with_extracted(config, extracted, check_kwargs_with_cache)
 }
 
 pub fn check_kwargs_with_cache(

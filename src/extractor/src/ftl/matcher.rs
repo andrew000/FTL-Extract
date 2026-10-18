@@ -63,10 +63,10 @@ impl FluentKey {
     /// The `# ftl-extract: ignore ...` marker in the comment attached to a stored message, if any.
     /// Terms and comments carry none.
     pub(crate) fn ignore_marker(&self) -> Option<IgnoreMarker> {
-        match self.entry.as_ref() {
-            FluentEntry::Message(message) => IgnoreMarker::parse(message.comment.as_ref()),
-            _ => None,
-        }
+        let FluentEntry::Message(message) = self.entry.as_ref() else {
+            return None;
+        };
+        IgnoreMarker::parse(message.comment.as_ref())
     }
 }
 
@@ -96,24 +96,17 @@ pub(crate) fn merge_key_occurrence(
     let kept_star = kept.kept_call_has_double_star();
     let other_star = other.kept_call_has_double_star();
 
-    let conflict = if kept_star || other_star {
+    // A key found in code is always a message of `{ $kwarg }` placeables, so two occurrences
+    // that differ were called with different keyword arguments.
+    let conflict = if kept_star || other_star || kept.entry == other.entry {
         None
     } else {
-        match (kept.entry.as_ref(), other.entry.as_ref()) {
-            (FluentEntry::Message(a), FluentEntry::Message(b)) if a == b => None,
-            (FluentEntry::Message(_), FluentEntry::Message(_)) => Some(conflict_diagnostic(
-                ExtractionDiagnosticKind::KeyMessageConflict,
-                kept,
-                &other,
-                kwargs_conflict_message,
-            )),
-            _ => Some(conflict_diagnostic(
-                ExtractionDiagnosticKind::KeyTypeConflict,
-                kept,
-                &other,
-                type_conflict_message,
-            )),
-        }
+        Some(conflict_diagnostic(
+            ExtractionDiagnosticKind::KeyMessageConflict,
+            kept,
+            &other,
+            kwargs_conflict_message,
+        ))
     };
 
     let first_double_star = match (kept.kwargs_unknown.take(), other.kwargs_unknown.clone()) {
@@ -239,14 +232,6 @@ pub(crate) fn path_conflict_message(first: &FluentKey, second: &FluentKey) -> St
     )
 }
 
-/// Message text of a `KeyTypeConflict`.
-pub(crate) fn type_conflict_message(first: &FluentKey, _second: &FluentKey) -> String {
-    format!(
-        "Fluent key {} is not a Message in one of the entries.",
-        first.key
-    )
-}
-
 pub(crate) struct I18nMatcher<'a> {
     code_path: Arc<PathBuf>,
     default_ftl_file: Arc<PathBuf>,
@@ -368,7 +353,10 @@ impl<'a> I18nMatcher<'a> {
             // attribute, so treat it like `i18n("key")`.
             [] => self.process_name_call(expr),
             [attr] if *attr == consts::GET_LITERAL => self.process_i18n_key_call_get_literal(expr),
-            _ => self.process_i18n_key_call_attrs(expr, attrs),
+            [.., last] => {
+                let last = *last;
+                self.process_i18n_key_call_attrs(expr, last, attrs);
+            }
         }
     }
     #[inline]
@@ -388,12 +376,10 @@ impl<'a> I18nMatcher<'a> {
     fn process_i18n_key_call_attrs(
         &mut self,
         expr: &ruff_python_ast::ExprCall,
+        last: &str,
         attrs: SmallVec<&str, 8>,
     ) {
-        let Some(last) = attrs.last() else {
-            return;
-        };
-        if self.ignore_attributes.contains(*last) {
+        if self.ignore_attributes.contains(last) {
             return;
         }
 

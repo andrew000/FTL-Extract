@@ -22,8 +22,6 @@ pub enum ExtractionDiagnosticKind {
     KeyPathConflict,
     /// The same key is used with different keyword arguments.
     KeyMessageConflict,
-    /// The same key resolves to different Fluent entry types.
-    KeyTypeConflict,
     /// A Python file could not be parsed.
     ParseError,
     /// A Python file could not be opened or mapped into memory.
@@ -37,7 +35,6 @@ impl ExtractionDiagnosticKind {
         match self {
             Self::KeyPathConflict => "key-path-conflict",
             Self::KeyMessageConflict => "key-message-conflict",
-            Self::KeyTypeConflict => "key-type-conflict",
             Self::ParseError => "parse-error",
             Self::ReadError => "read-error",
             Self::InvalidUtf8 => "invalid-utf8",
@@ -129,7 +126,6 @@ mod tests {
         for kind in [
             ExtractionDiagnosticKind::KeyPathConflict,
             ExtractionDiagnosticKind::KeyMessageConflict,
-            ExtractionDiagnosticKind::KeyTypeConflict,
         ] {
             assert!(!kind.is_file_error(), "{}", kind.as_str());
         }

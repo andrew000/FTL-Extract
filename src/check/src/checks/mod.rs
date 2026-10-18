@@ -7,15 +7,12 @@ mod untranslated;
 
 pub use kwargs::check_kwargs;
 pub use kwargs::check_kwargs_with_cache;
-pub use kwargs::check_kwargs_with_extracted;
 pub use missing::check_missing;
 pub use missing::check_missing_with_cache;
-pub use missing::check_missing_with_extracted;
 pub use references::check_references;
 pub use references::check_references_with_cache;
 pub use stale::check_stale;
 pub use stale::check_stale_with_cache;
-pub use stale::check_stale_with_extracted;
 pub use syntax::check_syntax;
 pub use syntax::check_syntax_with_cache;
 pub use untranslated::check_untranslated;
@@ -23,8 +20,8 @@ pub use untranslated::check_untranslated_with_cache;
 
 use crate::parser::{CheckLocaleCache, discover_locales};
 use crate::types::{
-    CheckCodeAwareCheckConfig, CheckCodeAwareConfig, CheckCodeConfig, CheckKwargsResult,
-    CheckLocaleConfig, CheckMissingResult, CheckStaleResult, CodeExtractionError,
+    CheckCodeAwareCheckConfig, CheckCodeConfig, CheckKwargsResult, CheckLocaleConfig,
+    CheckMissingResult, CheckStaleResult, CodeExtractionError,
 };
 use anyhow::{Result, bail};
 use extractor::ftl::code_extractor::extract_code_with_diagnostics_cached;
@@ -78,15 +75,6 @@ where
     let mut result = check(&cache, &extracted)?;
     result.set_extraction_errors(code_extraction_errors(&extracted));
     Ok(result)
-}
-
-pub(super) fn run_code_aware_check_with_extracted<R>(
-    config: CheckCodeAwareConfig,
-    extracted: &ExtractedCode,
-    check: impl FnOnce(&CheckLocaleCache, &ExtractedCode) -> Result<R>,
-) -> Result<R> {
-    let cache = CheckLocaleCache::load(&config.locales_path, &config.locales, &[])?;
-    check(&cache, extracted)
 }
 
 pub fn validate_check_locales(locales_path: &Path, locales: &[String]) -> Result<()> {

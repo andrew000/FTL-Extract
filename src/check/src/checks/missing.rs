@@ -1,6 +1,6 @@
-use crate::checks::{run_code_aware_check, run_code_aware_check_with_extracted};
+use crate::checks::run_code_aware_check;
 use crate::parser::CheckLocaleCache;
-use crate::types::{CheckCodeAwareConfig, CheckMissingConfig, CheckMissingResult, MissingKey};
+use crate::types::{CheckMissingConfig, CheckMissingResult, MissingKey};
 use anyhow::Result;
 use common::FastHashSet;
 use extractor::ftl::diagnostics::ExtractedCode;
@@ -8,13 +8,6 @@ use std::path::PathBuf;
 
 pub fn check_missing(config: CheckMissingConfig) -> Result<CheckMissingResult> {
     run_code_aware_check(config, check_missing_with_cache)
-}
-
-pub fn check_missing_with_extracted(
-    config: CheckCodeAwareConfig,
-    extracted: &ExtractedCode,
-) -> Result<CheckMissingResult> {
-    run_code_aware_check_with_extracted(config, extracted, check_missing_with_cache)
 }
 
 pub fn check_missing_with_cache(

@@ -1,6 +1,6 @@
 use crate::ftl::code_extractor::{extract_fluent_keys, sort_fluent_keys_by_path};
 use crate::ftl::consts::{CommentsKeyModes, LineEndings};
-use crate::ftl::diagnostics::ExtractionDiagnostic;
+use crate::ftl::diagnostics::{CodeLocation, ExtractionDiagnostic};
 use crate::ftl::ftl_importer::{DuplicateKey, ImportResult, Originals, import_ftl_from_dir};
 use crate::ftl::matcher::{FluentEntry, FluentKey};
 use crate::ftl::process::commentator::comment_ftl_key;
@@ -129,19 +129,17 @@ pub fn extract(config: ExtractConfig) -> Result<ExtractionStatistics> {
 /// One verbose line per key whose variables cannot be verified because some call passes
 /// `**kwargs`. Sorted by key so the output is stable.
 fn log_kwargs_unknown(in_code_fluent_keys: &FastHashMap<String, FluentKey>) {
-    let mut unknown: Vec<(&String, &FluentKey)> = in_code_fluent_keys
+    let mut unknown: Vec<(&String, &CodeLocation)> = in_code_fluent_keys
         .iter()
-        .filter(|(_, fluent_key)| fluent_key.kwargs_unknown.is_some())
+        .filter_map(|(key, fluent_key)| Some((key, fluent_key.kwargs_unknown.as_ref()?)))
         .collect();
     unknown.sort_by(|a, b| a.0.cmp(b.0));
 
-    for (key, fluent_key) in unknown {
-        if let Some(location) = &fluent_key.kwargs_unknown {
-            debug!(
-                target: "extractor::ftl",
-                "key \"{key}\" is called with **kwargs at {location}; its variables cannot be verified"
-            );
-        }
+    for (key, location) in unknown {
+        debug!(
+            target: "extractor::ftl",
+            "key \"{key}\" is called with **kwargs at {location}; its variables cannot be verified"
+        );
     }
 }
 

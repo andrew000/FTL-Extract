@@ -194,12 +194,14 @@ fn generate_inner_class(
 fn to_pascal_case(s: &str) -> String {
     s.split('_')
         .filter(|part| !part.is_empty())
-        .map(|part| {
+        // Empty parts are filtered out above, so every part has a first character.
+        .flat_map(|part| {
             let mut chars = part.chars();
-            match chars.next() {
-                None => String::new(),
-                Some(first) => first.to_uppercase().chain(chars).collect(),
-            }
+            chars
+                .next()
+                .into_iter()
+                .flat_map(char::to_uppercase)
+                .chain(chars)
         })
         .collect()
 }

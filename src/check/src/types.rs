@@ -18,7 +18,6 @@ pub struct CheckLocaleConfig {
 
 pub type CheckSyntaxConfig = CheckLocaleConfig;
 pub type CheckReferencesConfig = CheckLocaleConfig;
-pub type CheckCodeAwareConfig = CheckLocaleConfig;
 
 #[derive(Debug, Clone)]
 pub struct CheckCodeConfig {

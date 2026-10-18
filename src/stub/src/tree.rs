@@ -76,12 +76,8 @@ pub fn build_tree(messages: IndexMap<String, Message>) -> Result<IndexMap<String
     let mut tree = IndexMap::new();
 
     for (key, message) in messages {
+        // `split` always yields at least one part.
         let parts: Vec<&str> = key.split('-').collect();
-
-        if parts.is_empty() {
-            continue;
-        }
-
         let mut current = &mut tree;
 
         for part in &parts[..parts.len() - 1] {
@@ -99,31 +95,19 @@ pub fn build_tree(messages: IndexMap<String, Message>) -> Result<IndexMap<String
             translation: message.translation,
         };
 
-        match current.get_mut(final_part) {
-            Some(existing_node) => {
-                match existing_node {
-                    TreeNode::Branch(children) => {
-                        // Preserve existing children when promoting a branch to a leaf.
-                        let old_children = std::mem::take(children);
-                        *existing_node = TreeNode::Leaf {
-                            meta: metadata,
-                            children: old_children,
-                        };
-                    }
-                    TreeNode::Leaf {
-                        meta: existing_meta,
-                        ..
-                    } => {
-                        // Duplicate key — shouldn't happen with valid FTL.
-                        log::warn!("Duplicate key found: {}", key);
-                        *existing_meta = metadata;
-                    }
-                }
-            }
-            None => {
-                current.insert(final_part.to_string(), TreeNode::new_leaf(metadata));
-            }
-        }
+        // Keys are unique, so a node already here is a branch made for a longer key such as
+        // `menu-title` before `menu`: it becomes a leaf that keeps those children, in place.
+        let children = current
+            .get_mut(final_part)
+            .map(|node| std::mem::take(node.children_mut()))
+            .unwrap_or_default();
+        current.insert(
+            final_part.to_string(),
+            TreeNode::Leaf {
+                meta: metadata,
+                children,
+            },
+        );
     }
 
     Ok(tree)

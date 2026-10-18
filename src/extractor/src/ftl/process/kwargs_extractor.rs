@@ -70,17 +70,17 @@ struct StoredEntries<'a> {
 
 impl FluentEntries for StoredEntries<'_> {
     fn message(&self, id: &str) -> Option<&Message<String>> {
-        match self.messages.get(id)?.entry.as_ref() {
-            FluentEntry::Message(message) => Some(message),
-            _ => None,
-        }
+        let FluentEntry::Message(message) = self.messages.get(id)?.entry.as_ref() else {
+            return None;
+        };
+        Some(message)
     }
 
     fn term(&self, id: &str) -> Option<&Term<String>> {
-        match self.terms.get(id)?.entry.as_ref() {
-            FluentEntry::Term(term) => Some(term),
-            _ => None,
-        }
+        let FluentEntry::Term(term) = self.terms.get(id)?.entry.as_ref() else {
+            return None;
+        };
+        Some(term)
     }
 }
 

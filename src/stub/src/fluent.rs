@@ -505,6 +505,7 @@ welcome = { -greeting }
             ("{ { NUMBER($count) } }", "{...}"),
             ("{ $n ->\n   *[other] many\n}", "{...}"),
             ("before { $x } after", "before { $x } after"),
+            ("{ { $n ->\n       *[other] many\n    } }", "{...}"),
         ];
 
         for (value, expected) in cases {
@@ -515,6 +516,20 @@ welcome = { -greeting }
                 "value {value:?}"
             );
         }
+    }
+
+    #[test]
+    fn test_parse_ftl_files_skips_standalone_comments() -> Result<()> {
+        let temp_dir = TempDir::new()?;
+        fs::write(
+            temp_dir.path().join("messages.ftl"),
+            "### Resource comment\n\n## Group comment\n\n# Standalone comment\n\nhello = Hello\n",
+        )?;
+
+        let messages = parse_ftl_files(temp_dir.path())?;
+
+        assert_eq!(messages.keys().collect::<Vec<_>>(), ["hello"]);
+        Ok(())
     }
 
     #[test]

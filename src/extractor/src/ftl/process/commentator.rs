@@ -280,4 +280,12 @@ mod tests {
         );
         assert_round_trip(source);
     }
+
+    #[test]
+    fn test_split_content_drops_trailing_blank_lines() {
+        assert_eq!(
+            super::split_content("hello = Hello\n    \n\n"),
+            vec!["hello = Hello".to_string()]
+        );
+    }
 }

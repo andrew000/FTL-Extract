@@ -445,4 +445,44 @@ mod tests {
         assert!(rendered.contains(r#""ok": false"#));
         assert!(rendered.contains(r#""severity": "error""#));
     }
+
+    #[test]
+    fn test_render_terminal_with_nothing_checked() {
+        let empty = CheckResult {
+            checked_kinds: Vec::new(),
+            diagnostics: Vec::new(),
+        };
+
+        assert_eq!(
+            render_check_terminal(&empty),
+            "FTL check passed: no problems found."
+        );
+    }
+
+    #[test]
+    fn test_render_terminal_prints_a_code_location_without_a_line() {
+        let mut result = result();
+        result.diagnostics[0].code_location = Some(SourceLocation {
+            path: PathBuf::from("code/app.py"),
+            line: None,
+            column: None,
+        });
+
+        let rendered = render_check_terminal(&result);
+
+        assert!(rendered.contains("  code: code/app.py\n"), "{rendered}");
+    }
+
+    #[test]
+    fn test_source_location_display() {
+        let location = |line, column| SourceLocation {
+            path: PathBuf::from("a.ftl"),
+            line,
+            column,
+        };
+
+        assert_eq!(location(None, None).to_string(), "a.ftl");
+        assert_eq!(location(Some(3), None).to_string(), "a.ftl:3");
+        assert_eq!(location(Some(3), Some(7)).to_string(), "a.ftl:3:7");
+    }
 }

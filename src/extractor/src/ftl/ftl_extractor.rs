@@ -1621,4 +1621,35 @@ i18n.get("nested", _path="pages/main.ftl")
             "Message `broken` in _default.ftl references unknown message `missing`"
         );
     }
+
+    #[test]
+    fn test_extract_counts_problems_and_failed_files_in_its_errors() {
+        // Two Python files that do not parse: "2 problems".
+        let temp = TempDir::new().unwrap();
+        let code_path = temp.path().join("code");
+        let locales_path = temp.path().join("locales");
+        fs::create_dir_all(locales_path.join("en")).unwrap();
+        fs::create_dir_all(&code_path).unwrap();
+        fs::write(code_path.join("a.py"), "i18n.get(\"a\"\n").unwrap();
+        fs::write(code_path.join("b.py"), "i18n.get(\"b\"\n").unwrap();
+        let error = extract(config(code_path.clone(), locales_path.clone())).unwrap_err();
+        assert!(
+            error
+                .to_string()
+                .starts_with("Extraction aborted: 2 problems"),
+            "{error}"
+        );
+
+        // One `.ftl` file that cannot be written, because a directory has its name.
+        fs::remove_file(code_path.join("b.py")).unwrap();
+        fs::write(code_path.join("a.py"), "i18n.get(\"a\")\n").unwrap();
+        fs::create_dir_all(locales_path.join("en").join("_default.ftl")).unwrap();
+        let error = extract(config(code_path, locales_path)).unwrap_err();
+        assert!(
+            error
+                .to_string()
+                .starts_with("Failed to write 1 .ftl file for locale `en`"),
+            "{error}"
+        );
+    }
 }

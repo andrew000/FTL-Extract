@@ -701,4 +701,42 @@ mod tests {
             ExtractionDiagnosticKind::KeyPathConflict
         );
     }
+
+    #[test]
+    fn test_a_term_carries_no_ignore_marker() {
+        let term = FluentKey::new(
+            Arc::new(PathBuf::new()),
+            "brand".to_string(),
+            FluentEntry::Term(fluent_syntax::ast::Term {
+                id: fluent_syntax::ast::Identifier {
+                    name: "brand".to_string(),
+                },
+                value: fluent_syntax::ast::Pattern { elements: vec![] },
+                attributes: vec![],
+                comment: Some(fluent_syntax::ast::Comment {
+                    content: vec!["ftl-extract: ignore stale".to_string()],
+                }),
+            }),
+            Arc::new(PathBuf::from("_default.ftl")),
+            Some(0),
+        );
+
+        assert!(term.ignore_marker().is_none());
+    }
+
+    #[test]
+    fn test_calls_without_a_literal_key_or_path_are_handled() {
+        // A key that is not a string literal cannot be extracted.
+        let (keys, diagnostics) = run("i18n(key_variable)\n");
+        assert!(keys.is_empty());
+        assert!(diagnostics.is_empty());
+
+        // A `_path` that is not a string literal leaves the default file.
+        let (keys, _) = run("i18n.get(\"hello\", _path=folder)\n");
+        assert_eq!(*keys["hello"].path, PathBuf::from("_default.ftl"));
+
+        // So does an empty `_path`.
+        let (keys, _) = run("i18n.get(\"hello\", _path=\"\")\n");
+        assert_eq!(*keys["hello"].path, PathBuf::from("_default.ftl"));
+    }
 }

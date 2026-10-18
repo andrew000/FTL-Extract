@@ -105,4 +105,39 @@ mod tests {
         assert!(result.errors[0].message.contains("Expected"));
         Ok(())
     }
+
+    #[test]
+    fn test_check_syntax_sorts_errors_by_locale_file_and_line() -> Result<()> {
+        let temp_dir = TempDir::new()?;
+        let locales = temp_dir.path().join("locales");
+        for (file, content) in [
+            ("uk/b.ftl", "broken = {\n"),
+            ("en/z.ftl", "fine = Fine\nbroken = {\n"),
+            ("en/a.ftl", "broken = {\n"),
+        ] {
+            let path = locales.join(file);
+            fs::create_dir_all(path.parent().unwrap())?;
+            fs::write(path, content)?;
+        }
+
+        let result = check_syntax(CheckSyntaxConfig {
+            locales_path: locales,
+            locales: vec!["uk".to_string(), "en".to_string()],
+        })?;
+
+        let order = result
+            .errors
+            .iter()
+            .map(|item| (item.locale.as_str(), item.file_path.clone()))
+            .collect::<Vec<_>>();
+        assert_eq!(
+            order,
+            vec![
+                ("en", std::path::PathBuf::from("en/a.ftl")),
+                ("en", std::path::PathBuf::from("en/z.ftl")),
+                ("uk", std::path::PathBuf::from("uk/b.ftl")),
+            ]
+        );
+        Ok(())
+    }
 }

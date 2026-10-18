@@ -508,4 +508,26 @@ mod tests {
             assert_eq!(loaded["hello"].kept_call_has_double_star(), expected);
         }
     }
+
+    #[test]
+    fn test_save_cache_logs_instead_of_failing_when_it_cannot_write() {
+        let temp = TempDir::new().unwrap();
+        let cache = CacheFile {
+            schema_version: CACHE_SCHEMA_VERSION,
+            options: options("_default.ftl"),
+            files: FastHashMap::default(),
+        };
+
+        // The parent of the cache file is a file, so the directory cannot be created.
+        let blocker = temp.path().join("blocker");
+        std::fs::write(&blocker, "").unwrap();
+        save_cache(&blocker.join("cache.bin"), &cache);
+        assert!(!blocker.join("cache.bin").exists());
+
+        // The cache path is a directory, so the file cannot be written.
+        let directory = temp.path().join("cache.bin");
+        std::fs::create_dir(&directory).unwrap();
+        save_cache(&directory, &cache);
+        assert!(directory.is_dir());
+    }
 }

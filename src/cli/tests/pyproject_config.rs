@@ -219,13 +219,11 @@ fn check_loads_a_suggestion_locale_after_another_check_loaded_the_checked_ones()
     let temp = TempDir::new().unwrap();
     write(
         &temp.path().join("locales/en/_default.ftl"),
-        "hello = Hello
-",
+        "hello = Hello\n",
     );
     write(
         &temp.path().join("locales/uk/_default.ftl"),
-        "hello = hello
-",
+        "hello = hello\n",
     );
     write(
         &pyproject(&temp),

@@ -358,4 +358,9 @@ mod tests {
             "{stub}"
         );
     }
+
+    #[test]
+    fn test_a_branch_does_not_need_an_overload() {
+        assert!(!needs_overload(&TreeNode::new_branch()));
+    }
 }

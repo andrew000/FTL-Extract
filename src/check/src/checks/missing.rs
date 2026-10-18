@@ -193,4 +193,23 @@ i18n.get("absent", **data)
         assert_eq!(result.missing_keys.len(), 1);
         assert_eq!(result.missing_keys[0].key, "absent");
     }
+
+    #[test]
+    fn test_check_missing_fails_on_a_locale_file_that_does_not_parse() {
+        // Run on its own, a code-aware check cannot read the messages of a broken file; the
+        // `syntax` check is what reports it when the checks run together.
+        let temp = TempDir::new().unwrap();
+        write(&temp.path().join("code/app.py"), r#"i18n.get("hello")"#);
+        write(
+            &temp.path().join("locales/uk/_default.ftl"),
+            "hello = Hello\nbroken = {\n",
+        );
+
+        let error = check_missing(config(&temp, vec!["uk".to_string()])).unwrap_err();
+
+        assert!(
+            error.to_string().contains("Failed to parse FTL file"),
+            "{error}"
+        );
+    }
 }

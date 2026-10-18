@@ -825,4 +825,31 @@ JUNK!!!
         assert_eq!(super::definition_lines(content, "dup-long"), [3]);
         assert!(super::definition_lines(content, "missing").is_empty());
     }
+
+    #[test]
+    fn test_duplicate_inside_a_smaller_file_is_reported_when_files_merge() {
+        // `small.ftl` is not the largest file, so its own duplicate is merged into the
+        // duplicates of the base.
+        let (_, duplicates) = import_locale(&[
+            ("big.ftl", "a = A\nb = B\nc = C\n"),
+            ("small.ftl", "x = One\nx = Two\n"),
+        ]);
+
+        let keys: Vec<&str> = duplicates.iter().map(|item| item.key.as_str()).collect();
+        assert_eq!(keys, ["x"]);
+    }
+
+    #[test]
+    fn test_duplicate_key_without_definitions_displays_only_the_key() {
+        let duplicate = super::DuplicateKey {
+            locale: "en".to_string(),
+            key: "x".to_string(),
+            definitions: Vec::new(),
+        };
+
+        assert_eq!(
+            duplicate.to_string(),
+            "Fluent key x is defined more than once in locale en: "
+        );
+    }
 }

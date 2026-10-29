@@ -134,6 +134,19 @@ mod tests {
         permissions.set_readonly(true);
         fs::set_permissions(&locked, permissions).unwrap();
 
+        // Root ignores directory permissions, so there is nothing to make fail (e.g. in a
+        // container that runs the suite as root).
+        #[cfg(not(windows))]
+        {
+            let probe = temp.path().join("probe");
+            if fs::write(&probe, "").is_ok() {
+                fs::remove_file(&probe).unwrap();
+                fs::set_permissions(&locked, original_permissions).unwrap();
+                eprintln!("skipped: permissions are not enforced for this user");
+                return;
+            }
+        }
+
         let result = write_atomically(&target, b"replacement");
 
         fs::set_permissions(&locked, original_permissions).unwrap();

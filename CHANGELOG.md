@@ -10,6 +10,8 @@
   runs the tests while it has network access, so the scan can run offline; the threat model lists where untrusted
   input enters (`.py` files, `.ftl` files, the extraction cache), the properties the tool should keep and how to
   rate a finding.
+- The test suite passes when run as root on Linux, as the OSS Scanner image does: the atomic-write test that relies on
+  a read-only directory refusing writes is skipped when the current user is not bound by permissions.
 
 ## 0.12.3 — 2026-10-18
 

@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+### Internal
+
+- A security policy, `SECURITY.md`: vulnerabilities are reported through GitHub's private vulnerability reporting.
+- `.oss-scanner/Dockerfile` and `.oss-scanner/threat_model.md` for Anthropic's
+  [OSS Scanner](https://github.com/anthropics/oss-scanner): the image fetches every crate, builds the workspace and
+  runs the tests while it has network access, so the scan can run offline; the threat model lists where untrusted
+  input enters (`.py` files, `.ftl` files, the extraction cache), the properties the tool should keep and how to
+  rate a finding.
+
 ## 0.12.3 — 2026-10-18
 
 ### Documentation
